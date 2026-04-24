@@ -256,6 +256,7 @@
 <!-- ======== DASHBOARD TAB ======== -->
 <div class="panel active" id="panel-dashboard">
   <div class="kpi-grid">
+    <!-- 1행 -->
     <div class="kpi-card">
       <div class="kpi-label">현재 현금잔액</div>
       <div class="kpi-value blue" id="kpi-cash">—</div>
@@ -271,32 +272,38 @@
       <div class="kpi-value blue" id="kpi-total-liquid">—</div>
       <div class="kpi-sub" id="kpi-total-liquid-sub">현금 + 채권잔액</div>
     </div>
+    <div class="kpi-card">
+      <div class="kpi-label">금주 순현금</div>
+      <div class="kpi-value" id="kpi-weekly-net" style="cursor:pointer" title="클릭 시 주간 보고로 이동">—</div>
+      <div class="kpi-sub" id="kpi-weekly-range">—</div>
+    </div>
+    <!-- 2행 -->
     <div class="kpi-card" id="kpi-sejong-card" style="cursor:pointer" title="클릭 시 세종F2 내역으로 이동">
       <div class="kpi-label">세종F2</div>
       <div class="kpi-value neg" id="kpi-sejong">—</div>
       <div class="kpi-sub" id="kpi-sejong-sub">대분류: 세종시 합계</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">금주 순현금</div>
-      <div class="kpi-value" id="kpi-weekly-net" style="cursor:pointer" title="클릭 시 주간 보고로 이동">—</div>
-      <div class="kpi-sub" id="kpi-weekly-range">—</div>
+    <div class="kpi-card" id="kpi-laos-card" style="cursor:pointer" title="클릭 시 라오스 내역으로 이동">
+      <div class="kpi-label">라오스</div>
+      <div class="kpi-value neg" id="kpi-laos">—</div>
+      <div class="kpi-sub" id="kpi-laos-sub">대분류: 라오스 합계</div>
+    </div>
+    <div class="kpi-card" style="border:1px solid var(--amber);background:var(--amber2)">
+      <div class="kpi-label" style="color:var(--amber)">총 현물자산</div>
+      <div class="kpi-value amber" id="kpi-total-physical">—</div>
+      <div class="kpi-sub" id="kpi-total-physical-sub">세종F2 + 라오스</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">차주 예상 기말현금</div>
       <div class="kpi-value" id="kpi-next-cash">—</div>
       <div class="kpi-sub" id="kpi-next-range">—</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">금월 순현금</div>
-      <div class="kpi-value" id="kpi-monthly-net" style="cursor:pointer" title="클릭 시 월간 보고로 이동">—</div>
-      <div class="kpi-sub" id="kpi-monthly-range">—</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">차월 예상 기말현금</div>
-      <div class="kpi-value" id="kpi-next-month-cash">—</div>
-      <div class="kpi-sub" id="kpi-next-month-range">—</div>
-    </div>
   </div>
+  <!-- 금월 순현금 / 차월 예상 기말현금: 보고 탭 내부용 숨김 요소 -->
+  <span id="kpi-monthly-net" style="display:none"></span>
+  <span id="kpi-monthly-range" style="display:none"></span>
+  <span id="kpi-next-month-cash" style="display:none"></span>
+  <span id="kpi-next-month-range" style="display:none"></span>
 
   <!-- 예정 지출/입금 알림 -->
   <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
@@ -1692,6 +1699,28 @@ function renderKPIs() {
     sejongEl.textContent = fmt(sejongTotal);
     sejongEl.className = 'kpi-value neg';
     document.getElementById('kpi-sejong-sub').textContent = `세종시 분류 ${sejongCount}건`;
+  }
+
+  // 라오스 — 대분류 '라오스' 지출 합계
+  const laosTotal = cfData
+    .filter(r => r.big_cat === '라오스' && (r.status === '실제 지출' || r.status === '지출 예정'))
+    .reduce((s, r) => s + (r.out || 0), 0);
+  const laosCount = cfData.filter(r => r.big_cat === '라오스').length;
+  const laosEl = document.getElementById('kpi-laos');
+  if (laosEl) {
+    laosEl.textContent = fmt(laosTotal);
+    laosEl.className = 'kpi-value neg';
+    document.getElementById('kpi-laos-sub').textContent = `라오스 분류 ${laosCount}건`;
+  }
+
+  // 총 현물자산 — 세종F2 + 라오스
+  const totalPhysical = sejongTotal + laosTotal;
+  const tpEl = document.getElementById('kpi-total-physical');
+  if (tpEl) {
+    tpEl.textContent = fmt(totalPhysical);
+    tpEl.className = 'kpi-value amber';
+    document.getElementById('kpi-total-physical-sub').textContent =
+      `세종 ${fmt(sejongTotal)} + 라오스 ${fmt(laosTotal)}`;
   }
 
   // 매출채권
@@ -3571,30 +3600,6 @@ function navigateToWeeklyReport() {
 // 금주 순현금 클릭 → 주간 보고로 이동
 document.getElementById('kpi-weekly-net').addEventListener('click', navigateToWeeklyReport);
 
-// 금월 순현금 클릭 → 월간 보고로 이동
-document.getElementById('kpi-monthly-net').addEventListener('click', () => {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  const reportTab = document.querySelector('.tab[data-tab="report"]');
-  const reportPanel = document.getElementById('panel-report');
-  if (reportTab) reportTab.classList.add('active');
-  if (reportPanel) reportPanel.classList.add('active');
-  document.querySelectorAll('.report-sub-tab').forEach(b => {
-    b.style.borderBottom = '2px solid transparent';
-    b.style.color = 'var(--text2)';
-  });
-  const monthlyBtn = document.querySelector('.report-sub-tab[data-sub="monthly"]');
-  if (monthlyBtn) {
-    monthlyBtn.style.borderBottom = '2px solid var(--blue)';
-    monthlyBtn.style.color = 'var(--text)';
-  }
-  document.getElementById('rpt-monthly').style.display = '';
-  document.getElementById('rpt-weekly').style.display  = 'none';
-  document.getElementById('rpt-daily').style.display   = 'none';
-  renderMonthlyReport();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
 // 매출채권 카드 클릭 → AR 미회수 차트로 스크롤
 // 세종F2 카드 클릭 → 입출금 내역 탭 + 대분류 세종시 필터
 document.getElementById('kpi-sejong-card').addEventListener('click', () => {
@@ -3629,6 +3634,42 @@ document.getElementById('kpi-sejong-card').addEventListener('click', () => {
     bigSel.appendChild(opt);
   }
   if (bigSel) bigSel.value = '세종시';
+  renderCFTable();
+});
+
+// 라오스 카드 클릭 → 입출금 내역 탭 + 대분류 라오스 필터
+document.getElementById('kpi-laos-card').addEventListener('click', () => {
+  // 탭 전환
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.tab[data-tab="cashflow"]').classList.add('active');
+  document.getElementById('panel-cashflow').classList.add('active');
+
+  // 필터 초기화 후 대분류 라오스만 적용
+  document.getElementById('cf-from').value = '';
+  document.getElementById('cf-to').value = '';
+  document.getElementById('cf-filter-type').value = '';
+  document.getElementById('cf-filter-status').value = '';
+  document.getElementById('cf-filter-mid').value = '';
+  document.getElementById('cf-filter-big').value = '라오스';
+  document.getElementById('cf-search').value = '';
+  document.getElementById('cf-amount-min').value = '';
+  document.getElementById('cf-amount-max').value = '';
+  if (typeof cfUnassignedOnly !== 'undefined') {
+    cfUnassignedOnly = false;
+    const btn = document.getElementById('cf-unassigned-btn');
+    if (btn) { btn.textContent = '미분류만'; btn.style.background = ''; btn.style.color = 'var(--text2)'; btn.style.borderColor = ''; }
+  }
+  cfPage = 1;
+  buildCFFilterSelects();
+  // select에 라오스 값이 없을 경우 직접 옵션 추가
+  const bigSel = document.getElementById('cf-filter-big');
+  if (bigSel && !Array.from(bigSel.options).some(o => o.value === '라오스')) {
+    const opt = document.createElement('option');
+    opt.value = '라오스'; opt.textContent = '라오스';
+    bigSel.appendChild(opt);
+  }
+  if (bigSel) bigSel.value = '라오스';
   renderCFTable();
 });
 
