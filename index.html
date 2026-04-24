@@ -1552,7 +1552,10 @@ function getRefDate() { return new Date(refDate + 'T00:00:00'); }
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0,10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
 }
 
 // 주간 범위 한 번에 계산 (월~일 기준, weekStart 1회만 계산)
@@ -1560,7 +1563,10 @@ function getWeekRange(dateStr) {
   const d   = new Date(dateStr + 'T00:00:00');
   const mon = d.getDate() - ((d.getDay() + 6) % 7);
   d.setDate(mon);
-  const base = d.toISOString().slice(0,10); // 이번주 월요일
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  const base = `${y}-${m}-${day}`; // 이번주 월요일 (로컬 기준)
   return {
     wStart  : base,               // 이번주 월
     wEnd    : addDays(base,  6),  // 이번주 일
