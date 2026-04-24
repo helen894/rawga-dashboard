@@ -214,7 +214,7 @@
     </div>
     <div class="ref-date-wrap">
       <label>보고 기준일</label>
-      <input type="date" id="refDateInput" value="2026-04-17">
+      <input type="date" id="refDateInput">
     </div>
   </div>
 </div>
@@ -271,10 +271,10 @@
       <div class="kpi-value blue" id="kpi-total-liquid">—</div>
       <div class="kpi-sub" id="kpi-total-liquid-sub">현금 + 채권잔액</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">현금 런웨이</div>
-      <div class="kpi-value" id="kpi-runway">—</div>
-      <div class="kpi-sub" id="kpi-runway-sub">월평균 지출 기준</div>
+    <div class="kpi-card" id="kpi-sejong-card" style="cursor:pointer" title="클릭 시 세종F2 내역으로 이동">
+      <div class="kpi-label">세종F2</div>
+      <div class="kpi-value neg" id="kpi-sejong">—</div>
+      <div class="kpi-sub" id="kpi-sejong-sub">대분류: 세종시 합계</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">금주 순현금</div>
@@ -1172,7 +1172,7 @@
           <th>중분류</th>
           <th>메모</th>
           <th style="width:110px">다음 생성 예정</th>
-          <th></th>
+          <th style="width:120px"></th>
         </tr>
       </thead>
       <tbody id="rec-tbody"></tbody>
@@ -1539,12 +1539,38 @@ function fmtM(n) {
   return fmt(n);
 }
 
-let refDate = '2026-04-17';
+// 보고 기준일: 접속일 기준 자동 초기화
+let refDate = new Date().toISOString().slice(0,10);
 function getRefDate() { return new Date(refDate + 'T00:00:00'); }
-function weekStart(d) { const dt = new Date(d); dt.setDate(dt.getDate() - ((dt.getDay()+6)%7)); return dt.toISOString().slice(0,10); }
-function weekEnd(d) { const s = weekStart(d); const dt = new Date(s); dt.setDate(dt.getDate()+4); return dt.toISOString().slice(0,10); }
-function nextWeekStart(d) { const s = weekStart(d); const dt = new Date(s); dt.setDate(dt.getDate()+7); return dt.toISOString().slice(0,10); }
-function nextWeekEnd(d) { const s = weekStart(d); const dt = new Date(s); dt.setDate(dt.getDate()+11); return dt.toISOString().slice(0,10); }
+
+// 날짜 유틸 — N일 이동
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
+}
+
+// 주간 범위 한 번에 계산 (월~일 기준, weekStart 1회만 계산)
+function getWeekRange(dateStr) {
+  const d   = new Date(dateStr + 'T00:00:00');
+  const mon = d.getDate() - ((d.getDay() + 6) % 7);
+  d.setDate(mon);
+  const base = d.toISOString().slice(0,10); // 이번주 월요일
+  return {
+    wStart  : base,               // 이번주 월
+    wEnd    : addDays(base,  6),  // 이번주 일
+    pwStart : addDays(base, -7),  // 전주 월
+    pwEnd   : addDays(base, -1),  // 전주 일
+    nwStart : addDays(base,  7),  // 차주 월
+    nwEnd   : addDays(base, 13),  // 차주 일
+  };
+}
+
+// 하위 호환 래퍼 (코드 곳곳에서 단독 호출되는 함수들)
+function weekStart(d)     { return getWeekRange(d).wStart; }
+function weekEnd(d)       { return getWeekRange(d).wEnd; }
+function nextWeekStart(d) { return getWeekRange(d).nwStart; }
+function nextWeekEnd(d)   { return getWeekRange(d).nwEnd; }
 function monthStart(d) { return d.slice(0,7) + '-01'; }
 function monthEnd(d) { const [y,m] = d.slice(0,7).split('-').map(Number); return `${y}-${String(m).padStart(2,'0')}-${new Date(y,m,0).getDate()}`; }
 function prevMonthStart(d) { const [y,m] = d.slice(0,7).split('-').map(Number); const pm = m===1?12:m-1; const py = m===1?y-1:y; return `${py}-${String(pm).padStart(2,'0')}-01`; }
@@ -1552,14 +1578,10 @@ function prevMonthEnd(d) { const [y,m] = d.slice(0,7).split('-').map(Number); co
 
 function calcKPIs() {
   const ref = refDate;
-  const wStart = weekStart(ref), wEnd = weekEnd(ref);
-  const nwStart = nextWeekStart(ref), nwEnd = nextWeekEnd(ref);
+  // 주간 범위 — getWeekRange 1회 호출로 전주·금주·차주 모두 계산
+  const { wStart, wEnd, pwStart, pwEnd, nwStart, nwEnd } = getWeekRange(ref);
   const mStart = monthStart(ref), mEnd = monthEnd(ref);
   const pmStart = prevMonthStart(ref), pmEnd = prevMonthEnd(ref);
-
-  // 전주 날짜 계산
-  const pwStart = (() => { const d = new Date(wStart+'T00:00:00'); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
-  const pwEnd   = (() => { const d = new Date(wEnd+'T00:00:00');   d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
 
   let cash = INIT_CASH;
   let wIn = 0, wOut = 0, nwIn = 0, nwOut = 0;
@@ -1660,12 +1682,17 @@ function renderKPIs() {
   document.getElementById('kpi-total-liquid').textContent = fmt(totalLiquid);
   document.getElementById('kpi-total-liquid-sub').textContent = `현금 ${fmt(k.cash)} + 채권 ${fmt(k.totalAR)}`;
 
-  // 런웨이
-  const runwayEl = document.getElementById('kpi-runway');
-  const runwayVal = k.runway >= 99 ? '∞' : k.runway.toFixed(1) + '개월';
-  runwayEl.textContent = runwayVal;
-  runwayEl.className = 'kpi-value ' + (k.runway >= 6 ? 'pos' : k.runway >= 3 ? 'amber' : 'neg');
-  document.getElementById('kpi-runway-sub').textContent = `월평균 지출 ${fmtM(k.avgMonthlyOut)}`;
+  // 세종F2 — 대분류 '세종시' 지출 합계
+  const sejongTotal = cfData
+    .filter(r => r.big_cat === '세종시' && (r.status === '실제 지출' || r.status === '지출 예정'))
+    .reduce((s, r) => s + (r.out || 0), 0);
+  const sejongCount = cfData.filter(r => r.big_cat === '세종시').length;
+  const sejongEl = document.getElementById('kpi-sejong');
+  if (sejongEl) {
+    sejongEl.textContent = fmt(sejongTotal);
+    sejongEl.className = 'kpi-value neg';
+    document.getElementById('kpi-sejong-sub').textContent = `세종시 분류 ${sejongCount}건`;
+  }
 
   // 매출채권
   document.getElementById('kpi-ar').textContent = fmt(k.totalAR);
@@ -2504,7 +2531,7 @@ function buildCFFilterSelects() {
 /* ---- 필터 초기화 버튼 ---- */
 document.getElementById('cf-filter-reset-btn').addEventListener('click', () => {
   document.getElementById('cf-from').value = monthStart(refDate);
-  document.getElementById('cf-to').value = '2026-05-31';
+  document.getElementById('cf-to').value = monthEnd(refDate);
   document.getElementById('cf-filter-type').value = '';
   document.getElementById('cf-filter-status').value = '';
   document.getElementById('cf-filter-mid').value = '';
@@ -3201,17 +3228,25 @@ function recurDupExists(date, desc, inAmt, outAmt) {
 function generateRecurring(showToastMsg = true) {
   if (!recurData.length) return 0;
   const today = new Date().toISOString().slice(0,10);
+  const todayDay = parseInt(today.slice(8,10));
   const [ty, tm] = today.split('-').map(Number);
   const months = parseInt(localStorage.getItem('recur_months') || '3');
   let added = 0;
 
   for (const rec of recurData) {
-    for (let offset = 1; offset <= months; offset++) {
+    // 당월: 기준일이 오늘 이후(당일 포함)면 당월도 생성
+    const offsets = [];
+    if (rec.day > todayDay) offsets.push(0);    // 당월 포함 (기준일 > 오늘인 경우만)
+    for (let i = 1; i <= months; i++) offsets.push(i); // 이후 N개월
+
+    for (const offset of offsets) {
       let nm = tm + offset, ny = ty;
       while (nm > 12) { nm -= 12; ny++; }
       const last = new Date(ny, nm, 0).getDate();
       const day = Math.min(rec.day, last);
       const targetDate = `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      // 이미 지난 날짜는 생성 안 함 (당월 offset=0 시 오늘 기준 이미 지난 날 제외)
+      if (targetDate < today) continue;
       if (recurDupExists(targetDate, rec.desc, rec.in||0, rec.out||0)) continue;
       const type = (rec.in||0) > 0 ? '입금' : '지출';
       const status = type === '입금' ? '입금 예정' : '지출 예정';
@@ -3280,9 +3315,87 @@ function renderRecurTable() {
       <td style="font-size:11px;color:${alreadyGen?'var(--green)':'var(--text3)'}">
         ${alreadyGen ? '✅ 생성됨' : nextDate}
       </td>
-      <td><button class="btn sm red rec-del-btn" data-idx="${i}" style="padding:2px 8px">삭제</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn sm rec-edit-btn" data-idx="${i}" style="padding:2px 8px;margin-right:4px">수정</button>
+        <button class="btn sm red rec-del-btn" data-idx="${i}" style="padding:2px 8px">삭제</button>
+      </td>
     </tr>`;
   }).join('');
+}
+
+/* ------ 반복 거래 인라인 편집 ------ */
+function expandRecurRow(tr, idx) {
+  const r = recurData[idx];
+  const mids = getMidCats();
+  const midOpts = '<option value="">선택...</option>' + mids.map(m =>
+    `<option value="${m}"${m === r.mid_cat ? ' selected' : ''}>${m}</option>`
+  ).join('');
+
+  tr.classList.add('rec-editing');
+  tr.style.background = 'var(--bg2)';
+  tr.innerHTML = `
+    <td></td>
+    <td style="text-align:center">
+      <input type="number" class="rec-edit-day" value="${r.day}" min="1" max="31"
+        style="width:52px;background:var(--bg3);border:1px solid var(--blue);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 6px;border-radius:6px;text-align:center">
+    </td>
+    <td>
+      <input type="text" class="rec-edit-desc" value="${(r.desc||'').replace(/"/g,'&quot;')}"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px">
+    </td>
+    <td class="num">
+      <input type="number" class="rec-edit-in" value="${r.in||0}" min="0"
+        style="width:110px;background:var(--bg3);border:1px solid var(--border2);color:var(--green);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px;text-align:right">
+    </td>
+    <td class="num">
+      <input type="number" class="rec-edit-out" value="${r.out||0}" min="0"
+        style="width:110px;background:var(--bg3);border:1px solid var(--border2);color:var(--red);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px;text-align:right">
+    </td>
+    <td></td>
+    <td>
+      <select class="rec-edit-mid"
+        style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 6px;border-radius:6px;max-width:110px">
+        ${midOpts}
+      </select>
+    </td>
+    <td>
+      <input type="text" class="rec-edit-memo" value="${(r.memo||'').replace(/"/g,'&quot;')}"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px">
+    </td>
+    <td></td>
+    <td style="white-space:nowrap">
+      <button class="btn sm green rec-save-btn" data-idx="${idx}" style="padding:2px 8px;margin-right:4px">저장</button>
+      <button class="btn sm rec-cancel-btn" data-idx="${idx}" style="padding:2px 8px">취소</button>
+    </td>`;
+
+  // 저장
+  tr.querySelector('.rec-save-btn').addEventListener('click', () => {
+    const day    = parseInt(tr.querySelector('.rec-edit-day').value);
+    const desc   = tr.querySelector('.rec-edit-desc').value.trim();
+    const inAmt  = parseFloat(tr.querySelector('.rec-edit-in').value)  || 0;
+    const outAmt = parseFloat(tr.querySelector('.rec-edit-out').value) || 0;
+    const mid    = tr.querySelector('.rec-edit-mid').value;
+    const memo   = tr.querySelector('.rec-edit-memo').value.trim();
+    if (!day || day < 1 || day > 31) { tr.querySelector('.rec-edit-day').style.borderColor='var(--red)'; return; }
+    if (!desc) { tr.querySelector('.rec-edit-desc').style.borderColor='var(--red)'; return; }
+    recurData[idx] = { day, desc, in: inAmt, out: outAmt, mid_cat: mid, memo };
+    saveRecurData();
+    renderRecurTable();
+    showToast(`✅ "${desc}" 수정됐습니다.`, 'green');
+  });
+
+  // 취소
+  tr.querySelector('.rec-cancel-btn').addEventListener('click', () => renderRecurTable());
+
+  // Enter/Escape
+  tr.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  tr.querySelector('.rec-save-btn').click();
+      if (e.key === 'Escape') renderRecurTable();
+    });
+  });
+
+  tr.querySelector('.rec-edit-desc').focus();
 }
 
 /* ------ 이벤트 ------ */
@@ -3371,15 +3484,29 @@ document.getElementById('rec-add-btn').addEventListener('click', () => {
 });
 
 document.getElementById('rec-tbody').addEventListener('click', e => {
-  const btn = e.target.closest('.rec-del-btn');
-  if (!btn) return;
-  const idx = parseInt(btn.dataset.idx);
-  const rec = recurData[idx];
-  if (!confirm(`"${rec.desc}" (매월 ${rec.day}일) 반복 거래를 삭제하시겠습니까?\n이미 생성된 예정 항목은 유지됩니다.`)) return;
-  recurData.splice(idx, 1);
-  saveRecurData();
-  renderRecurTable();
-  showToast('삭제됐습니다.', 'red');
+  // 삭제
+  const delBtn = e.target.closest('.rec-del-btn');
+  if (delBtn) {
+    const idx = parseInt(delBtn.dataset.idx);
+    const rec = recurData[idx];
+    if (!confirm(`"${rec.desc}" (매월 ${rec.day}일) 반복 거래를 삭제하시겠습니까?\n이미 생성된 예정 항목은 유지됩니다.`)) return;
+    recurData.splice(idx, 1);
+    saveRecurData();
+    renderRecurTable();
+    showToast('삭제됐습니다.', 'red');
+    return;
+  }
+  // 수정
+  const editBtn = e.target.closest('.rec-edit-btn');
+  if (editBtn) {
+    const idx = parseInt(editBtn.dataset.idx);
+    const tr = editBtn.closest('tr');
+    // 이미 편집 중인 행이 있으면 먼저 닫기
+    const editing = document.querySelector('#rec-tbody tr.rec-editing');
+    if (editing && editing !== tr) renderRecurTable();
+    expandRecurRow(tr, idx);
+    return;
+  }
 });
 
 document.getElementById('recur-gen-btn').addEventListener('click', () => {
@@ -3469,6 +3596,42 @@ document.getElementById('kpi-monthly-net').addEventListener('click', () => {
 });
 
 // 매출채권 카드 클릭 → AR 미회수 차트로 스크롤
+// 세종F2 카드 클릭 → 입출금 내역 탭 + 대분류 세종시 필터
+document.getElementById('kpi-sejong-card').addEventListener('click', () => {
+  // 탭 전환
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.tab[data-tab="cashflow"]').classList.add('active');
+  document.getElementById('panel-cashflow').classList.add('active');
+
+  // 필터 초기화 후 대분류 세종시만 적용
+  document.getElementById('cf-from').value = '';
+  document.getElementById('cf-to').value = '';
+  document.getElementById('cf-filter-type').value = '';
+  document.getElementById('cf-filter-status').value = '';
+  document.getElementById('cf-filter-mid').value = '';
+  document.getElementById('cf-filter-big').value = '세종시';
+  document.getElementById('cf-search').value = '';
+  document.getElementById('cf-amount-min').value = '';
+  document.getElementById('cf-amount-max').value = '';
+  if (typeof cfUnassignedOnly !== 'undefined') {
+    cfUnassignedOnly = false;
+    const btn = document.getElementById('cf-unassigned-btn');
+    if (btn) { btn.textContent = '미분류만'; btn.style.background = ''; btn.style.color = 'var(--text2)'; btn.style.borderColor = ''; }
+  }
+  cfPage = 1;
+  buildCFFilterSelects();
+  // select에 세종시 값이 없을 경우 직접 옵션 추가
+  const bigSel = document.getElementById('cf-filter-big');
+  if (bigSel && !Array.from(bigSel.options).some(o => o.value === '세종시')) {
+    const opt = document.createElement('option');
+    opt.value = '세종시'; opt.textContent = '세종시';
+    bigSel.appendChild(opt);
+  }
+  if (bigSel) bigSel.value = '세종시';
+  renderCFTable();
+});
+
 document.getElementById('kpi-ar-card').addEventListener('click', () => {
   const el = document.getElementById('ar-bar-section');
   if (el) {
@@ -3493,7 +3656,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     // 탭 전환 시 필터 초기화
     if (tab.dataset.tab === 'cashflow') {
       document.getElementById('cf-from').value = monthStart(refDate);
-      document.getElementById('cf-to').value = '2026-05-31';
+      document.getElementById('cf-to').value = monthEnd(refDate);
       document.getElementById('cf-filter-type').value = '';
       document.getElementById('cf-filter-status').value = '';
       document.getElementById('cf-filter-mid').value = '';
@@ -3532,6 +3695,9 @@ function switchToARTab(partner) {
 }
 
 /* ===== REF DATE ===== */
+// 페이지 로드 시 input 초기값을 오늘 날짜로 세팅
+document.getElementById('refDateInput').value = refDate;
+
 document.getElementById('refDateInput').addEventListener('change', e => {
   refDate = e.target.value;
   renderAll();
@@ -4636,7 +4802,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
 
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('cf-from').value = monthStart(refDate);
-  document.getElementById('cf-to').value = '2026-05-31';
+  document.getElementById('cf-to').value = monthEnd(refDate);
   document.getElementById('cf-date').value = today;
   document.getElementById('ar-start').value = today;
   updateInitCashDisplay();
