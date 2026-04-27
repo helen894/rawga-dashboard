@@ -3863,11 +3863,6 @@ function loadCatData() {
   if (!Object.keys(catMidToBig).length)  catMidToBig  = {...DEFAULT_MID_TO_BIG};
   if (!Object.keys(catDescToMid).length) catDescToMid = {...DEFAULT_DESC_TO_MID};
 }
-function saveCatData() {
-  localStorage.setItem('cat_mid_to_big',        JSON.stringify(catMidToBig));
-  localStorage.setItem('cat_desc_to_mid',       JSON.stringify(catDescToMid));
-  localStorage.setItem('cat_desc_type_to_mid',  JSON.stringify(catDescTypeToMid));
-}
 
 // getMidCat: 조합 키 우선 → 단독 키 폴백
 function getMidCat(desc, type) {
