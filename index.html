@@ -1391,9 +1391,18 @@ async function loadDataFromSupabase() {
     const catRes = await _supa.from('cat_data').select('key, data');
     if (catRes.data && catRes.data.length > 0) {
       for (const row of catRes.data) {
-        if (row.key === 'mid_to_big')        catMidToBig      = row.data;
-        if (row.key === 'desc_to_mid')       catDescToMid     = row.data;
-        if (row.key === 'desc_type_to_mid')  catDescTypeToMid = row.data;
+        if (row.key === 'mid_to_big') {
+          catMidToBig = row.data;
+          localStorage.setItem('cat_mid_to_big', JSON.stringify(catMidToBig));
+        }
+        if (row.key === 'desc_to_mid') {
+          catDescToMid = row.data;
+          localStorage.setItem('cat_desc_to_mid', JSON.stringify(catDescToMid));
+        }
+        if (row.key === 'desc_type_to_mid') {
+          catDescTypeToMid = row.data;
+          localStorage.setItem('cat_desc_type_to_mid', JSON.stringify(catDescTypeToMid));
+        }
         if (row.key === 'recur_data' && Array.isArray(row.data)) {
           recurData = row.data;
           localStorage.setItem('recur_data', JSON.stringify(recurData));
