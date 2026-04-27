@@ -1505,9 +1505,18 @@ function subscribeRealtime() {
         const catRes = await _supa.from('cat_data').select('key, data');
         if (catRes.data) {
           for (const row of catRes.data) {
-            if (row.key === 'mid_to_big')       catMidToBig      = row.data;
-            if (row.key === 'desc_to_mid')      catDescToMid     = row.data;
-            if (row.key === 'desc_type_to_mid') catDescTypeToMid = row.data;
+            if (row.key === 'mid_to_big') {
+              catMidToBig = row.data;
+              localStorage.setItem('cat_mid_to_big', JSON.stringify(catMidToBig));
+            }
+            if (row.key === 'desc_to_mid') {
+              catDescToMid = row.data;
+              localStorage.setItem('cat_desc_to_mid', JSON.stringify(catDescToMid));
+            }
+            if (row.key === 'desc_type_to_mid') {
+              catDescTypeToMid = row.data;
+              localStorage.setItem('cat_desc_type_to_mid', JSON.stringify(catDescTypeToMid));
+            }
             if (row.key === 'recur_data' && Array.isArray(row.data)) {
               recurData = row.data;
               localStorage.setItem('recur_data', JSON.stringify(recurData));
@@ -1519,7 +1528,13 @@ function subscribeRealtime() {
               updateInitCashDisplay();
             }
           }
+          ['cf-midcat','edit-cf-midcat'].forEach(id => {
+            const sel = document.getElementById(id);
+            if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
+          });
+          renderCategoryTab();
           renderAll();
+          showToast('🔄 카테고리가 업데이트됐습니다.', 'green');
         }
       } finally { _isSyncing = false; }
     })
