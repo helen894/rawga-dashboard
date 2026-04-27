@@ -1333,7 +1333,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617');
+let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // Supabase 로드 후 덮어씀
 const DESC_TO_MID = {"Npay정산":"매출","스마트스토어정":"매출","카카오페이정산":"매출","Toss정산0330":"매출","한국정보통신(주)":"매출","오늘의집정산":"매출","Toss정산0331":"매출","Toss정산0401":"매출","Toss정산0402":"매출","Toss정산0403":"매출","쿠팡(주)":"매출","(주)씨제이이엔엠":"매출","엔에이치엔페이":"매출","(유)동이식품_매출":"매출","분당（１４４）　　　":"세금과공과금","성남시지방소":"세금과공과금","쿠팡페이주식회":"매출","씨엔에이바이오":"매입대금","태성수산 영어":"매입대금","기업주식회사　월드씨푸드":"매입대금","하나(주)모락스":"운반비","(주)디앤비푸드_매출":"매출","(주)제이에스푸":"매입대금","우리대주회계법인":"지급수수료","신한동백로지스주식회사":"운반비","하나(사)한국건강기능식":"지급수수료","기업(주)옥수":"매입대금","AMAZON":"매출","tosspaymen":"매출","(주)다날":"매출","(주)씨제이이엔":"매출","신한미디어브릿지그룹(주":"지급수수료","기업RC주식회사　로가":"연구개발비","신한(주)지앤원":"매입대금","신한유한회사　위써트인증":"지급수수료","신한카드":"법인카드 대금","롯데카드(주)":"법인카드 대금","Toss정산0406":"매출","급여":"급여","4대보험":"보험료","원천세":"세금과공과금","이자-32-00039 다음납입예정일-20260329":"이자비용","이자-32-00035 다음납입예정일-20260328":"이자비용","이자-32-00042 다음납입예정일-20260329":"이자비용","신솔민":"광고선전비","임형규":"광고선전비","우미연":"광고선전비","신병철":"광고선전비","방군석":"광고선전비","(유)바다향":"매출","신동섭":"매입대금","(주)로가제이에":"대여금 지급","아난티 오시리":"매출","jht코스메틱":"매출","황건숙":"광고선전비","홍지민":"광고선전비","박민아":"광고선전비","유나윤":"광고선전비","김선영":"광고선전비","이상훈(페퍼스":"광고선전비","휴온스엔":"매출","(주)프라임카고":"운반비","(유)동이식품_매출":"매출","주)로릭코리아":"운반비","김대영(이성국":"지급수수료","중진공대출":"이자비용","tosspaymen":"매출","하경수_회수":"대여금 수취","주식회사에이치이공일":"대여금 수취","(주)로가제이에_회수":"대여금 수취","신한(주)지앤원":"매입대금","농협(주)우앤파트너스":"지급수수료","주식회사로가":"계좌간이체","신한주식회사　로가":"계좌간이체","주식회사 호마":"매입대금","주식회사 코코":"매입대금","(주)루리인터내":"매입대금","이아인":"광고선전비","박미영":"광고선전비","김세라":"광고선전비","황귀순":"광고선전비","이태호":"광고선전비","안나근":"광고선전비","장혜진":"광고선전비","이솔":"광고선전비","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","RAWGA USA":"대여금 지급","Toss정산0309":"매출","중진공대출원리":"이자비용","SMS140***24316":"지급수수료","이성국제특허법_반환":"기타 입금","주식회사무신사":"매출","SSG상품대":"매출","안성환":"광고선전비","모은지":"광고선전비","고재경":"광고선전비","허영식":"광고선전비","조영현":"광고선전비","주식회사　로가":"계좌간이체","주식회사 로가":"계좌간이체","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","(주)씨제이이엔":"매출","허진관":"광고선전비","이상희":"광고선전비","방군석":"광고선전비","서지은":"광고선전비","이윤서":"광고선전비","허진숙":"광고선전비","우미연":"광고선전비","문현주":"광고선전비","(주)에이치이공":"대여금 수취","성남시등록면":"세금과공과금","장부식_수취":"대여금 수취","미쓰이소꼬코리":"운반비","(주)로가":"소모품비","(유)바다향":"매출","이준영":"광고선전비","방군석":"광고선전비","유도연":"광고선전비","김한나":"광고선전비","김미아":"광고선전비","주식회사　로가_투자":"투자금","주식회사로가_투자":"투자금"};
 const MID_TO_BIG = {"세금과공과금":"세금과공과금","매입대금":"재고/상품매입","운반비":"판매관리비","지급수수료":"판매관리비","연구개발비":"연구개발비","법인카드 대금":"자금이동/제외","급여":"판매관리비","보험료":"보험료","이자비용":"금융비용","광고선전비":"판매관리비","대여금 지급":"자금이동/제외","소모품비":"판매관리비","통신비":"판매관리비","대여금 상환":"자금이동/제외","기타 지출":"기타 지출","판매수수료":"판매관리비","보증금":"보증금","설비 대금":"세종시","임차료":"판매관리비","여비교통비":"판매관리비","매출":"기타","대여금 수취":"기타","투자금":"자금이동/제외","이자수익":"기타","기타 입금":"기타","인오가닉":"인오가닉","계좌간이체":"자금이동/제외"};
 const MID_CATS = Object.keys(MID_TO_BIG);
@@ -1393,6 +1393,10 @@ async function loadDataFromSupabase() {
         if (row.key === 'mid_to_big')        catMidToBig      = row.data;
         if (row.key === 'desc_to_mid')       catDescToMid     = row.data;
         if (row.key === 'desc_type_to_mid')  catDescTypeToMid = row.data;
+        if (row.key === 'settings' && row.data?.init_cash !== undefined) {
+          INIT_CASH = row.data.init_cash;
+          localStorage.setItem('init_cash', String(INIT_CASH));
+        }
       }
     }
 
@@ -1454,6 +1458,7 @@ async function saveCatDataToSupabase() {
       { key: 'mid_to_big',       data: catMidToBig },
       { key: 'desc_to_mid',      data: catDescToMid },
       { key: 'desc_type_to_mid', data: catDescTypeToMid },
+      { key: 'settings',         data: { init_cash: INIT_CASH } },
     ];
     await _supa.from('cat_data').upsert(upserts, { onConflict: 'key' });
   } catch(e) {
@@ -1495,6 +1500,11 @@ function subscribeRealtime() {
             if (row.key === 'mid_to_big')       catMidToBig      = row.data;
             if (row.key === 'desc_to_mid')      catDescToMid     = row.data;
             if (row.key === 'desc_type_to_mid') catDescTypeToMid = row.data;
+            if (row.key === 'settings' && row.data?.init_cash !== undefined) {
+              INIT_CASH = row.data.init_cash;
+              localStorage.setItem('init_cash', String(INIT_CASH));
+              updateInitCashDisplay();
+            }
           }
           renderAll();
         }
@@ -3778,10 +3788,17 @@ document.getElementById('init-cash-save-btn').addEventListener('click', () => {
   if (isNaN(val)) return alert('올바른 금액을 입력하세요.');
   INIT_CASH = val;
   localStorage.setItem('init_cash', String(val));
+  // Supabase에도 저장 (모든 기기 동기화)
+  if (_supa) {
+    _supa.from('cat_data').upsert({ key: 'settings', data: { init_cash: val } }, { onConflict: 'key' })
+      .then(() => showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다.`, 'green'))
+      .catch(() => showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다. (로컬 저장)`, 'green'));
+  } else {
+    showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다.`, 'green');
+  }
   updateInitCashDisplay();
   closeInitCashModal();
   renderAll();
-  showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다.`, 'green');
 });
 
 // Enter 키로 저장
