@@ -895,7 +895,7 @@
         </select>
       </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:20px">
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
       <button class="btn green" onclick="saveCFEdit()">저장</button>
       <button class="btn" onclick="closeCFEditModal()">취소</button>
     </div>
@@ -2405,6 +2405,13 @@ function renderCFTable() {
       <td style="white-space:nowrap">
         <button class="btn sm cf-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
         <button class="btn sm red cf-del-btn" data-id="${r._id}">삭제</button>
+        ${r.type === '입금' && r.mid_cat ? (() => {
+          if (r.ar_applied === '완료')
+            return `<span title="차감일: ${r.ar_applied_date||'—'}" style="margin-left:4px;font-size:10px;color:var(--green);cursor:default">💰완료</span>`;
+          if (r.ar_applied === '실패')
+            return `<span title="${r.ar_applied_error||''}" style="margin-left:4px;font-size:10px;color:var(--red);cursor:default">💰실패</span>`;
+          return '';
+        })() : ''}
       </td>
     </tr>`;
   }).join('');
@@ -2482,33 +2489,91 @@ function closeCFEditModal() {
 function saveCFEdit() {
   const idx = cfData.findIndex(r => r._id === cfEditId);
   if (idx === -1) return;
-  const r = cfData[idx];
+  const r = cfData[idx]; // 수정 전 원본 (ar_deduct_log 포함)
 
-  const date = document.getElementById('edit-cf-date').value;
-  const desc = document.getElementById('edit-cf-desc').value.trim();
-  const inAmt = parseFloat(document.getElementById('edit-cf-in').value) || 0;
+  const date   = document.getElementById('edit-cf-date').value;
+  const desc   = document.getElementById('edit-cf-desc').value.trim();
+  const inAmt  = parseFloat(document.getElementById('edit-cf-in').value)  || 0;
   const outAmt = parseFloat(document.getElementById('edit-cf-out').value) || 0;
-  const mid = document.getElementById('edit-cf-midcat').value;
+  const mid    = document.getElementById('edit-cf-midcat').value;
   const status = document.getElementById('edit-cf-status').value;
 
   if (!date || !desc) return alert('거래일과 거래내용을 입력하세요.');
   if (inAmt === 0 && outAmt === 0) return alert('입금액 또는 출금액을 입력하세요.');
 
+  // 핵심 필드(날짜·입금액·중분류) 변경 여부 → AR 원복 트리거
+  const needRevert = r.ar_applied === '완료' &&
+    (r.date !== date || r.in !== inAmt || r.mid_cat !== mid);
+
+  // ① AR 원복: cfData 수정 전, 수정 전 원본(r)의 ar_deduct_log로 원복
+  if (needRevert) {
+    try {
+      const rv = revertARDeduction(r);
+      // rv.ok === false는 ar_applied !== '완료'일 때만 발생하나, needRevert 조건상 도달 불가
+      // rv.reverted === 0 이면 이력이 비어있는 것이므로 정상 통과
+      if (!rv.ok) {
+        cfData[idx] = {
+          ...r, date, desc, in: inAmt, out: outAmt, amount: inAmt - outAmt,
+          type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: getBigCat(mid),
+          ar_applied: '실패', ar_applied_error: `원복 실패: ${rv.reason}`,
+        };
+        cfData.sort((a,b) => a.date.localeCompare(b.date));
+        saveData(); closeCFEditModal(); renderAll();
+        showToast(`⚠ 수정됐으나 AR 원복 실패: ${rv.reason}`, 'red');
+        return;
+      }
+    } catch(e) {
+      // 예외 발생 시 재차감 없이 오류 기록
+      cfData[idx] = {
+        ...r, date, desc, in: inAmt, out: outAmt, amount: inAmt - outAmt,
+        type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: getBigCat(mid),
+        ar_applied: '실패', ar_applied_error: `원복 예외: ${e.message}`,
+      };
+      cfData.sort((a,b) => a.date.localeCompare(b.date));
+      saveData(); closeCFEditModal(); renderAll();
+      showToast(`⚠ 수정됐으나 AR 원복 중 오류: ${e.message}`, 'red');
+      return;
+    }
+  }
+
+  // ② CF 데이터 업데이트 (원복 완료 또는 원복 불필요)
   cfData[idx] = {
-    ...r,
-    date, desc,
+    ...r, date, desc,
     in: inAmt, out: outAmt,
     amount: inAmt - outAmt,
     type: inAmt > 0 ? '입금' : '지출',
-    status,
-    mid_cat: mid,
-    big_cat: getBigCat(mid),
+    status, mid_cat: mid, big_cat: getBigCat(mid),
+    ...(needRevert ? { ar_applied: '', ar_applied_date: '', ar_applied_error: '', ar_deduct_log: [] } : {}),
   };
   cfData.sort((a,b) => a.date.localeCompare(b.date));
+
+  // ③ 재차감: 수정된 값이 조건을 만족하면 새 값 기준으로 차감
+  let arMsg = '';
+  const updatedRow = cfData.find(x => x._id === cfEditId);
+  if (updatedRow && updatedRow.type === '입금' && updatedRow.mid_cat && (updatedRow.in || 0) > 0 && updatedRow.ar_applied !== '완료') {
+    try {
+      const dr = deductARByIncome(updatedRow);
+      if (dr.ok) {
+        arMsg = needRevert
+          ? ` | 💰 AR 원복 후 재차감 ${fmt(dr.totalCut)}원`
+          : ` | 💰 AR 차감 ${fmt(dr.totalCut)}원`;
+      } else if (needRevert) {
+        arMsg = ` (AR 원복 완료, 재차감 불가: ${dr.reason})`;
+      }
+    } catch(e) {
+      const fi = cfData.findIndex(x => x._id === cfEditId);
+      if (fi >= 0) { cfData[fi].ar_applied = '실패'; cfData[fi].ar_applied_error = e.message; }
+      arMsg = needRevert ? ` (AR 원복 완료, 재차감 오류: ${e.message})` : '';
+    }
+  } else if (needRevert) {
+    // 원복됐지만 재차감 조건 미충족 (지출 건으로 변경 등) → ar_applied 비워둠
+    arMsg = ' (AR 원복 완료, 재차감 조건 미충족)';
+  }
+
   saveData();
   closeCFEditModal();
   renderAll();
-  showToast('✅ 수정됐습니다.', 'green');
+  showToast('✅ 수정됐습니다.' + arMsg, 'green');
 }
 
 document.getElementById('cf-add-btn').addEventListener('click', () => {
@@ -2557,7 +2622,23 @@ function cfAddSingleRow(row) {
   row._id = 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2, 9);
   cfData.push(row);
   cfData.sort((a,b) => a.date.localeCompare(b.date));
+
+  const arAdded = addARFromCF(row);
+  let arMsg = arAdded ? ' | 📋 매출채권 자동 등록' : '';
+
+  // 입금 건 → AR 미회수액 자동 차감
+  if (row.type === '입금' && row.mid_cat && (row.in || 0) > 0) {
+    try {
+      const dr = deductARByIncome(row);
+      if (dr.ok) arMsg += ` | 💰 AR 차감 ${fmt(dr.totalCut)}원`;
+    } catch(e) {
+      const cfIdx = cfData.findIndex(r => r._id === row._id);
+      if (cfIdx >= 0) { cfData[cfIdx].ar_applied = '실패'; cfData[cfIdx].ar_applied_error = e.message; }
+    }
+  }
+
   saveData();
+  buildARPartnerSelect();
   document.getElementById('cf-date').value = '';
   document.getElementById('cf-desc').value = '';
   document.getElementById('cf-in').value = '';
@@ -2565,7 +2646,7 @@ function cfAddSingleRow(row) {
   document.getElementById('cf-midcat').value = '';
   document.getElementById('cf-status').value = '';
   renderAll();
-  showToast(`✅ 1건 추가됐습니다 (${row.date} ${row.desc})`, 'green');
+  showToast(`✅ 1건 추가됐습니다 (${row.date} ${row.desc})${arMsg}`, 'green');
 }
 
 document.getElementById('cf-filter-btn').addEventListener('click', () => { cfPage = 1; renderCFTable(); });
@@ -3066,6 +3147,172 @@ document.getElementById('ar-next').addEventListener('click', () => {
   const pages = Math.ceil(arFiltered.length / arPerPage);
   if (arPage < pages) { arPage++; renderARTable(); }
 });
+
+/* ===== 입금 CF → AR 미회수액 자동 차감 =====
+ * 입금 CF의 중분류가 AR 거래처와 일치하면 경과일 내림차순으로 미회수액을 순차 차감.
+ * 신규 등록·수정·일괄 업로드 시 자동 호출되며, ar_applied='완료'인 건은 건너뜀.
+ * @returns {{ ok, reason, totalCut, leftover, log }}
+ */
+function deductARByIncome(cfRow) {
+  if (cfRow.type !== '입금' || !cfRow.mid_cat || (cfRow.in || 0) <= 0)
+    return { ok: false, reason: '입금 건이 아니거나 중분류/금액 없음', log: [] };
+
+  if (cfRow.ar_applied === '완료')
+    return { ok: false, reason: '이미 처리 완료된 건', log: [] };
+
+  // 원복 이력 추적을 위해 AR 행에 _id 없으면 미리 부여
+  arData.forEach((a, i) => {
+    if (!a._id) a._id = 'ar_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 7);
+  });
+
+  const partner = cfRow.mid_cat;
+  const targets = arData
+    .map((r, i) => ({ ...r, _i: i }))
+    .filter(r => r.partner === partner && (r.remaining || 0) > 0)
+    .sort((a, b) => {
+      // 경과일 내림차순(오래된 건 먼저), 동률이면 시작일 오름차순
+      const ed = (b.elapsed || 0) - (a.elapsed || 0);
+      if (ed !== 0) return ed;
+      return (a.start || '').localeCompare(b.start || '');
+    });
+
+  if (!targets.length)
+    return { ok: false, reason: `'${partner}' 미회수 매출채권 없음`, log: [] };
+
+  let leftover = cfRow.in;
+  const log = [];
+
+  for (const t of targets) {
+    if (leftover <= 0) break;
+    const ar     = arData[t._i];
+    const before = ar.remaining;
+    const cut    = Math.min(leftover, before);
+    const after  = Math.max(0, before - cut);
+
+    const newStatus = after <= 0 ? '완료' : '부분회수';
+    log.push({ ar_id: ar._id, partner: ar.partner, start: ar.start,
+               before, cut, after, status_before: ar.status, status_after: newStatus });
+
+    ar.collected    = (ar.collected || 0) + cut;
+    ar.remaining    = after;
+    ar.status       = newStatus;
+    if (after <= 0 && !ar.collect_date) ar.collect_date = cfRow.date;
+    ar.elapsed      = after > 0 && ar.start
+      ? Math.max(0, Math.floor((new Date(refDate) - new Date(ar.start)) / 86400000)) : 0;
+
+    leftover -= cut;
+  }
+
+  const totalCut = log.reduce((s, l) => s + l.cut, 0);
+
+  const cfIdx = cfData.findIndex(r => r._id === cfRow._id);
+  if (cfIdx >= 0) {
+    cfData[cfIdx].ar_applied       = '완료';
+    cfData[cfIdx].ar_applied_date  = new Date().toISOString().slice(0, 10);
+    cfData[cfIdx].ar_applied_error = '';
+    cfData[cfIdx].ar_deduct_log    = log;
+  }
+
+  return { ok: true, totalCut, leftover, log };
+}
+
+/* ===== AR 차감 원복 =====
+ * cfRow.ar_deduct_log 이력을 역산해 각 AR의 미회수액·상태를 복원.
+ * saveCFEdit()에서 핵심 필드(날짜·금액·중분류)가 변경됐을 때 재차감 전에 호출.
+ *
+ * 이력 구조: { ar_id, partner, start, before, cut, after, status_before, status_after }
+ * - ar_id 우선 매칭 → 없으면 partner+start fallback (AR 행이 삭제된 경우 해당 항목 스킵)
+ * - status 복원: 현재 remaining/collected 값 기반으로 재계산 (다른 CF의 차감이 공존해도 안전)
+ * - collect_date: 이 차감으로 인해 완료 처리됐다가 원복 후 remaining이 생기면 해제
+ *
+ * @returns {{ ok: boolean, reason: string, reverted: number }}
+ */
+function revertARDeduction(cfRow) {
+  if (cfRow.ar_applied !== '완료')
+    return { ok: false, reason: 'AR 차감 이력 없음', reverted: 0 };
+
+  const log = cfRow.ar_deduct_log || [];
+  if (!log.length)
+    return { ok: true, reason: '이력 없음 (원복 불필요)', reverted: 0 };
+
+  let reverted = 0;
+
+  for (const entry of log) {
+    // ar_id 우선 매칭, 없으면 partner + start로 fallback
+    let arIdx = -1;
+    if (entry.ar_id) arIdx = arData.findIndex(a => a._id === entry.ar_id);
+    if (arIdx < 0)   arIdx = arData.findIndex(a => a.partner === entry.partner && a.start === entry.start);
+    if (arIdx < 0)  continue; // AR 행이 삭제된 경우 건너뜀
+
+    const ar = arData[arIdx];
+
+    // 차감액 원복 (다른 CF 차감분은 그대로 유지)
+    ar.remaining = (ar.remaining || 0) + entry.cut;
+    ar.collected = Math.max(0, (ar.collected || 0) - entry.cut);
+
+    // 상태 재계산: 현재 remaining/collected 기반으로 결정
+    if (ar.remaining <= 0) {
+      ar.status = '완료';
+    } else if ((ar.collected || 0) > 0) {
+      ar.status = '부분회수';
+    } else {
+      // 회수액이 없으면 차감 전 원래 상태로 복원
+      ar.status = entry.status_before || '미정';
+    }
+
+    // 이 차감으로 완료 처리됐었다면(status_after==='완료'), 원복 후 remaining이 생겼으면 collect_date 해제
+    if (entry.status_after === '완료' && ar.remaining > 0) {
+      ar.collect_date = '';
+    }
+
+    // elapsed 재계산
+    ar.elapsed = ar.remaining > 0 && ar.start
+      ? Math.max(0, Math.floor((new Date(refDate) - new Date(ar.start)) / 86400000))
+      : 0;
+
+    reverted++;
+  }
+
+  return { ok: true, reverted };
+}
+
+/* ===== CF 지출 → AR 자동 추가 =====
+ * 지출 CF의 중분류가 기존 AR 거래처와 일치하면 새 AR 항목을 생성.
+ * 중복 기준: partner + start(date) + expected(out) 모두 일치하면 건너뜀.
+ * @returns {boolean} 추가됐으면 true, 중복/미해당이면 false
+ */
+function addARFromCF(cfRow) {
+  if (cfRow.type !== '지출' || !cfRow.mid_cat || cfRow.out <= 0) return false;
+
+  const partner = cfRow.mid_cat;
+  const partnerExists = arData.some(ar => ar.partner === partner);
+  if (!partnerExists) return false;
+
+  // 중복 방지: 같은 거래처 + 같은 날짜 + 같은 금액이 이미 있으면 스킵
+  const isDup = arData.some(ar =>
+    ar.partner === partner &&
+    ar.start   === cfRow.date &&
+    Math.abs((ar.expected || 0) - cfRow.out) < 1
+  );
+  if (isDup) return false;
+
+  const remaining = cfRow.out;
+  const newAR = {
+    partner,
+    start       : cfRow.date,
+    expected    : cfRow.out,
+    collected   : 0,
+    remaining,
+    due_date    : '',
+    collect_date: '',
+    status      : '미정',
+    elapsed     : 0,
+    note        : `CF 자동등록: ${cfRow.desc}`,
+  };
+  arData.push(newAR);
+  return true;
+}
+
 
 /* ===== REPORT TAB ===== */
 const REPORT_ITEMS = ['세금과공과금','매입대금','운반비','지급수수료','연구개발비','법인카드 대금','급여','보험료','이자비용','광고선전비','대여금 지급','소모품비','통신비','대여금 상환','기타 지출','판매수수료','보증금','설비 대금','임차료','여비교통비','매출','대여금 수취','투자금','이자수익','기타 입금','계좌간이체','인오가닉'];
@@ -5221,11 +5468,39 @@ function cfDoImport(mode) {
     }
   }
   cfData.sort((a,b) => a.date.localeCompare(b.date));
+
+  // 추가/교체된 지출 CF → AR 자동 등록
+  let arAutoAdded = 0;
+  for (const r of cfParsed) {
+    if (r._id && r.type === '지출') {
+      if (addARFromCF(r)) arAutoAdded++;
+    }
+  }
+
+  // 추가/교체된 입금 CF → AR 미회수액 자동 차감
+  let arAutoDeducted = 0;
+  for (const r of cfParsed) {
+    if (r._id && r.type === '입금' && r.mid_cat && (r.in || 0) > 0) {
+      // cfData에서 최신 행 참조 (ar_applied 상태 포함)
+      const cfRow = cfData.find(d => d._id === r._id);
+      if (cfRow && cfRow.ar_applied !== '완료') {
+        try {
+          const dr = deductARByIncome(cfRow);
+          if (dr.ok) arAutoDeducted += dr.log.length;
+        } catch(e) {
+          const cfIdx = cfData.findIndex(d => d._id === r._id);
+          if (cfIdx >= 0) { cfData[cfIdx].ar_applied = '실패'; cfData[cfIdx].ar_applied_error = e.message; }
+        }
+      }
+    }
+  }
+
   saveData();
+  if (arAutoAdded > 0) buildARPartnerSelect();
   renderAll();
   document.getElementById('cf-modal').classList.add('hidden');
   document.getElementById('cf-dup-modal').classList.add('hidden');
-  const msg = [`✅ 가져오기 완료`, `추가: ${added}건`, replaced ? `교체: ${replaced}건` : '', skipped ? `건너뜀: ${skipped}건` : ''].filter(Boolean).join(' | ');
+  const msg = [`✅ 가져오기 완료`, `추가: ${added}건`, replaced ? `교체: ${replaced}건` : '', skipped ? `건너뜀: ${skipped}건` : '', arAutoAdded ? `📋 AR 자동등록: ${arAutoAdded}건` : '', arAutoDeducted ? `💰 AR 차감: ${arAutoDeducted}건` : ''].filter(Boolean).join(' | ');
   showToast(msg, 'green');
 }
 
