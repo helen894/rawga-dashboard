@@ -110,7 +110,8 @@
   .badge.지연 { background: rgba(255,77,106,0.15); color: var(--red); }
   .badge.정상 { background: rgba(7,81,56,0.15); color: var(--blue); }
   .badge.미정 { background: rgba(155,109,255,0.15); color: var(--purple); }
-  .badge.예정 { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .badge.예정     { background: rgba(245,166,35,0.15); color: var(--amber); }
+  .badge.부분회수 { background: rgba(245,166,35,0.15); color: var(--amber); }
   .pager { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 0; font-size: 12px; color: var(--text2); }
   .pager-btns { display: flex; gap: 6px; }
 
@@ -244,8 +245,7 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="dashboard">대시보드</div>
-  <div class="tab" data-tab="report">보고</div>
-  <div class="tab" data-tab="weekly-report">주간 리포팅</div>
+  <div class="tab" data-tab="reporting">리포팅</div>
   <div class="tab" data-tab="ar">매출채권(AR)</div>
   <div class="tab" data-tab="cashflow">입출금 내역</div>
   <div class="tab" data-tab="recurring">반복 거래</div>
@@ -275,7 +275,7 @@
     </div>
     <div class="kpi-card">
       <div class="kpi-label">금주 순현금</div>
-      <div class="kpi-value" id="kpi-weekly-net" style="cursor:pointer" title="클릭 시 주간 보고로 이동">—</div>
+      <div class="kpi-value" id="kpi-weekly-net" style="cursor:pointer" title="클릭 시 리포팅(주간)으로 이동">—</div>
       <div class="kpi-sub" id="kpi-weekly-range">—</div>
     </div>
     <!-- 2행 -->
@@ -300,7 +300,7 @@
       <div class="kpi-sub" id="kpi-next-range">—</div>
     </div>
   </div>
-  <!-- 금월 순현금 / 차월 예상 기말현금: 보고 탭 내부용 숨김 요소 -->
+  <!-- 금월 순현금 / 차월 예상 기말현금: 숨김 요소 -->
   <span id="kpi-monthly-net" style="display:none"></span>
   <span id="kpi-monthly-range" style="display:none"></span>
   <span id="kpi-next-month-cash" style="display:none"></span>
@@ -399,6 +399,10 @@
       <div class="form-group">
         <label>중분류</label>
         <select id="cf-midcat"></select>
+      </div>
+      <div class="form-group">
+        <label>대분류</label>
+        <select id="cf-bigcat"><option value="">자동(중분류 기준)</option></select>
       </div>
       <div class="form-group">
         <label>상태</label>
@@ -575,6 +579,7 @@
       <option value="">전체</option>
       <option value="지연">지연</option>
       <option value="정상">정상</option>
+      <option value="부분회수">부분회수</option>
       <option value="완료">완료</option>
       <option value="미정">미정</option>
     </select>
@@ -629,157 +634,18 @@
   </div>
 </div>
 
-<!-- ======== REPORT TAB ======== -->
-<div class="panel" id="panel-report">
+<!-- ======== REPORT TAB (제거됨) ======== -->
 
-  <!-- 서브탭 -->
-  <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0">
-    <button class="report-sub-tab active" data-sub="monthly" style="padding:8px 18px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--blue);color:var(--text);cursor:pointer;font-family:var(--font)">월간</button>
-    <button class="report-sub-tab" data-sub="weekly" style="padding:8px 18px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-family:var(--font)">주간</button>
-    <button class="report-sub-tab" data-sub="daily" style="padding:8px 18px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-family:var(--font)">일간</button>
+<!-- ======== REPORTING TAB ======== -->
+<div class="panel" id="panel-reporting">
+
+  <!-- 리포팅 하위 탭 (주간 / 추후 월간·분기·연간 확장 가능) -->
+  <div class="sheet-tabs" id="reporting-sub-tabs" style="margin-bottom:20px">
+    <div class="sheet-tab active" data-reporting-sub="weekly">주간</div>
   </div>
 
-  <!-- ===== 월간 보고 ===== -->
-  <div id="rpt-monthly">
-
-    <!-- 금월/차월 입금·지출 요약 카드 -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
-      <div class="kpi-card">
-        <div class="kpi-label">금월 입금</div>
-        <div class="kpi-value pos" id="rpt-m-in">—</div>
-        <div class="kpi-sub" id="rpt-m-in-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">금월 지출</div>
-        <div class="kpi-value neg" id="rpt-m-out">—</div>
-        <div class="kpi-sub" id="rpt-m-out-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">차월 입금 예정</div>
-        <div class="kpi-value pos" id="rpt-nm-in">—</div>
-        <div class="kpi-sub" id="rpt-nm-in-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">차월 지출 예정</div>
-        <div class="kpi-value neg" id="rpt-nm-out">—</div>
-        <div class="kpi-sub" id="rpt-nm-out-sub">—</div>
-      </div>
-    </div>
-
-    <div class="report-row">
-      <div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <div class="chart-title" style="margin:0">당월 입출금 요약</div>
-          <span id="rpt-month-label" style="font-size:12px;color:var(--text2)"></span>
-        </div>
-        <div class="report-table">
-          <table>
-            <thead><tr><th>항목</th><th class="num">당월 실적</th><th class="num">전월 실적</th><th class="num">증감</th></tr></thead>
-            <tbody id="rpt-month-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <div>
-        <div style="margin-bottom:16px" class="chart-title">당월 대분류 비용</div>
-        <div class="report-table">
-          <table>
-            <thead><tr><th>대분류</th><th class="num">당월</th><th class="num">전월</th><th class="num">증감</th></tr></thead>
-            <tbody id="rpt-month-cat-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== 주간 보고 ===== -->
-  <div id="rpt-weekly" style="display:none">
-
-    <!-- 금주/차주 입금·지출 요약 카드 -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
-      <div class="kpi-card">
-        <div class="kpi-label">금주 입금</div>
-        <div class="kpi-value pos" id="kpi-w-in">—</div>
-        <div class="kpi-sub" id="kpi-win-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">금주 지출</div>
-        <div class="kpi-value neg" id="kpi-w-out">—</div>
-        <div class="kpi-sub" id="kpi-wout-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">차주 입금 예정</div>
-        <div class="kpi-value pos" id="kpi-nw-in">—</div>
-        <div class="kpi-sub" id="kpi-nwin-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">차주 지출 예정</div>
-        <div class="kpi-value neg" id="kpi-nw-out">—</div>
-        <div class="kpi-sub" id="kpi-nwout-sub">—</div>
-      </div>
-    </div>
-
-    <div class="report-row">
-      <div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <div class="chart-title" style="margin:0">금주 입출금 요약</div>
-          <span id="rpt-week-label" style="font-size:12px;color:var(--text2)"></span>
-        </div>
-        <div class="report-table">
-          <table>
-            <thead><tr><th>항목</th><th class="num">금주</th><th class="num">차주 예정</th><th class="num">합계</th></tr></thead>
-            <tbody id="rpt-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <div>
-        <div style="margin-bottom:16px" class="chart-title">대분류 비용 리포트</div>
-        <div class="report-table">
-          <table>
-            <thead><tr><th>대분류</th><th class="num">금주</th><th class="num">차주 예정</th><th class="num">합계</th></tr></thead>
-            <tbody id="rpt-cat-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== 일간 보고 ===== -->
-  <div id="rpt-daily" style="display:none">
-
-    <!-- 당일 요약 카드 -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
-      <div class="kpi-card">
-        <div class="kpi-label">당일 입금</div>
-        <div class="kpi-value pos" id="rpt-day-in">—</div>
-        <div class="kpi-sub" id="rpt-day-label">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">당일 지출</div>
-        <div class="kpi-value neg" id="rpt-day-out">—</div>
-        <div class="kpi-sub" id="rpt-day-out-sub">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">당일 순현금</div>
-        <div class="kpi-value" id="rpt-day-net">—</div>
-        <div class="kpi-sub">입금 - 지출</div>
-      </div>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="chart-title" style="margin:0">당일 입출금 내역</div>
-    </div>
-    <div class="report-table" style="margin-bottom:20px">
-      <table>
-        <thead><tr><th>거래내용</th><th>구분</th><th>상태</th><th>중분류</th><th class="num">입금액</th><th class="num">출금액</th></tr></thead>
-        <tbody id="rpt-day-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-
-<!-- ======== WEEKLY REPORT TAB ======== -->
-<div class="panel" id="panel-weekly-report">
+  <!-- 주간 하위 패널 -->
+  <div id="rpt-panel-weekly">
 
   <!-- 주 탐색 헤더 -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:14px 20px;background:var(--card);border:1px solid var(--border);border-radius:10px">
@@ -794,6 +660,11 @@
   <!-- KPI 카드 4개 -->
   <div class="kpi-grid" style="margin-bottom:20px">
     <div class="kpi-card">
+      <div class="kpi-label">전주 기말</div>
+      <div class="kpi-value" id="wkrpt-pw-end">—</div>
+      <div class="kpi-sub" id="wkrpt-pw-end-sub"></div>
+    </div>
+    <div class="kpi-card">
       <div class="kpi-label">주간 입금</div>
       <div class="kpi-value pos" id="wkrpt-in">—</div>
       <div class="kpi-sub" id="wkrpt-in-sub"></div>
@@ -804,14 +675,9 @@
       <div class="kpi-sub" id="wkrpt-out-sub"></div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">순현금흐름</div>
-      <div class="kpi-value" id="wkrpt-net">—</div>
-      <div class="kpi-sub">입금 - 지출</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">전주 대비 순현금</div>
-      <div class="kpi-value" id="wkrpt-wow">—</div>
-      <div class="kpi-sub" id="wkrpt-wow-sub">—</div>
+      <div class="kpi-label">금주 기말</div>
+      <div class="kpi-value" id="wkrpt-wk-end">—</div>
+      <div class="kpi-sub" id="wkrpt-wk-end-sub"></div>
     </div>
   </div>
 
@@ -933,7 +799,9 @@
     </div>
   </div>
 
-</div>
+  </div><!-- /rpt-panel-weekly -->
+
+</div><!-- /panel-reporting -->
 
 <!-- ======== CATEGORY UPLOAD MODAL ======== -->
 <div class="modal-backdrop hidden" id="cat-modal">
@@ -1042,6 +910,10 @@
       <div class="form-group">
         <label>중분류</label>
         <select id="edit-cf-midcat"></select>
+      </div>
+      <div class="form-group">
+        <label>대분류</label>
+        <select id="edit-cf-bigcat"></select>
       </div>
       <div class="form-group">
         <label>상태</label>
@@ -1597,12 +1469,17 @@ async function loadDataFromSupabase() {
 
 /* ---- Supabase에 데이터 저장 ---- */
 async function saveDataToSupabase() {
-  if (_isSyncing) return; // 원격 수신 중이면 저장 안 함
+  // _isSyncing 중에도 localStorage는 항상 저장 (데이터 유실 방지)
+  // Supabase 원격 저장은 동기화 충돌 방지를 위해 _isSyncing 해소 후 재시도
   try {
-    setSyncStatus('saving');
-    // localStorage도 동시 저장 (오프라인 폴백)
     localStorage.setItem('cf_data', JSON.stringify(cfData));
     localStorage.setItem('ar_data', JSON.stringify(arData));
+  } catch(e) {
+    console.warn('localStorage 저장 실패:', e);
+  }
+  if (_isSyncing) return; // 원격 수신 중이면 Supabase 저장만 skip
+  try {
+    setSyncStatus('saving');
 
     const [cfRow, arRow] = await Promise.all([
       _supa.from('cf_data').select('id').limit(1).single(),
@@ -1699,6 +1576,7 @@ function subscribeRealtime() {
             const sel = document.getElementById(id);
             if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
           });
+          buildBigCatSelects();
           renderCategoryTab();
           renderAll();
           showToast('🔄 카테고리가 업데이트됐습니다.', 'green');
@@ -1947,12 +1825,14 @@ function renderKPIs() {
   document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)}`;
 
   // 금주 입금 + 전주 대비
-  document.getElementById('kpi-w-in').textContent = fmt(k.wIn);
+  const winEl = document.getElementById('kpi-w-in');
+  if (winEl) winEl.textContent = fmt(k.wIn);
   const winSubEl = document.getElementById('kpi-win-sub');
   if (winSubEl) winSubEl.innerHTML = `${fmtDate(k.wStart)}~${fmtDate(k.wEnd)} &nbsp; ${wowBadge(k.wowInGrowth, false)}`;
 
   // 금주 지출 + 전주 대비
-  document.getElementById('kpi-w-out').textContent = fmt(k.wOut);
+  const woutEl = document.getElementById('kpi-w-out');
+  if (woutEl) woutEl.textContent = fmt(k.wOut);
   const woutSubEl = document.getElementById('kpi-wout-sub');
   if (woutSubEl) woutSubEl.innerHTML = `${fmtDate(k.wStart)}~${fmtDate(k.wEnd)} &nbsp; ${wowBadge(k.wowOutGrowth, true)}`;
 
@@ -2455,11 +2335,13 @@ function renderARDonutChart() {
   const ctx = document.getElementById('arDonutChart').getContext('2d');
   if (arDonutInst) arDonutInst.destroy();
 
-  const counts = { 완료: 0, 정상: 0, 지연: 0, 미정: 0 };
+  const counts = { 완료: 0, 정상: 0, 부분회수: 0, 지연: 0, 미정: 0 };
   for (const r of arData) counts[r.status] = (counts[r.status]||0) + 1;
-  const labels = Object.keys(counts), vals = Object.values(counts);
-  const colors = { 완료: '#2ec77a', 정상: '#075138', 지연: '#ff4d6a', 미정: '#9b6dff' };
-  const colArr = labels.map(l => colors[l]);
+  // 건수 0인 항목 제외
+  const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
+  const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
+  const colors = { 완료: '#2ec77a', 정상: '#075138', 부분회수: '#f5a623', 지연: '#ff4d6a', 미정: '#9b6dff' };
+  const colArr = labels.map(l => colors[l] || '#aaaaaa');
 
   const legend = document.getElementById('ar-legend');
   legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colArr[i]}"></span>${l} ${vals[i]}건</span>`).join('');
@@ -2611,10 +2493,34 @@ function deleteCF(id) {
   if (idx === -1) { alert('해당 항목을 찾을 수 없습니다.'); return; }
   const row = cfData[idx];
   if (!confirm(`삭제하시겠습니까?\n[${row.date}] ${row.desc}`)) return;
+
+  // ① 자동 생성된 AR 원복 (splice 전에 실행)
+  let deleteMsg = '';
+  const hasCreationLog = (row.ar_created_log || []).some(e => !e.reverted);
+  if (hasCreationLog) {
+    try {
+      const crv = revertARCreation(row);
+      if (crv.reverted  > 0) deleteMsg += ` | 🗑 연결 AR ${crv.reverted}건 삭제`;
+      if (crv.protected > 0) deleteMsg += ` | ⚠ AR ${crv.protected}건 보호됨(기 회수액 있음, 직접 확인 필요)`;
+    } catch(e) {
+      deleteMsg += ` | ⚠ AR 생성 원복 오류: ${e.message}`;
+    }
+  }
+
+  // ② AR 차감 이력 원복 (입금 CF가 AR 미회수액을 차감했던 경우)
+  if (row.ar_applied === '완료') {
+    try {
+      const drv = revertARDeduction(row);
+      if (drv.reverted > 0) deleteMsg += ` | ↩ AR 차감 ${drv.reverted}건 원복`;
+    } catch(e) {
+      deleteMsg += ` | ⚠ AR 차감 원복 오류: ${e.message}`;
+    }
+  }
+
   cfData.splice(idx, 1);
   saveData();
   renderAll();
-  showToast('삭제됐습니다.', 'red');
+  showToast('삭제됐습니다.' + deleteMsg, 'red');
 }
 
 document.getElementById('cf-tbody').addEventListener('click', e => {
@@ -2636,6 +2542,7 @@ function openEditCF(id) {
   document.getElementById('edit-cf-in').value = r.in || '';
   document.getElementById('edit-cf-out').value = r.out || '';
   document.getElementById('edit-cf-midcat').value = r.mid_cat || '';
+  document.getElementById('edit-cf-bigcat').value = r.big_cat || getBigCat(r.mid_cat) || '';
   document.getElementById('edit-cf-status').value = r.status || '';
 
   document.getElementById('cf-edit-modal').classList.remove('hidden');
@@ -2654,13 +2561,15 @@ function saveCFEdit() {
   const inAmt  = parseFloat(document.getElementById('edit-cf-in').value)  || 0;
   const outAmt = parseFloat(document.getElementById('edit-cf-out').value) || 0;
   const mid    = document.getElementById('edit-cf-midcat').value;
+  const bigSel = document.getElementById('edit-cf-bigcat').value;
+  const big    = bigSel || getBigCat(mid);
   const status = document.getElementById('edit-cf-status').value;
 
   if (!date || !desc) return alert('거래일과 거래내용을 입력하세요.');
   if (inAmt === 0 && outAmt === 0) return alert('입금액 또는 출금액을 입력하세요.');
 
-  // 핵심 필드 변경 여부 공통 판단
-  const coreFieldChanged = r.date !== date || r.in !== inAmt || r.out !== outAmt || r.mid_cat !== mid;
+  // 핵심 필드 변경 여부 공통 판단 (대분류 명시 변경도 포함)
+  const coreFieldChanged = r.date !== date || r.in !== inAmt || r.out !== outAmt || r.mid_cat !== mid || r.big_cat !== big;
 
   // AR 생성 원복 조건: ar_created_log에 비원복 항목이 있고 핵심 필드가 변경된 경우
   const hasCreationLog = (r.ar_created_log || []).some(e => !e.reverted);
@@ -2668,11 +2577,13 @@ function saveCFEdit() {
 
   // ① AR 생성 원복 (자동 생성된 AR 삭제/보호) — 차감 원복보다 먼저 실행
   let creationRevertMsg = '';
+  let _creationRevertResult = null; // 보호 AR 존재 여부를 ④에서 참조하기 위해 캡처
   if (needCreationRevert) {
     try {
       const crv = revertARCreation(r);
+      _creationRevertResult = crv;
       if (crv.reverted  > 0) creationRevertMsg += ` | 🗑 AR 생성 원복 ${crv.reverted}건`;
-      if (crv.protected > 0) creationRevertMsg += ` | ⚠ AR 보호 ${crv.protected}건(이미 회수됨)`;
+      if (crv.protected > 0) creationRevertMsg += ` | ⚠ AR 보호 ${crv.protected}건(기 회수액 있음)`;
     } catch(e) {
       creationRevertMsg += ` | ⚠ AR 생성 원복 오류: ${e.message}`;
     }
@@ -2691,7 +2602,7 @@ function saveCFEdit() {
       if (!rv.ok) {
         cfData[idx] = {
           ...r, date, desc, in: inAmt, out: outAmt, amount: inAmt - outAmt,
-          type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: getBigCat(mid),
+          type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: big,
           ar_applied: '실패', ar_applied_error: `원복 실패: ${rv.reason}`,
         };
         cfData.sort((a,b) => a.date.localeCompare(b.date));
@@ -2703,7 +2614,7 @@ function saveCFEdit() {
       // 예외 발생 시 재차감 없이 오류 기록
       cfData[idx] = {
         ...r, date, desc, in: inAmt, out: outAmt, amount: inAmt - outAmt,
-        type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: getBigCat(mid),
+        type: inAmt > 0 ? '입금' : '지출', status, mid_cat: mid, big_cat: big,
         ar_applied: '실패', ar_applied_error: `원복 예외: ${e.message}`,
       };
       cfData.sort((a,b) => a.date.localeCompare(b.date));
@@ -2719,24 +2630,43 @@ function saveCFEdit() {
     in: inAmt, out: outAmt,
     amount: inAmt - outAmt,
     type: inAmt > 0 ? '입금' : '지출',
-    status, mid_cat: mid, big_cat: getBigCat(mid),
+    status, mid_cat: mid, big_cat: big,
     ...(needRevert ? { ar_applied: '', ar_applied_date: '', ar_applied_error: '', ar_deduct_log: [] } : {}),
   };
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
-  // ④ AR 재생성: 인오가닉 신규 거래처 / 기존 거래처 / 지출→AR
+  // ④ AR 재생성 / 직접 업데이트
   let arMsg = creationRevertMsg;
   const updatedRow = cfData.find(x => x._id === cfEditId);
   let arInorgAdded  = false;
   let arIncomeAdded = false;
-  if (updatedRow && updatedRow.type === '입금' && updatedRow.big_cat === '인오가닉' &&
-      updatedRow.mid_cat && (updatedRow.in || 0) > 0) {
-    arInorgAdded = addARFromInorganicIncome(updatedRow);
-    if (arInorgAdded) arMsg += ' | 🆕 인오가닉 거래처 AR 생성';
+
+  // ④-1 보호된 인오가닉 AR 직접 업데이트
+  //      (collected>0 이라 revertARCreation이 삭제 못한 AR → 새 값으로 갱신 후 로그 재활성화)
+  if (_creationRevertResult && _creationRevertResult.protected > 0 && updatedRow) {
+    try {
+      const syncRes = syncInorganicAR(updatedRow);
+      if (syncRes.synced  > 0) arMsg += ` | 🔄 AR ${syncRes.synced}건 직접 업데이트`;
+      if (syncRes.warnings.length) arMsg += ` | ⚠ ${syncRes.warnings.join(' / ')}`;
+      if (syncRes.synced > 0) arInorgAdded = true; // 업데이트 성공 = 신규 생성 불필요
+    } catch(e) {
+      arMsg += ` | ⚠ AR 직접 업데이트 오류: ${e.message}`;
+    }
   }
-  // 기존 거래처 입금 → AR 추가 (인오가닉 신규 생성 건 제외)
-  if (!arInorgAdded && updatedRow && updatedRow.type === '입금' &&
-      updatedRow.mid_cat && (updatedRow.in || 0) > 0) {
+
+  // ④-2 인오가닉 신규 거래처 AR 생성 (보호 AR 업데이트가 없었던 경우에만)
+  if (!arInorgAdded && updatedRow && updatedRow.type === '지출' && updatedRow.big_cat === '인오가닉' &&
+      updatedRow.mid_cat && (updatedRow.out || 0) > 0) {
+    const _r = addARFromInorganicIncome(updatedRow);
+    arInorgAdded = (_r === true);
+    if (arInorgAdded) arMsg += ' | 🆕 인오가닉 거래처 AR 생성';
+    else if (typeof _r === 'string' && _r !== '거래처이미존재' && _r !== '이미생성됨')
+      arMsg += ` | ⚠ 인오가닉AR미생성(${_r})`;
+  }
+  // 기존 거래처 입금 → AR 추가 (인오가닉 건 및 인오가닉 신규 생성 건 제외)
+  // 인오가닉(big_cat==='인오가닉')은 addARFromIncomeToPartner 경로 사용 안 함
+  if (!arInorgAdded && updatedRow && updatedRow.big_cat !== '인오가닉' &&
+      updatedRow.type === '입금' && updatedRow.mid_cat && (updatedRow.in || 0) > 0) {
     arIncomeAdded = addARFromIncomeToPartner(updatedRow);
     if (arIncomeAdded) arMsg += ' | 📋 기존 거래처 AR 추가';
   }
@@ -2775,12 +2705,13 @@ document.getElementById('cf-add-btn').addEventListener('click', () => {
   const inAmt = parseFloat(document.getElementById('cf-in').value) || 0;
   const outAmt = parseFloat(document.getElementById('cf-out').value) || 0;
   const mid = document.getElementById('cf-midcat').value;
+  const bigSel = document.getElementById('cf-bigcat').value;
   let status = document.getElementById('cf-status').value;
 
   if (!date || !desc) return alert('거래일과 거래내용을 입력하세요.');
   if (inAmt === 0 && outAmt === 0) return alert('입금액 또는 출금액을 입력하세요.');
 
-  const big = getBigCat(mid);
+  const big = bigSel || getBigCat(mid);
   const type = inAmt > 0 ? '입금' : '지출';
   if (!status) {
     const today = new Date().toISOString().slice(0,10);
@@ -2819,13 +2750,22 @@ function cfAddSingleRow(row) {
   const arAdded = addARFromCF(row);
   let arMsg = arAdded ? ' | 📋 매출채권 자동 등록' : '';
 
-  // 인오가닉 입금 건 → 신규 거래처 AR 생성
-  const arInorgAdded = addARFromInorganicIncome(row);
-  if (arInorgAdded) arMsg += ' | 🆕 인오가닉 거래처 AR 생성';
+  // 인오가닉 지출 건 → 신규 거래처 AR 생성
+  const _arInorgResult = addARFromInorganicIncome(row);
+  const arInorgAdded = (_arInorgResult === true);
+  if (arInorgAdded) {
+    arMsg += ' | 🆕 인오가닉 거래처 AR 생성';
+  } else if (typeof _arInorgResult === 'string'
+      && row.big_cat === '인오가닉' && row.type === '지출'
+      && _arInorgResult !== '거래처이미존재' && _arInorgResult !== '이미생성됨') {
+    // 인오가닉 지출임에도 AR 미생성된 경우만 경고 표시 (예상 케이스는 무음 처리)
+    arMsg += ` | ⚠ 인오가닉AR미생성(${_arInorgResult})`;
+  }
 
-  // 기존 거래처 입금 → AR 추가 (인오가닉 신규 생성 건 제외)
+  // 기존 거래처 입금 → AR 추가 (인오가닉 건 및 인오가닉 신규 생성 건 제외)
+  // 인오가닉(big_cat==='인오가닉')은 addARFromIncomeToPartner 경로 사용 안 함
   let arIncomeAdded = false;
-  if (!arInorgAdded) {
+  if (!arInorgAdded && row.big_cat !== '인오가닉') {
     arIncomeAdded = addARFromIncomeToPartner(row);
     if (arIncomeAdded) arMsg += ' | 📋 기존 거래처 AR 추가';
   }
@@ -2848,6 +2788,7 @@ function cfAddSingleRow(row) {
   document.getElementById('cf-in').value = '';
   document.getElementById('cf-out').value = '';
   document.getElementById('cf-midcat').value = '';
+  document.getElementById('cf-bigcat').value = '';
   document.getElementById('cf-status').value = '';
   renderAll();
   showToast(`✅ 1건 추가됐습니다 (${row.date} ${row.desc})${arMsg}`, 'green');
@@ -2974,12 +2915,36 @@ document.getElementById('cf-delete-selected-btn').addEventListener('click', () =
   if (!ids.length) return;
   if (!confirm(`선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
   const idSet = new Set(ids);
+
+  // AR 연동 원복 (삭제 전 실행)
+  let arRevCreated = 0, arProtected = 0, arRevDeducted = 0;
+  for (const r of cfData) {
+    if (!idSet.has(r._id)) continue;
+    if ((r.ar_created_log || []).some(e => !e.reverted)) {
+      try {
+        const crv = revertARCreation(r);
+        arRevCreated  += crv.reverted  || 0;
+        arProtected   += crv.protected || 0;
+      } catch(e) { /* 계속 진행 */ }
+    }
+    if (r.ar_applied === '완료') {
+      try {
+        const drv = revertARDeduction(r);
+        arRevDeducted += drv.reverted || 0;
+      } catch(e) { /* 계속 진행 */ }
+    }
+  }
+
   cfData = cfData.filter(r => !idSet.has(r._id));
   saveData();
   renderAll();
   document.getElementById('cf-bulk-bar').style.display = 'none';
   document.getElementById('cf-check-all').checked = false;
-  showToast(`🗑 ${ids.length}건 삭제됐습니다.`, 'red');
+  let msg = `🗑 ${ids.length}건 삭제됐습니다.`;
+  if (arRevCreated)  msg += ` | AR ${arRevCreated}건 삭제`;
+  if (arProtected)   msg += ` | AR ${arProtected}건 보호됨`;
+  if (arRevDeducted) msg += ` | AR 차감 ${arRevDeducted}건 원복`;
+  showToast(msg, 'red');
 });
 
 /* ---- 선택 취소 ---- */
@@ -3016,6 +2981,18 @@ document.getElementById('cf-delete-all-btn').addEventListener('click', () => {
     : `입출금 내역 전체 ${total}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
   if (!confirm(msg)) return;
   const filteredIds = new Set(cfFiltered.map(r => r._id));
+
+  // AR 연동 원복 (삭제 전 실행)
+  for (const r of cfData) {
+    if (!filteredIds.has(r._id)) continue;
+    if ((r.ar_created_log || []).some(e => !e.reverted)) {
+      try { revertARCreation(r); } catch(e) { /* 계속 진행 */ }
+    }
+    if (r.ar_applied === '완료') {
+      try { revertARDeduction(r); } catch(e) { /* 계속 진행 */ }
+    }
+  }
+
   cfData = cfData.filter(r => !filteredIds.has(r._id));
   saveData();
   renderAll();
@@ -3454,14 +3431,16 @@ function revertARDeduction(cfRow) {
     ar.remaining = (ar.remaining || 0) + entry.cut;
     ar.collected = Math.max(0, (ar.collected || 0) - entry.cut);
 
-    // 상태 재계산: 현재 remaining/collected 기반으로 결정
+    // 상태 재계산: remaining/collected/due_date 기반으로 결정
     if (ar.remaining <= 0) {
       ar.status = '완료';
     } else if ((ar.collected || 0) > 0) {
-      ar.status = '부분회수';
+      // 다른 CF에 의한 부분 회수가 남아있는 경우 — due_date 초과 여부도 체크
+      ar.status = ar.due_date && ar.due_date < refDate ? '지연' : '부분회수';
     } else {
-      // 회수액이 없으면 차감 전 원래 상태로 복원
-      ar.status = entry.status_before || '미정';
+      // 회수액이 전혀 없으면 차감 전 원래 상태로 복원, 단 due_date가 지났으면 지연으로 조정
+      const restored = entry.status_before || '미정';
+      ar.status = (restored !== '완료' && ar.due_date && ar.due_date < refDate) ? '지연' : restored;
     }
 
     // 이 차감으로 완료 처리됐었다면(status_after==='완료'), 원복 후 remaining이 생겼으면 collect_date 해제
@@ -3534,34 +3513,42 @@ function addARFromCF(cfRow) {
 }
 
 
-/* ===== 인오가닉 입금 건 → 신규 거래처 AR 자동 생성 =====
- * 대분류='인오가닉'인 입금 CF의 중분류가 AR 거래처에 없을 때만 새 AR 항목을 생성.
- * 중복 방지: arData에 동일 partner가 이미 존재하면 생성하지 않음.
- * 생성 후 같은 CF 행의 deductARByIncome은 호출하지 않음 (AR 즉시 소멸 방지).
- * @returns {boolean} 생성됐으면 true, 조건 불충족/이미 존재하면 false
+/* ===== 인오가닉 지출 건 → 신규 거래처 AR 자동 생성 =====
+ * 대분류='인오가닉'인 지출 CF의 중분류가 AR 거래처에 없을 때만 새 AR 항목을 생성.
+ * 중복 방지 ①: arData에 동일 partner가 이미 존재하면 생성하지 않음 (전역 거래처 중복 방지).
+ * 중복 방지 ②: ar_created_log에 이 CF 행이 이미 이 partner로 AR을 생성했으면 skip.
+ * @returns {true | string} 생성됐으면 true, 조건 불충족 시 실패 이유 문자열
  */
 function addARFromInorganicIncome(cfRow) {
-  if (cfRow.type !== '입금')          return false;
-  if (cfRow.big_cat !== '인오가닉')   return false;
-  if (!cfRow.mid_cat)                 return false;
-  if ((cfRow.in || 0) <= 0)          return false;
+  // 각 조건 실패 시 이유 문자열 반환 (진단용)
+  if (cfRow.type !== '지출')          return '구분='+cfRow.type;
+  if (cfRow.big_cat !== '인오가닉')   return '대분류='+cfRow.big_cat;
+  if (!cfRow.mid_cat)                 return '중분류없음';
+  if ((cfRow.out || 0) <= 0)         return '지출액='+cfRow.out;
 
-  // 동일 거래처가 이미 AR에 있으면 생성 안 함
-  if (arData.some(a => a.partner === cfRow.mid_cat)) return false;
+  // ① 전역 거래처 중복 방지: arData에 이미 같은 partner가 있으면 신규 생성 안 함
+  if (arData.some(a => a.partner === cfRow.mid_cat)) return '거래처이미존재';
 
+  // ② 이 CF 행이 이미 이 파트너에 대한 미원복 AR을 생성했으면 skip (재저장·재수정 중복 방지)
+  const alreadyCreated = (cfRow.ar_created_log || []).some(
+    e => !e.reverted && e.partner === cfRow.mid_cat && e.type === '신규거래처생성'
+  );
+  if (alreadyCreated) return '이미생성됨';
+
+  const amt = cfRow.out;  // 지출액(양수)을 AR 금액으로 사용
   const newArId = 'ar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   arData.push({
     _id         : newArId,
     partner     : cfRow.mid_cat,
     start       : cfRow.date,
-    expected    : cfRow.in,
+    expected    : amt,
     collected   : 0,
-    remaining   : cfRow.in,
+    remaining   : amt,
     due_date    : '',
     collect_date: '',
     status      : '미정',
     elapsed     : 0,
-    note        : `인오가닉 입금건 자동생성: ${cfRow.desc}`,
+    note        : `인오가닉 지출건 자동생성: ${cfRow.desc}`,
   });
 
   // ar_created_log 기록
@@ -3570,7 +3557,7 @@ function addARFromInorganicIncome(cfRow) {
     ar_id      : newArId,
     type       : '신규거래처생성',
     partner    : cfRow.mid_cat,
-    amount     : cfRow.in,
+    amount     : amt,
     start      : cfRow.date,
     created_at : new Date().toISOString().slice(0, 10),
     reverted   : false,
@@ -3627,6 +3614,62 @@ function revertARCreation(cfRow) {
   if (cfIdx >= 0) cfData[cfIdx].ar_created_log = cfRow.ar_created_log;
 
   return { ok: true, reverted, protected: protected_, notFound };
+}
+
+
+/* ===== 보호된 인오가닉 AR 직접 업데이트 =====
+ * revertARCreation에서 collected>0 이라 삭제하지 못한 AR(보호됨)을 새 CF 값으로 직접 동기화.
+ * - 처리 순서: partner·start·expected/remaining 갱신 → 로그 항목 재활성화(reverted=false)
+ * - 기 회수액이 새 금액보다 크면 금액은 유지하고 경고만 반환
+ * - 이 함수 호출 후 alreadyCreated 체크가 true가 되어 이중 생성이 방지됨
+ * @param {object} cfRow  수정 완료된 CF 행 (새 date·out·mid_cat 포함)
+ * @returns {{ synced: number, warnings: string[] }}
+ */
+function syncInorganicAR(cfRow) {
+  const today = new Date().toISOString().slice(0, 10);
+  let synced = 0;
+  const warnings = [];
+
+  const log = cfRow.ar_created_log || [];
+  // revertARCreation이 "보호됨" 마킹한 신규거래처생성 항목만 대상
+  const protectedEntries = log.filter(
+    e => e.reverted && (e.revert_note || '').includes('보호됨') && e.type === '신규거래처생성'
+  );
+
+  for (const entry of protectedEntries) {
+    const arIdx = arData.findIndex(a => a._id === entry.ar_id);
+    if (arIdx < 0) continue; // AR이 이미 없으면 skip
+
+    const ar       = arData[arIdx];
+    const collected = ar.collected || 0;
+    const newAmt   = cfRow.out;
+
+    // 금액: 기 회수액보다 새 금액이 크거나 같아야 안전하게 갱신
+    if (newAmt >= collected) {
+      ar.expected  = newAmt;
+      ar.remaining = newAmt - collected;
+    } else {
+      warnings.push(`기 회수액(${fmt(collected)}원) > 새 금액(${fmt(newAmt)}원): 금액 미조정`);
+    }
+    ar.partner = cfRow.mid_cat;
+    ar.start   = cfRow.date;
+
+    // 로그 항목 재활성화 — 새 값으로 갱신하고 reverted 해제
+    entry.reverted    = false;
+    entry.reverted_at = '';
+    entry.revert_note = '';
+    entry.partner     = cfRow.mid_cat;
+    entry.amount      = cfRow.out;
+    entry.start       = cfRow.date;
+    entry.updated_at  = today;
+    synced++;
+  }
+
+  // cfData에 반영
+  const cfIdx = cfData.findIndex(r => r._id === cfRow._id);
+  if (cfIdx >= 0) cfData[cfIdx].ar_created_log = log;
+
+  return { synced, warnings };
 }
 
 
@@ -3881,7 +3924,7 @@ function renderDailyReport() {
 
 /* ===== 주간 리포팅 탭 ===== */
 
-// ISO 주차 번호 계산 (월요일 시작 기준)
+// ISO 주차 번호 계산 (월요일 시작 기준, 연간 기준 — 내부 참조용으로 유지)
 function getISOWeekNum(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   const jan4 = new Date(d.getFullYear(), 0, 4);
@@ -3891,13 +3934,29 @@ function getISOWeekNum(dateStr) {
   return Math.max(1, Math.floor(diff / (7 * 86400000)) + 1);
 }
 
+// 목요일 기준 월 주차 계산
+// 해당 월의 첫 번째 목요일을 1주차로 삼아 주어진 날짜(목요일)가 몇 번째 주인지 반환.
+// ISO 8601과 동일한 "해당 주의 목요일이 속한 달"로 주차를 결정하는 방식.
+function getWeekNumByThursday(thuDateStr) {
+  const thu = new Date(thuDateStr + 'T00:00:00');
+  const year = thu.getFullYear(), month = thu.getMonth();
+  // 해당 월의 첫 번째 목요일: 1일부터 시작해서 요일이 4(목)이 될 때까지 전진
+  const firstDay = new Date(year, month, 1);
+  const daysToFirstThu = (4 - firstDay.getDay() + 7) % 7; // 0이면 1일 자체가 목요일
+  const firstThu = new Date(year, month, 1 + daysToFirstThu);
+  return Math.round((thu.getTime() - firstThu.getTime()) / (7 * 86400000)) + 1;
+}
+
 function renderWeeklyReport() {
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(refDate);
 
   // ── 헤더 ──────────────────────────────────────────────
-  const wd = new Date(wStart + 'T00:00:00');
-  const wYear = wd.getFullYear(), wMon = wd.getMonth() + 1;
-  const wNum  = getISOWeekNum(wStart);
+  // 주차 표시 기준: 해당 주의 목요일(wStart + 3일)이 속한 년/월/주차
+  // → 월/연 경계에서도 "목요일이 어느 달이냐"로 일관되게 결정
+  const thuDate = new Date(new Date(wStart + 'T00:00:00').getTime() + 3 * 86400000);
+  const thuStr  = thuDate.toISOString().slice(0, 10);
+  const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
+  const wNum  = getWeekNumByThursday(thuStr);
   const fmtMD = s => s ? s.slice(5).replace('-', '/') : '';
 
   document.getElementById('wkrpt-week-title').textContent =
@@ -3917,21 +3976,30 @@ function renderWeeklyReport() {
   const pwNet = pwIn - pwOut;
   const wow   = wNet - pwNet;
 
+  // 기말 잔액 계산 (INIT_CASH + 누적 실제 입출금)
+  let pwEndCash = INIT_CASH, wkEndCash = INIT_CASH;
+  for (const r of cfData) {
+    if (r.status === '실제 입금' && r.date <= pwEnd) pwEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= pwEnd) pwEndCash -= (r.out || 0);
+    if (r.status === '실제 입금' && r.date <= wEnd)  wkEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= wEnd)  wkEndCash -= (r.out || 0);
+  }
+
   // KPI 카드
-  const netEl = document.getElementById('wkrpt-net');
-  netEl.textContent  = fmt(wNet);
-  netEl.className    = 'kpi-value ' + (wNet >= 0 ? 'pos' : 'neg');
+  const pwEndEl = document.getElementById('wkrpt-pw-end');
+  pwEndEl.textContent = fmt(pwEndCash);
+  pwEndEl.className   = 'kpi-value ' + (pwEndCash >= 0 ? 'pos' : 'neg');
+  document.getElementById('wkrpt-pw-end-sub').textContent = `기준일: ${pwEnd} (일)`;
 
   document.getElementById('wkrpt-in').textContent       = fmt(wIn);
   document.getElementById('wkrpt-out').textContent      = fmt(wOut);
   document.getElementById('wkrpt-in-sub').textContent   = `${fmtMD(wStart)} ~ ${fmtMD(wEnd)} 실제 입금`;
   document.getElementById('wkrpt-out-sub').textContent  = `${fmtMD(wStart)} ~ ${fmtMD(wEnd)} 실제 지출`;
 
-  const wowEl = document.getElementById('wkrpt-wow');
-  wowEl.textContent = (wow >= 0 ? '+' : '') + fmt(wow);
-  wowEl.className   = 'kpi-value ' + (wow > 0 ? 'pos' : wow < 0 ? 'neg' : '');
-  document.getElementById('wkrpt-wow-sub').textContent =
-    `전주 순현금 ${fmt(pwNet)}원 대비`;
+  const wkEndEl = document.getElementById('wkrpt-wk-end');
+  wkEndEl.textContent = fmt(wkEndCash);
+  wkEndEl.className   = 'kpi-value ' + (wkEndCash >= 0 ? 'pos' : 'neg');
+  document.getElementById('wkrpt-wk-end-sub').textContent = `기준일: ${wEnd} (일)`;
 
   // ── 입금 내역 테이블 ──────────────────────────────────
   const inRows  = wCF.filter(r => r.in  > 0).sort((a, b) => b.in  - a.in);
@@ -4038,24 +4106,17 @@ function renderWeeklyReport() {
     `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">고위험 매출채권이 없습니다. 👍</td></tr>`;
 }
 
-/* ---- 서브탭 이벤트 ---- */
-document.querySelectorAll('.report-sub-tab').forEach(btn => {
+/* ---- 리포팅 하위 탭 이벤트 ---- */
+document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.report-sub-tab').forEach(b => {
-      b.style.borderBottom = '2px solid transparent';
-      b.style.color = 'var(--text2)';
-    });
-    btn.style.borderBottom = '2px solid var(--blue)';
-    btn.style.color = 'var(--text)';
-
-    const sub = btn.dataset.sub;
-    document.getElementById('rpt-monthly').style.display = sub === 'monthly' ? '' : 'none';
-    document.getElementById('rpt-weekly').style.display  = sub === 'weekly'  ? '' : 'none';
-    document.getElementById('rpt-daily').style.display   = sub === 'daily'   ? '' : 'none';
-
-    if (sub === 'monthly') renderMonthlyReport();
-    if (sub === 'weekly')  renderReport();
-    if (sub === 'daily')   renderDailyReport();
+    document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const sub = btn.dataset.reportingSub;
+    // 추후 월간·분기·연간 패널 추가 시 여기서 show/hide 처리
+    if (sub === 'weekly') {
+      document.getElementById('rpt-panel-weekly').style.display = '';
+      renderWeeklyReport();
+    }
   });
 });
 
@@ -4397,31 +4458,24 @@ function renderRecurringTab() {
 
 
 /* ===== TABS ===== */
-/* ===== 주간 보고로 이동 헬퍼 ===== */
+/* ===== 주간 리포팅으로 이동 헬퍼 ===== */
 function navigateToWeeklyReport() {
-  // 보고 탭 활성화
+  // 리포팅 탭 활성화
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  const reportTab = document.querySelector('.tab[data-tab="report"]');
-  const reportPanel = document.getElementById('panel-report');
-  if (reportTab) reportTab.classList.add('active');
-  if (reportPanel) reportPanel.classList.add('active');
+  const reportingTab = document.querySelector('.tab[data-tab="reporting"]');
+  const reportingPanel = document.getElementById('panel-reporting');
+  if (reportingTab) reportingTab.classList.add('active');
+  if (reportingPanel) reportingPanel.classList.add('active');
 
-  // 주간 서브탭 활성화
-  document.querySelectorAll('.report-sub-tab').forEach(b => {
-    b.style.borderBottom = '2px solid transparent';
-    b.style.color = 'var(--text2)';
-  });
-  const weeklyBtn = document.querySelector('.report-sub-tab[data-sub="weekly"]');
-  if (weeklyBtn) {
-    weeklyBtn.style.borderBottom = '2px solid var(--blue)';
-    weeklyBtn.style.color = 'var(--text)';
-  }
-  document.getElementById('rpt-monthly').style.display = 'none';
-  document.getElementById('rpt-weekly').style.display  = '';
-  document.getElementById('rpt-daily').style.display   = 'none';
-  renderReport();
-  renderKPIs(); // 금주 입금/지출 카드도 함께 업데이트
+  // 주간 하위 탭 활성화
+  document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(b => b.classList.remove('active'));
+  const weeklyBtn = document.querySelector('#reporting-sub-tabs .sheet-tab[data-reporting-sub="weekly"]');
+  if (weeklyBtn) weeklyBtn.classList.add('active');
+  const weeklyPanel = document.getElementById('rpt-panel-weekly');
+  if (weeklyPanel) weeklyPanel.style.display = '';
+
+  renderWeeklyReport();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -4518,8 +4572,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const panel = document.getElementById('panel-' + tab.dataset.tab);
     panel.classList.add('active');
-    if (tab.dataset.tab === 'report')         renderMonthlyReport();
-    if (tab.dataset.tab === 'weekly-report')  renderWeeklyReport();
+    if (tab.dataset.tab === 'reporting')      renderWeeklyReport();
     if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
     if (tab.dataset.tab === 'recurring')      renderRecurringTab();
 
@@ -4646,17 +4699,7 @@ function renderAll() {
   buildCFFilterSelects();
   renderCFTable();
   renderARTable();
-  if (document.getElementById('panel-report').classList.contains('active')) {
-    // 현재 보이는 서브탭 패널 기준으로 렌더
-    const isMonthly = document.getElementById('rpt-monthly').style.display !== 'none';
-    const isWeekly  = document.getElementById('rpt-weekly').style.display  !== 'none';
-    const isDaily   = document.getElementById('rpt-daily').style.display   !== 'none';
-    if (isMonthly) renderMonthlyReport();
-    else if (isWeekly) renderReport();
-    else if (isDaily) renderDailyReport();
-    else renderMonthlyReport();
-  }
-  if (document.getElementById('panel-weekly-report').classList.contains('active')) {
+  if (document.getElementById('panel-reporting').classList.contains('active')) {
     renderWeeklyReport();
   }
 }
@@ -4702,6 +4745,19 @@ function getMidCat(desc, type) {
 }
 function getBigCat(mid)  { return catMidToBig[mid] || '기타'; }
 function getMidCats()    { return Object.keys(catMidToBig).sort(); }
+function getBigCats()    { return [...new Set(Object.values(catMidToBig))].sort((a,b) => a.localeCompare(b,'ko')); }
+
+// 대분류 셀렉터 재구성 (추가 폼 / 수정 모달 공용)
+function buildBigCatSelects(curAddBig, curEditBig) {
+  const allBigs = getBigCats();
+  const makeOpts = (cur) =>
+    '<option value="">자동(중분류 기준)</option>' +
+    allBigs.map(b => `<option value="${b}"${b === cur ? ' selected' : ''}>${b}</option>`).join('');
+  const addSel  = document.getElementById('cf-bigcat');
+  const editSel = document.getElementById('edit-cf-bigcat');
+  if (addSel)  addSel.innerHTML  = makeOpts(curAddBig  || addSel.value  || '');
+  if (editSel) editSel.innerHTML = makeOpts(curEditBig || editSel.value || '');
+}
 
 // cfData 전체 중분류+대분류 재매핑 (type 기반 조합 키 반영)
 function remapAllCfData() {
@@ -5228,6 +5284,7 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
   });
+  buildBigCatSelects();
 
   const remapped = remapAllCfData();
   if (remapped > 0) saveData();
@@ -5253,6 +5310,7 @@ document.getElementById('cat-reset-btn').addEventListener('click', () => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
   });
+  buildBigCatSelects();
   const remapped = remapAllCfData();
   if (remapped > 0) saveData();
   renderMidBigList();
@@ -5611,6 +5669,7 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
   });
+  buildBigCatSelects();
 
   // cfData 재매핑
   const remapped = remapAllCfData();
@@ -5691,6 +5750,18 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     const sel = document.getElementById('edit-cf-midcat');
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
   })();
+  buildBigCatSelects();
+
+  // 중분류 변경 시 대분류 자동 갱신 (추가 폼)
+  document.getElementById('cf-midcat').addEventListener('change', function() {
+    const bigSel = document.getElementById('cf-bigcat');
+    if (bigSel) bigSel.value = getBigCat(this.value) || '';
+  });
+  // 중분류 변경 시 대분류 자동 갱신 (수정 모달)
+  document.getElementById('edit-cf-midcat').addEventListener('change', function() {
+    const bigSel = document.getElementById('edit-cf-bigcat');
+    if (bigSel) bigSel.value = getBigCat(this.value) || '';
+  });
 
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('cf-from').value = monthStart(refDate);
@@ -5713,6 +5784,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     loadCatData(); // Supabase에서 받은 카테고리로 갱신
     buildMidCatSelect();
     buildARPartnerSelect();
+    buildBigCatSelects();
     const autoChanged2 = autoUpdateStatus();
     const recurGenerated2 = generateRecurring(false);
     renderAll();
@@ -6022,23 +6094,23 @@ function cfDoImport(mode) {
     }
   }
 
-  // 추가/교체된 인오가닉 입금 CF → 신규 거래처 AR 생성
+  // 추가/교체된 인오가닉 지출 CF → 신규 거래처 AR 생성
   let arInorgAutoAdded = 0;
   const arCreatedIds = new Set(); // 이 사이클에서 AR이 자동 생성된 CF _id (차감 제외 대상)
   for (const r of cfParsed) {
-    if (r._id && r.type === '입금' && r.big_cat === '인오가닉' && r.mid_cat) {
+    if (r._id && r.type === '지출' && r.big_cat === '인오가닉' && r.mid_cat) {
       const cfRow = cfData.find(d => d._id === r._id);
-      if (cfRow && addARFromInorganicIncome(cfRow)) {
+      if (cfRow && addARFromInorganicIncome(cfRow) === true) {
         arInorgAutoAdded++;
         arCreatedIds.add(r._id);
       }
     }
   }
 
-  // 추가/교체된 기존 거래처 입금 CF → AR 추가 (인오가닉 신규 생성 건 제외)
+  // 추가/교체된 기존 거래처 입금 CF → AR 추가 (인오가닉 건 및 이미 생성된 건 제외)
   let arIncomeAutoAdded = 0;
   for (const r of cfParsed) {
-    if (r._id && r.type === '입금' && r.mid_cat && (r.in || 0) > 0) {
+    if (r._id && r.type === '입금' && r.mid_cat && (r.in || 0) > 0 && r.big_cat !== '인오가닉') {
       if (arCreatedIds.has(r._id)) continue;
       const cfRow = cfData.find(d => d._id === r._id);
       if (cfRow && addARFromIncomeToPartner(cfRow)) {
