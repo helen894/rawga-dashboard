@@ -2552,9 +2552,13 @@ function closeCFEditModal() {
   document.getElementById('cf-edit-modal').classList.add('hidden');
   cfEditId = null;
 }
+// 배경 클릭으로 닫기 (ar-edit-modal과 동일 패턴)
+document.getElementById('cf-edit-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCFEditModal();
+});
 function saveCFEdit() {
   const idx = cfData.findIndex(r => r._id === cfEditId);
-  if (idx === -1) return;
+  if (idx === -1) { closeCFEditModal(); return; }
   const r = cfData[idx]; // 수정 전 원본 (ar_deduct_log 포함)
 
   const date   = document.getElementById('edit-cf-date').value;
@@ -3184,7 +3188,7 @@ document.getElementById('ar-edit-modal').addEventListener('click', e => {
 
 document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
   const idx = arData.findIndex(r => r._id === arEditId);
-  if (idx === -1) return;
+  if (idx === -1) { closeAREditModal(); return; }
 
   const partner   = document.getElementById('edit-ar-partner').value.trim();
   const start     = document.getElementById('edit-ar-start').value;
@@ -6443,7 +6447,7 @@ function showToast(msg, type='green') {
   if (!t) {
     t = document.createElement('div');
     t.id = 'toast-el';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;pointer-events:none;';
     document.body.appendChild(t);
   }
   const colors = { green: 'background:#0d3d24;color:#2ec77a;border:1px solid rgba(46,199,122,0.4)', red: 'background:#3d0f18;color:#ff4d6a;border:1px solid rgba(255,77,106,0.4)' };
