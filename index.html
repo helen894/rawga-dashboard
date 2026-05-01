@@ -85,6 +85,7 @@
   .filter-bar label { font-size: 12px; color: var(--text2); }
   .btn { background: var(--blue2); color: var(--blue); border: 1px solid var(--blue); font-size: 12px; font-family: var(--font); font-weight: 500; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
   .btn:hover { background: var(--blue); color: #fff; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
   .btn.green { background: var(--green2); color: var(--green); border-color: var(--green); }
   .btn.green:hover { background: var(--green); color: #000; }
   .btn.red { background: var(--red2); color: var(--red); border-color: var(--red); }
@@ -2482,9 +2483,9 @@ function renderCFTable() {
   nextBtn.style.opacity = cfPage >= pages ? '0.35' : '';
   nextBtn.style.cursor  = cfPage >= pages ? 'not-allowed' : '';
 
-  delAllBtn.disabled = cfData.length === 0;
-  delAllBtn.style.opacity = cfData.length === 0 ? '0.35' : '';
-  delAllBtn.style.cursor  = cfData.length === 0 ? 'not-allowed' : '';
+  delAllBtn.disabled = cfFiltered.length === 0;
+  delAllBtn.style.opacity = cfFiltered.length === 0 ? '0.35' : '';
+  delAllBtn.style.cursor  = cfFiltered.length === 0 ? 'not-allowed' : '';
 }
 
 /* ---- 삭제 / 수정: 이벤트 위임 방식 ---- */
@@ -3095,9 +3096,9 @@ function renderARTable() {
   arNextBtn.style.opacity     = arPage >= pages ? '0.35' : '';
   arNextBtn.style.cursor      = arPage >= pages ? 'not-allowed' : '';
 
-  arDelAllBtn.disabled        = arData.length === 0;
-  arDelAllBtn.style.opacity   = arData.length === 0 ? '0.35' : '';
-  arDelAllBtn.style.cursor    = arData.length === 0 ? 'not-allowed' : '';
+  arDelAllBtn.disabled        = arFiltered.length === 0;
+  arDelAllBtn.style.opacity   = arFiltered.length === 0 ? '0.35' : '';
+  arDelAllBtn.style.cursor    = arFiltered.length === 0 ? 'not-allowed' : '';
 
   // 정렬 아이콘 표시
   document.querySelectorAll('#panel-ar thead th.sort').forEach(th => {
