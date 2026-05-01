@@ -611,7 +611,7 @@
           <th class="num">현재 회수액</th>
           <th class="num sort" data-col="remaining">미회수액</th>
           <th class="sort" data-col="due">회수예정일</th>
-          <th>실제 입금일</th>
+          <th class="sort" data-col="collect_date">실제 입금일</th>
           <th>상태</th>
           <th class="num sort" data-col="elapsed">경과일</th>
           <th>비고</th>
@@ -3022,9 +3022,17 @@ function getFilteredAR() {
     return true;
   });
   filtered.sort((a, b) => {
+    // 실제 입금일: 빈 값은 정렬 방향 관계없이 항상 하단
+    if (arSortCol === 'collect_date') {
+      const av = a.collect_date || '', bv = b.collect_date || '';
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return arSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
     let av, bv;
-    if (arSortCol === 'start')     { av = a.start||'';    bv = b.start||''; }
-    else if (arSortCol === 'due')  { av = a.due_date||''; bv = b.due_date||''; }
+    if (arSortCol === 'start')          { av = a.start||'';    bv = b.start||''; }
+    else if (arSortCol === 'due')       { av = a.due_date||''; bv = b.due_date||''; }
     else if (arSortCol === 'remaining') { av = a.remaining||0; bv = b.remaining||0; }
     else if (arSortCol === 'elapsed')   { av = a.elapsed||0;   bv = b.elapsed||0; }
     else { av = a.remaining||0; bv = b.remaining||0; }
@@ -3073,6 +3081,23 @@ function renderARTable() {
 
   document.getElementById('ar-count').textContent = `총 ${total}건 | 미회수 합계: ${fmt(arFiltered.reduce((s,r)=>s+(r.remaining||0),0))}원`;
   document.getElementById('ar-page-info').textContent = `${arPage} / ${pages}`;
+
+  // 버튼 상태 갱신
+  const arPrevBtn   = document.getElementById('ar-prev');
+  const arNextBtn   = document.getElementById('ar-next');
+  const arDelAllBtn = document.getElementById('ar-delete-all-btn');
+
+  arPrevBtn.disabled          = arPage <= 1;
+  arPrevBtn.style.opacity     = arPage <= 1 ? '0.35' : '';
+  arPrevBtn.style.cursor      = arPage <= 1 ? 'not-allowed' : '';
+
+  arNextBtn.disabled          = arPage >= pages;
+  arNextBtn.style.opacity     = arPage >= pages ? '0.35' : '';
+  arNextBtn.style.cursor      = arPage >= pages ? 'not-allowed' : '';
+
+  arDelAllBtn.disabled        = arData.length === 0;
+  arDelAllBtn.style.opacity   = arData.length === 0 ? '0.35' : '';
+  arDelAllBtn.style.cursor    = arData.length === 0 ? 'not-allowed' : '';
 
   // 정렬 아이콘 표시
   document.querySelectorAll('#panel-ar thead th.sort').forEach(th => {
@@ -3317,7 +3342,7 @@ document.querySelector('#panel-ar thead').addEventListener('click', e => {
   if (!th) return;
   const col = th.dataset.col;
   if (arSortCol === col) arSortAsc = !arSortAsc;
-  else { arSortCol = col; arSortAsc = col === 'start' || col === 'due'; }
+  else { arSortCol = col; arSortAsc = col === 'start' || col === 'due' || col === 'collect_date'; }
   arPage = 1;
   renderARTable();
 });
@@ -3371,13 +3396,17 @@ function deductARByIncome(cfRow) {
     const after  = Math.max(0, before - cut);
 
     const newStatus = after <= 0 ? '완료' : '부분회수';
+    // date 필드 추가: 원복 시 다른 CF 기여분 날짜 재계산에 활용
     log.push({ ar_id: ar._id, partner: ar.partner, start: ar.start,
-               before, cut, after, status_before: ar.status, status_after: newStatus });
+               before, cut, after, status_before: ar.status, status_after: newStatus,
+               date: cfRow.date });
 
     ar.collected    = (ar.collected || 0) + cut;
     ar.remaining    = after;
     ar.status       = newStatus;
-    if (after <= 0 && !ar.collect_date) ar.collect_date = cfRow.date;
+    // 전액·부분 차감 모두 실제 입금일(거래일) 기록
+    // 여러 CF가 같은 AR을 차감하는 경우 가장 최신 거래일을 유지
+    if (!ar.collect_date || cfRow.date > ar.collect_date) ar.collect_date = cfRow.date;
     ar.elapsed      = after > 0 && ar.start
       ? Math.max(0, Math.floor((new Date(refDate) - new Date(ar.start)) / 86400000)) : 0;
 
@@ -3443,10 +3472,18 @@ function revertARDeduction(cfRow) {
       ar.status = (restored !== '완료' && ar.due_date && ar.due_date < refDate) ? '지연' : restored;
     }
 
-    // 이 차감으로 완료 처리됐었다면(status_after==='완료'), 원복 후 remaining이 생겼으면 collect_date 해제
-    if (entry.status_after === '완료' && ar.remaining > 0) {
-      ar.collect_date = '';
-    }
+    // 실제 입금일 재계산:
+    // 이 CF(cfRow) 이외 다른 CF의 ar_deduct_log 중 이 AR을 차감한 이력의 최신 거래일을 찾아 반영.
+    // 다른 CF 기여분이 없으면 빈 문자열로 초기화.
+    const otherMaxDate = cfData
+      .filter(cf => cf._id !== cfRow._id && cf.ar_applied === '완료' && Array.isArray(cf.ar_deduct_log))
+      .flatMap(cf => cf.ar_deduct_log.filter(l =>
+        (entry.ar_id ? l.ar_id === entry.ar_id : (l.partner === ar.partner && l.start === ar.start))
+        && l.date
+      ))
+      .map(l => l.date)
+      .reduce((max, d) => (!max || d > max ? d : max), '');
+    ar.collect_date = otherMaxDate || '';
 
     // elapsed 재계산
     ar.elapsed = ar.remaining > 0 && ar.start
