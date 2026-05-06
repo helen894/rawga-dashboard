@@ -640,7 +640,7 @@
 <!-- ======== REPORTING TAB ======== -->
 <div class="panel" id="panel-reporting">
 
-  <!-- 리포팅 하위 탭 (주간 / 추후 월간·분기·연간 확장 가능) -->
+  <!-- 리포팅 하위 탭 -->
   <div class="sheet-tabs" id="reporting-sub-tabs" style="margin-bottom:20px">
     <div class="sheet-tab active" data-reporting-sub="weekly">주간</div>
   </div>
@@ -691,14 +691,20 @@
         💰 주간 입금 내역
         <small id="wkrpt-in-count" style="font-weight:400;color:var(--text3)"></small>
       </div>
-      <div style="max-height:260px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <div style="max-height:300px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+          <colgroup>
+            <col style="width:44px">
+            <col>
+            <col style="width:86px">
+            <col style="width:80px">
+          </colgroup>
           <thead>
-            <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
-              <th style="text-align:left;padding:5px 6px;font-weight:500">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500">거래내용</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500">중분류</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500">금액</th>
+            <tr>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
           </thead>
           <tbody id="wkrpt-in-tbody"></tbody>
@@ -712,14 +718,20 @@
         💸 주간 지출 내역
         <small id="wkrpt-out-count" style="font-weight:400;color:var(--text3)"></small>
       </div>
-      <div style="max-height:260px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <div style="max-height:300px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+          <colgroup>
+            <col style="width:44px">
+            <col>
+            <col style="width:86px">
+            <col style="width:80px">
+          </colgroup>
           <thead>
-            <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
-              <th style="text-align:left;padding:5px 6px;font-weight:500">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500">거래내용</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500">중분류</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500">금액</th>
+            <tr>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
           </thead>
           <tbody id="wkrpt-out-tbody"></tbody>
@@ -734,14 +746,20 @@
     <!-- 거래처별 주간 집계 -->
     <div class="chart-box">
       <div class="chart-title">🏢 거래처별 주간 집계</div>
-      <div style="max-height:280px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <div style="max-height:300px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+          <colgroup>
+            <col>
+            <col style="width:68px">
+            <col style="width:68px">
+            <col style="width:80px">
+          </colgroup>
           <thead>
-            <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
-              <th style="text-align:left;padding:5px 6px;font-weight:500">거래처(중분류)</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500">입금</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500">지출</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500">미회수잔액</th>
+            <tr>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처(중분류)</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">입금</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">지출</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
             </tr>
           </thead>
           <tbody id="wkrpt-partner-tbody"></tbody>
@@ -783,22 +801,142 @@
       ⚠️ 고위험 매출채권
       <small id="wkrpt-highrisk-label" style="font-weight:400;color:var(--text3)">경과일 60일 이상 또는 지연 상태</small>
     </div>
-    <div style="max-height:260px;overflow-y:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <div style="max-height:320px;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+        <colgroup>
+          <col>
+          <col style="width:58px">
+          <col style="width:78px">
+          <col style="width:74px">
+          <col style="width:52px">
+          <col style="width:46px">
+        </colgroup>
         <thead>
-          <tr style="color:var(--text3);border-bottom:1px solid var(--border)">
-            <th style="text-align:left;padding:5px 6px;font-weight:500">거래처</th>
-            <th style="text-align:left;padding:5px 6px;font-weight:500">시작일</th>
-            <th style="text-align:right;padding:5px 6px;font-weight:500">예상회수액</th>
-            <th style="text-align:right;padding:5px 6px;font-weight:500">미회수잔액</th>
-            <th style="text-align:center;padding:5px 6px;font-weight:500">경과일</th>
-            <th style="text-align:center;padding:5px 6px;font-weight:500">상태</th>
+          <tr>
+            <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처</th>
+            <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">시작일</th>
+            <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">예상회수액</th>
+            <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
+            <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">경과일</th>
+            <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">상태</th>
           </tr>
         </thead>
         <tbody id="wkrpt-highrisk-tbody"></tbody>
       </table>
     </div>
   </div>
+
+  <!-- ======== 이메일 자동 발송 설정 패널 ======== -->
+  <div style="margin-top:24px">
+    <!-- 아코디언 헤더 -->
+    <div id="email-settings-toggle"
+      style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;user-select:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:15px">📧</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">이메일 자동 발송 설정</span>
+        <span id="email-auto-badge"
+          style="display:none;font-size:10px;padding:2px 9px;border-radius:10px;background:var(--green2);color:var(--green);font-weight:600">자동 발송 ON</span>
+      </div>
+      <span id="email-toggle-arrow" style="font-size:11px;color:var(--text3);transition:transform 0.2s">▼</span>
+    </div>
+
+    <!-- 아코디언 바디 -->
+    <div id="email-settings-body"
+      style="display:none;padding:20px;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px">
+
+      <!-- ① 자동 발송 ON/OFF -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label style="font-size:13px;font-weight:600;color:var(--text);min-width:110px">자동 발송</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="email-enabled" style="width:16px;height:16px;cursor:pointer">
+          <span style="font-size:13px;color:var(--text2)">매주 정해진 시간에 자동 발송</span>
+        </label>
+      </div>
+
+      <!-- ② 발송 일정 -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:600;color:var(--text);min-width:110px">발송 일정</label>
+        <select id="email-send-day"
+          style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
+          <option value="0">일요일</option>
+          <option value="1">월요일</option>
+          <option value="2">화요일</option>
+          <option value="3">수요일</option>
+          <option value="4">목요일</option>
+          <option value="5">금요일</option>
+          <option value="6">토요일</option>
+        </select>
+        <input type="time" id="email-send-time" value="22:00"
+          style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
+        <span style="font-size:11px;color:var(--text2)">Asia/Seoul 기준 (외부 cron이 Edge Function을 호출)</span>
+      </div>
+
+      <!-- ③ 수신자 목록 -->
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px">
+        <label style="font-size:13px;font-weight:600;color:var(--text);min-width:110px;padding-top:8px">수신자</label>
+        <div style="flex:1">
+          <textarea id="email-recipients" rows="3"
+            placeholder="이메일 주소를 줄바꿈 또는 쉼표로 구분해 입력&#10;예: ceo@company.com, cfo@company.com"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:8px 10px;border-radius:6px;resize:vertical;box-sizing:border-box"></textarea>
+          <div id="email-recipients-error" style="display:none;font-size:11px;color:var(--red);margin-top:4px"></div>
+        </div>
+      </div>
+
+      <!-- ④ 발신자 이메일 -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <label style="font-size:13px;font-weight:600;color:var(--text);min-width:110px">발신 주소</label>
+        <input type="email" id="email-from-addr" placeholder="noreply@yourdomain.com"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
+        <span style="font-size:11px;color:var(--text2)">Resend 도메인 인증 필요 (기본: onboarding@resend.dev)</span>
+      </div>
+
+      <!-- ⑤ 버튼 행 -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        <button id="email-save-btn" class="btn green">💾 설정 저장</button>
+        <button id="email-send-now-btn" class="btn">📤 즉시 발송</button>
+        <button id="email-test-btn" class="btn">🧪 테스트 발송</button>
+        <button id="email-dryrun-btn" class="btn" style="background:var(--amber2);color:var(--amber);border-color:var(--amber)">🔍 Dry-run 미리보기</button>
+        <span id="email-action-status" style="font-size:12px;color:var(--text2)"></span>
+      </div>
+
+      <!-- ⑥ 발송 이력 -->
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          최근 발송 이력
+          <button id="email-refresh-history" class="btn sm" style="font-size:11px">↻ 새로고침</button>
+        </div>
+        <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--bg3)">
+                <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text2)">발송일시 (KST)</th>
+                <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text2)">주차</th>
+                <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text2)">보고기간</th>
+                <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text2)">유형</th>
+                <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text2)">수신자</th>
+                <th style="padding:7px 10px;text-align:center;font-size:11px;color:var(--text2)">결과</th>
+              </tr>
+            </thead>
+            <tbody id="email-history-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px;font-size:12px">이력을 불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ⑦ cron webhook 정보 -->
+      <div style="margin-top:16px;padding:12px 14px;background:var(--bg3);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.8">
+        <strong>🔗 외부 cron webhook URL (cron-job.org 등에 등록)</strong>
+        <code style="display:block;margin:5px 0;padding:6px 8px;background:var(--card);border-radius:4px;font-size:11px;word-break:break-all;user-select:all">
+          https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/send-weekly-report
+        </code>
+        Method: <code style="background:var(--card);padding:1px 5px;border-radius:3px">POST</code>
+        &nbsp;·&nbsp; Header: <code style="background:var(--card);padding:1px 5px;border-radius:3px">X-Cron-Secret: [CRON_SECRET 환경변수 값]</code>
+        &nbsp;·&nbsp; Body: <code style="background:var(--card);padding:1px 5px;border-radius:3px">{"send_type":"auto"}</code>
+      </div>
+    </div>
+  </div>
+  <!-- /이메일 자동 발송 설정 패널 -->
 
   </div><!-- /rpt-panel-weekly -->
 
@@ -1373,6 +1511,17 @@ const MID_CATS = Object.keys(MID_TO_BIG);
 let cfData = [];
 let arData = [];
 
+/* 이메일 자동 발송 설정 — 기본값 */
+let emailSettings = {
+  enabled:            false,
+  recipients:         [],          // string[]
+  sendDayOfWeek:      5,           // 0=일 ~ 6=토, 기본 금요일
+  sendTime:           '22:00',     // HH:MM (Asia/Seoul)
+  timezone:           'Asia/Seoul',
+  reportTargetPolicy: 'current_week',
+  fromEmail:          'onboarding@resend.dev', // Resend 인증 도메인 없을 때 기본값
+};
+
 /* =============================================
    SUPABASE 연동
    ============================================= */
@@ -1442,6 +1591,13 @@ async function loadDataFromSupabase() {
           INIT_CASH = row.data.init_cash;
           localStorage.setItem('init_cash', String(INIT_CASH));
         }
+        if (row.key === 'weekly_email_settings' && row.data) {
+          emailSettings = { ...emailSettings, ...row.data };
+          localStorage.setItem('weekly_email_settings', JSON.stringify(emailSettings));
+        }
+        if (row.key === 'report_base_date' && row.data) {
+          refDate = row.data; // 저장된 보고기준일 복원
+        }
       }
     }
 
@@ -1458,10 +1614,12 @@ async function loadDataFromSupabase() {
     setSyncStatus('offline');
     const savedCF    = localStorage.getItem('cf_data');
     const savedAR    = localStorage.getItem('ar_data');
-    const savedRecur = localStorage.getItem('recur_data');
-    if (savedCF)    cfData    = JSON.parse(savedCF);
-    if (savedAR)    arData    = JSON.parse(savedAR);
-    if (savedRecur) recurData = JSON.parse(savedRecur);
+    const savedRecur        = localStorage.getItem('recur_data');
+    const savedEmailSettings = localStorage.getItem('weekly_email_settings');
+    if (savedCF)             cfData        = JSON.parse(savedCF);
+    if (savedAR)             arData        = JSON.parse(savedAR);
+    if (savedRecur)          recurData     = JSON.parse(savedRecur);
+    if (savedEmailSettings)  emailSettings = { ...emailSettings, ...JSON.parse(savedEmailSettings) };
     if (!cfData.length) cfData = getDefaultCF();
     if (!arData.length) arData = getDefaultAR();
     return false;
@@ -3922,48 +4080,6 @@ function renderMonthlyReport() {
   document.getElementById('rpt-nm-out-sub').textContent = nmLabel;
 }
 
-/* ---- 일간 보고 ---- */
-function renderDailyReport() {
-  const dayRows = cfData.filter(r => r.date === refDate);
-  const tbody = document.getElementById('rpt-day-tbody');
-
-  // 날짜 표시
-  const refFmt = new Date(refDate+'T00:00:00').toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'});
-  const dayLabelEl = document.getElementById('rpt-day-label');
-  if (dayLabelEl) dayLabelEl.textContent = `${refDate} 기준`;
-
-  if (!dayRows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">당일 거래 내역이 없습니다.</td></tr>`;
-  } else {
-    tbody.innerHTML = dayRows.map(r => {
-      const statusBadge = r.status.includes('예정')
-        ? `<span class="badge 예정">${r.status}</span>`
-        : `<span class="badge ${r.type}">${r.status}</span>`;
-      return `<tr>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.desc}</td>
-        <td><span class="badge ${r.type}">${r.type}</span></td>
-        <td>${statusBadge}</td>
-        <td style="font-size:11px;color:var(--text2)">${r.mid_cat||'—'}</td>
-        <td class="num">${r.in > 0 ? '<span style="color:var(--green)">+'+fmt(r.in)+'</span>' : '—'}</td>
-        <td class="num">${r.out > 0 ? '<span style="color:var(--red)">-'+fmt(r.out)+'</span>' : '—'}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  const dayIn  = dayRows.filter(r => r.status === '실제 입금').reduce((s,r) => s+r.in,  0);
-  const dayOut = dayRows.filter(r => r.status === '실제 지출').reduce((s,r) => s+r.out, 0);
-  const dayNet = dayIn - dayOut;
-
-  // 카드 업데이트
-  document.getElementById('rpt-day-in').textContent  = fmt(dayIn);
-  document.getElementById('rpt-day-label').textContent = `${refDate} 기준`;
-  document.getElementById('rpt-day-out').textContent = fmt(dayOut);
-  document.getElementById('rpt-day-out-sub').textContent = `${refDate} 기준`;
-  const netEl = document.getElementById('rpt-day-net');
-  netEl.textContent = fmt(dayNet);
-  netEl.className = 'kpi-value ' + (dayNet >= 0 ? 'pos' : 'neg');
-}
-
 /* ===== 주간 리포팅 탭 ===== */
 
 // ISO 주차 번호 계산 (월요일 시작 기준, 연간 기준 — 내부 참조용으로 유지)
@@ -4053,18 +4169,18 @@ function renderWeeklyReport() {
 
   document.getElementById('wkrpt-in-tbody').innerHTML = inRows.length ? inRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="padding:5px 6px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
-      <td style="padding:5px 6px;font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(r.in)}</td>
+      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${r.date.slice(5).replace('-','/')}</td>
+      <td style="padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td style="padding:5px 6px;font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.mid_cat || '—'}</td>
+      <td style="padding:5px 6px;text-align:right;color:var(--green);font-family:var(--mono);white-space:nowrap;overflow:hidden">+${fmt(r.in)}</td>
     </tr>`).join('') : empty;
 
   document.getElementById('wkrpt-out-tbody').innerHTML = outRows.length ? outRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="padding:5px 6px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
-      <td style="padding:5px 6px;font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(r.out)}</td>
+      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${r.date.slice(5).replace('-','/')}</td>
+      <td style="padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td style="padding:5px 6px;font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.mid_cat || '—'}</td>
+      <td style="padding:5px 6px;text-align:right;color:var(--red);font-family:var(--mono);white-space:nowrap;overflow:hidden">-${fmt(r.out)}</td>
     </tr>`).join('') : empty;
 
   // ── 거래처별 주간 집계 ────────────────────────────────
@@ -4091,10 +4207,10 @@ function renderWeeklyReport() {
   const partnerTbody = document.getElementById('wkrpt-partner-tbody');
   partnerTbody.innerHTML = partnerRows.length ? partnerRows.map(x => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-weight:500">${x.p}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono)">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.rem > 0 ? 'var(--amber)' : 'var(--text3)'};font-family:var(--mono)">${x.rem > 0 ? fmt(x.rem) : '—'}</td>
+      <td style="padding:5px 6px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.p}</td>
+      <td style="padding:5px 6px;text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
+      <td style="padding:5px 6px;text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
+      <td style="padding:5px 6px;text-align:right;color:${x.rem > 0 ? 'var(--amber)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.rem > 0 ? fmt(x.rem) : '—'}</td>
     </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">이번 주 거래 없음</td></tr>`;
 
   // ── 매출채권 요약 ─────────────────────────────────────
@@ -4134,19 +4250,408 @@ function renderWeeklyReport() {
   const hrTbody = document.getElementById('wkrpt-highrisk-tbody');
   hrTbody.innerHTML = highRisk.length ? highRisk.map(a => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-weight:500">${a.partner || '—'}</td>
-      <td style="padding:5px 6px;color:var(--text2)">${a.start || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;font-family:var(--mono)">${fmt(a.expected || 0)}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--amber);font-family:var(--mono)">${fmt(a.remaining || 0)}</td>
-      <td style="padding:5px 6px;text-align:center">
-        <span style="font-weight:600;color:${(a.elapsed||0)>=90?'var(--red)':'var(--amber)'}">${a.elapsed || 0}일</span>
+      <td style="padding:5px 6px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.partner || '—'}</td>
+      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${a.start || '—'}</td>
+      <td style="padding:5px 6px;text-align:right;font-family:var(--mono);white-space:nowrap;overflow:hidden">${fmt(a.expected || 0)}</td>
+      <td style="padding:5px 6px;text-align:right;color:var(--amber);font-family:var(--mono);white-space:nowrap;overflow:hidden">${fmt(a.remaining || 0)}</td>
+      <td style="padding:5px 6px;text-align:center;overflow:hidden">
+        <span style="font-weight:600;color:${(a.elapsed||0)>=90?'var(--red)':'var(--amber)'};white-space:nowrap">${a.elapsed || 0}일</span>
       </td>
-      <td style="padding:5px 6px;text-align:center">
-        <span style="font-size:11px;font-weight:600;color:${statusColor(a.status)}">${a.status || '—'}</span>
+      <td style="padding:5px 6px;text-align:center;overflow:hidden">
+        <span style="font-size:11px;font-weight:600;color:${statusColor(a.status)};white-space:nowrap">${a.status || '—'}</span>
       </td>
     </tr>`).join('') :
     `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">고위험 매출채권이 없습니다. 👍</td></tr>`;
 }
+
+/* =================================================================
+   buildWeeklyReportHTML — DOM 비의존 순수 함수 (이메일/미리보기용)
+   기존 renderWeeklyReport() 계산 로직과 동일, HTML string 반환
+   ================================================================= */
+function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
+  // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
+  const C = {
+    green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
+    amber:'#f5a623', amber2:'#fff3d4', blue:'#075138',
+    text:'#1a1d2e', t2:'#5a6478', t3:'#9aa0b0',
+    bg:'#f5f6fa', bg3:'#f0f2f7', card:'#ffffff', border:'#e8eaef',
+  };
+
+  // ── 주간 범위 & 주차 계산 ──
+  const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(targetDate);
+  const thuStr  = addDays(wStart, 3);
+  const thuDate = new Date(thuStr + 'T00:00:00');
+  const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
+  const wNum  = getWeekNumByThursday(thuStr);
+  const fmtMD = s => (s || '').slice(5).replace('-', '/');
+
+  // ── CF 집계 ──
+  const wCF  = cfArr.filter(r => r.date >= wStart && r.date <= wEnd);
+  const pwCF = cfArr.filter(r => r.date >= pwStart && r.date <= pwEnd);
+  const wIn  = wCF.filter(r => r.status === '실제 입금').reduce((s, r) => s + (r.in  || 0), 0);
+  const wOut = wCF.filter(r => r.status === '실제 지출').reduce((s, r) => s + (r.out || 0), 0);
+  const wNet = wIn - wOut;
+
+  // ── 잔액 계산 ──
+  let pwEndCash = initCash, wkEndCash = initCash;
+  for (const r of cfArr) {
+    if (r.status === '실제 입금' && r.date <= pwEnd) pwEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= pwEnd) pwEndCash -= (r.out || 0);
+    if (r.status === '실제 입금' && r.date <= wEnd)  wkEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= wEnd)  wkEndCash -= (r.out || 0);
+  }
+
+  // ── 입금/지출 내역 ──
+  const inRows  = wCF.filter(r => (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
+  const outRows = wCF.filter(r => (r.out || 0) > 0).sort((a, b) => b.out - a.out);
+
+  // ── 거래처별 집계 ──
+  const pMap = {};
+  wCF.forEach(r => { const k = r.mid_cat || '(미분류)'; if (!pMap[k]) pMap[k]={in:0,out:0}; pMap[k].in+=(r.in||0); pMap[k].out+=(r.out||0); });
+  const arRemMap = {};
+  arArr.filter(a => (a.remaining||0) > 0).forEach(a => { arRemMap[a.partner] = (arRemMap[a.partner]||0) + (a.remaining||0); });
+  const allPartners = new Set([...Object.keys(pMap), ...Object.keys(arRemMap)]);
+  const partnerRows = [...allPartners]
+    .map(p => ({ p, in: pMap[p]?.in||0, out: pMap[p]?.out||0, rem: arRemMap[p]||0 }))
+    .filter(x => x.in>0||x.out>0||x.rem>0).sort((a,b)=>(b.in+b.out)-(a.in+a.out));
+
+  // ── AR 집계 ──
+  const wNewAR   = arArr.filter(a => a.start >= wStart && a.start <= wEnd);
+  const wNewAmt  = wNewAR.reduce((s, a) => s + (a.expected || 0), 0);
+  const wColCF   = cfArr.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= wStart && r.ar_applied_date <= wEnd);
+  const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
+  const remAll   = arArr.filter(a => (a.remaining || 0) > 0);
+  const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
+  const highRisk = arArr.filter(a => (a.remaining||0) > 0 && ((a.elapsed||0) >= 60 || a.status === '지연'))
+                        .sort((a, b) => (b.elapsed||0) - (a.elapsed||0));
+  const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
+
+  // ── 헬퍼: HTML 조각 생성 ──
+  const B = C.border;
+  const TDS = `padding:6px 8px;font-size:12px;border-bottom:1px solid ${B};`;
+  const THS = `padding:7px 8px;font-size:11px;font-weight:600;color:${C.t2};background:${C.bg3};text-align:`;
+
+  const kpi = (label, val, color, sub) =>
+    `<td width="25%" style="padding:0 5px"><div style="background:${C.card};border:1px solid ${B};border-radius:8px;padding:14px 10px;text-align:center">
+      <div style="font-size:10px;color:${C.t2};text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">${label}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};font-family:monospace">${val}</div>
+      <div style="font-size:10px;color:${C.t3};margin-top:4px">${sub}</div>
+    </div></td>`;
+
+  const empty4 = `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">내역 없음</td></tr>`;
+  const inHtml = inRows.length ? inRows.slice(0,25).map(r =>
+    `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
+         <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
+         <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
+         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('') : empty4;
+  const outHtml = outRows.length ? outRows.slice(0,25).map(r =>
+    `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
+         <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
+         <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
+         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('') : empty4;
+  const partnerHtml = partnerRows.length ? partnerRows.slice(0,20).map(x =>
+    `<tr><td style="${TDS}font-weight:500">${x.p}</td>
+         <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
+         <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td>
+         <td style="${TDS}text-align:right;color:${x.rem>0?C.amber:C.t3}">${x.rem>0?fmt(x.rem):'—'}</td></tr>`).join('')
+    : `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
+  const hrHtml = highRisk.length ? highRisk.slice(0,15).map(a =>
+    `<tr><td style="${TDS}font-weight:500">${a.partner||'—'}</td>
+         <td style="${TDS}color:${C.t2}">${a.start||'—'}</td>
+         <td style="${TDS}text-align:right">${fmt(a.expected||0)}</td>
+         <td style="${TDS}text-align:right;color:${C.amber}">${fmt(a.remaining||0)}</td>
+         <td style="${TDS}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?C.red:C.amber}">${a.elapsed||0}일</td>
+         <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:C.amber}">${a.status||'—'}</td></tr>`).join('')
+    : `<tr><td colspan="6" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">고위험 매출채권이 없습니다 👍</td></tr>`;
+
+  const title  = `${wYear}년 ${wMon}월 ${wNum}주차`;
+  const period = `${wStart} (월) ~ ${wEnd} (일)`;
+  const sentAt = new Date().toLocaleString('ko-KR');
+
+  return `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAWGA 주간 자금 리포트 — ${title}</title></head>
+<body style="margin:0;padding:0;background:${C.bg};font-family:'Malgun Gothic',Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};padding:24px 0">
+<tr><td align="center">
+<table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%">
+<!-- 헤더 -->
+<tr><td style="background:${C.blue};border-radius:12px 12px 0 0;padding:26px 24px 20px">
+  <div style="font-size:12px;color:rgba(255,255,255,.65);letter-spacing:.5px;margin-bottom:4px">RAWGA 주간 자금 리포트</div>
+  <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px">${title}</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.65)">${period}</div>
+</td></tr>
+<!-- KPI -->
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    ${kpi('전주 기말잔액', fmt(pwEndCash), pwEndCash>=0?C.green:C.red, `기준: ${fmtMD(pwEnd)}`)}
+    ${kpi('주간 입금', fmt(wIn), C.green, `${fmtMD(wStart)}~${fmtMD(wEnd)}`)}
+    ${kpi('주간 지출', fmt(wOut), C.red, `${fmtMD(wStart)}~${fmtMD(wEnd)}`)}
+    ${kpi('당주 기말잔액', fmt(wkEndCash), wkEndCash>=0?C.green:C.red, `기준: ${fmtMD(wEnd)}`)}
+  </tr></table>
+  <div style="margin-top:10px;padding:10px 12px;background:${C.bg3};border-radius:6px;font-size:13px;color:${C.t2}">
+    전주 대비 현금흐름
+    <span style="font-weight:700;color:${wNet>=0?C.green:C.red};margin-left:6px">${wNet>=0?'+':''}${fmt(wNet)}</span>
+    <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
+  </div></td></tr>
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<!-- 입금/지출 2열 -->
+<tr><td style="background:${C.card};padding:18px">
+<table width="100%" cellpadding="0" cellspacing="0"><tr>
+<td width="50%" style="padding-right:8px;vertical-align:top">
+  <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
+    <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
+    ${inHtml}
+  </table>
+</td>
+<td width="50%" style="padding-left:8px;vertical-align:top">
+  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
+    <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
+    ${outHtml}
+  </table>
+</td></tr></table></td></tr>
+<!-- 거래처 -->
+<tr><td style="background:${C.card};padding:0 18px 18px">
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 거래처별 주간 현황</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
+    <tr><th style="${THS}left">거래처</th><th style="${THS}right">입금</th><th style="${THS}right">지출</th><th style="${THS}right">AR 미회수</th></tr>
+    ${partnerHtml}
+  </table></td></tr>
+<!-- AR 요약 -->
+<tr><td style="background:${C.card};padding:0 18px 18px">
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['고위험 AR',fmt(highRiskAmt),C.red,`${highRisk.length}건`]]
+      .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center">
+        <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
+        <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
+        <div style="font-size:10px;color:${co};margin-top:3px">${s}</div></div></td>`).join('')}
+  </tr></table></td></tr>
+<!-- 고위험 AR -->
+<tr><td style="background:${C.card};padding:0 18px 18px">
+  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">⚠️ 고위험 매출채권</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
+    <tr><th style="${THS}left">거래처</th><th style="${THS}left">시작일</th><th style="${THS}right">예상회수액</th><th style="${THS}right">미회수잔액</th><th style="${THS}center">경과일</th><th style="${THS}center">상태</th></tr>
+    ${hrHtml}
+  </table></td></tr>
+<!-- 푸터 -->
+<tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
+  <div style="font-size:11px;color:${C.t3}">RAWGA 자금 대시보드 · 자동 발송 리포트 · ${sentAt}</div>
+</td></tr>
+</table></td></tr></table>
+</body></html>`;
+}
+
+/* =================================================================
+   이메일 설정 — UI 로드 / 저장 / 발송
+   ================================================================= */
+const EDGE_FN_URL = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/send-weekly-report';
+
+/* UI에 현재 설정값 반영 */
+function renderEmailSettingsUI() {
+  const el = id => document.getElementById(id);
+  el('email-enabled').checked   = !!emailSettings.enabled;
+  el('email-send-day').value    = String(emailSettings.sendDayOfWeek ?? 5);
+  el('email-send-time').value   = emailSettings.sendTime || '22:00';
+  el('email-recipients').value  = (emailSettings.recipients || []).join('\n');
+  el('email-from-addr').value   = emailSettings.fromEmail || '';
+  el('email-auto-badge').style.display = emailSettings.enabled ? 'inline-block' : 'none';
+}
+
+/* 수신자 문자열 파싱 & 검증 */
+function parseAndValidateRecipients(raw) {
+  const list = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const invalid = list.filter(e => !emailRe.test(e));
+  return { list, invalid };
+}
+
+/* Supabase cat_data에 이메일 설정 저장 */
+async function saveEmailSettingsToSupabase() {
+  if (!_supa) return;
+  await _supa.from('cat_data').upsert(
+    [{ key: 'weekly_email_settings', data: emailSettings }],
+    { onConflict: 'key' }
+  );
+  localStorage.setItem('weekly_email_settings', JSON.stringify(emailSettings));
+}
+
+/* 보고기준일을 cat_data에 저장 — Edge Function 자동 발송에서도 조회 가능하도록 */
+async function saveRefDateToSupabase(dateStr) {
+  if (!_supa) return;
+  try {
+    await _supa.from('cat_data').upsert(
+      [{ key: 'report_base_date', data: dateStr }],
+      { onConflict: 'key' }
+    );
+  } catch(e) {
+    console.warn('보고기준일 저장 실패:', e);
+  }
+}
+
+/* 발송 이력 렌더링 */
+async function renderEmailHistory() {
+  const tbody = document.getElementById('email-history-tbody');
+  if (!tbody || !_supa) return;
+
+  const { data, error } = await _supa
+    .from('email_log')
+    .select('*')
+    .eq('report_type', 'weekly')
+    .order('created_at', { ascending: false })
+    .limit(15);
+
+  if (error || !data) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--red);padding:14px;font-size:12px">이력 조회 실패: ${error?.message||'unknown'}</td></tr>`;
+    return;
+  }
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:14px;font-size:12px">발송 이력이 없습니다.</td></tr>`;
+    return;
+  }
+
+  const statusBadge = s => {
+    const map = { sent:'background:#d4f4e3;color:#2ec77a', pending:'background:#fff3d4;color:#f5a623', failed:'background:#ffe0e5;color:#ff4d6a' };
+    const style = map[s] || 'background:#f0f2f7;color:#5a6478';
+    const label = s==='sent'?'성공':s==='pending'?'처리중':'실패';
+    return `<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;${style}">${label}</span>`;
+  };
+  const typeLabel = t => ({ auto:'자동', manual:'즉시', test:'테스트' }[t] || t);
+  const fmtDt = iso => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone:'Asia/Seoul', hour12:false }).slice(0,-3) : '—';
+  const fmtMD2 = s => (s||'').slice(5).replace('-','/');
+
+  tbody.innerHTML = data.map(row => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px;font-size:12px;white-space:nowrap">${fmtDt(row.sent_at || row.created_at)}</td>
+      <td style="padding:6px 10px;font-size:12px">${row.week_key ? fmtMD2(row.week_key)+'주' : '—'}</td>
+      <td style="padding:6px 10px;font-size:11px;color:var(--text2);white-space:nowrap">${row.report_start_date ? fmtMD2(row.report_start_date)+'~'+fmtMD2(row.report_end_date) : '—'}</td>
+      <td style="padding:6px 10px;font-size:11px;color:var(--text2)">${typeLabel(row.send_type)}</td>
+      <td style="padding:6px 10px;font-size:11px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis">${(row.recipients||[]).join(', ')||'—'}</td>
+      <td style="padding:6px 10px;text-align:center">${statusBadge(row.status)}${row.error_message?`<div style="font-size:10px;color:var(--red);margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${row.error_message}">${row.error_message.slice(0,40)}</div>`:''}</td>
+    </tr>`).join('');
+}
+
+/* Edge Function 호출 (test / manual / auto dry-run) */
+async function callEdgeFunction(sendType, dryRun = false, recipientOverride = null, targetDate = null) {
+  const statusEl = document.getElementById('email-action-status');
+  statusEl.textContent = '처리 중...';
+  statusEl.style.color = 'var(--text2)';
+  try {
+    const body = { send_type: sendType, dry_run: dryRun, target_date: targetDate || refDate };
+    if (recipientOverride) body.recipient_override = recipientOverride;
+
+    const res = await fetch(EDGE_FN_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  } catch(e) {
+    statusEl.textContent = `오류: ${e.message}`;
+    statusEl.style.color = 'var(--red)';
+    throw e;
+  }
+}
+
+/* ---- 이메일 UI 이벤트 바인딩 ---- */
+(function bindEmailUIEvents() {
+  /* 아코디언 토글 */
+  document.getElementById('email-settings-toggle').addEventListener('click', () => {
+    const body  = document.getElementById('email-settings-body');
+    const arrow = document.getElementById('email-toggle-arrow');
+    const open  = body.style.display !== 'none';
+    body.style.display  = open ? 'none' : '';
+    arrow.style.transform = open ? '' : 'rotate(180deg)';
+    if (!open) { renderEmailSettingsUI(); renderEmailHistory(); }
+  });
+
+  /* 설정 저장 */
+  document.getElementById('email-save-btn').addEventListener('click', async () => {
+    const rawRecip = document.getElementById('email-recipients').value;
+    const { list, invalid } = parseAndValidateRecipients(rawRecip);
+    const errEl = document.getElementById('email-recipients-error');
+    if (invalid.length) {
+      errEl.textContent = `형식 오류: ${invalid.join(', ')}`;
+      errEl.style.display = '';
+      return;
+    }
+    errEl.style.display = 'none';
+
+    emailSettings.enabled        = document.getElementById('email-enabled').checked;
+    emailSettings.sendDayOfWeek  = parseInt(document.getElementById('email-send-day').value, 10);
+    emailSettings.sendTime       = document.getElementById('email-send-time').value;
+    emailSettings.recipients     = list;
+    emailSettings.fromEmail      = document.getElementById('email-from-addr').value.trim() || 'onboarding@resend.dev';
+
+    const statusEl = document.getElementById('email-action-status');
+    statusEl.textContent = '저장 중...';
+    try {
+      await saveEmailSettingsToSupabase();
+      document.getElementById('email-auto-badge').style.display = emailSettings.enabled ? 'inline-block' : 'none';
+      statusEl.textContent = '✓ 저장 완료';
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+    } catch(e) {
+      statusEl.textContent = '저장 실패: ' + e.message;
+      statusEl.style.color = 'var(--red)';
+    }
+  });
+
+  /* 즉시 발송 */
+  document.getElementById('email-send-now-btn').addEventListener('click', async () => {
+    if (!confirm('현재 주간 리포트를 즉시 발송합니다. 계속하시겠습니까?')) return;
+    const statusEl = document.getElementById('email-action-status');
+    try {
+      const res = await callEdgeFunction('manual', false, null, refDate);
+      statusEl.textContent = `✓ 발송 완료 (${(emailSettings.recipients||[]).length}명)`;
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => renderEmailHistory(), 800);
+    } catch(e) { /* callEdgeFunction이 statusEl 업데이트 */ }
+  });
+
+  /* 테스트 발송 (수신자 목록 첫 번째만) */
+  document.getElementById('email-test-btn').addEventListener('click', async () => {
+    const first = (emailSettings.recipients || [])[0];
+    if (!first) { alert('수신자 이메일을 먼저 설정하고 저장하세요.'); return; }
+    if (!confirm(`테스트 발송: ${first} 으로만 발송합니다.`)) return;
+    const statusEl = document.getElementById('email-action-status');
+    try {
+      await callEdgeFunction('test', false, [first], refDate);
+      statusEl.textContent = `✓ 테스트 발송 완료 → ${first}`;
+      statusEl.style.color = 'var(--green)';
+      setTimeout(() => renderEmailHistory(), 800);
+    } catch(e) { /* handled */ }
+  });
+
+  /* Dry-run — Edge Function 호출 후 결과를 화면에 표시, 로컬에서도 HTML 미리보기 */
+  document.getElementById('email-dryrun-btn').addEventListener('click', async () => {
+    const statusEl = document.getElementById('email-action-status');
+    try {
+      /* Edge Function dry-run */
+      const res = await callEdgeFunction('auto', true, null, refDate);
+      /* 로컬 HTML 미리보기 */
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH);
+      const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
+      if (win) {
+        win.document.write(previewHtml);
+        win.document.close();
+      }
+      statusEl.textContent =
+        `Dry-run 완료 — 제목: "${res.subject}" · 수신자: ${(res.recipients||[]).join(', ')||'없음'} · HTML: ${res.html_byte_size?.toLocaleString()||'?'}B`;
+      statusEl.style.color = 'var(--amber)';
+    } catch(e) { /* handled */ }
+  });
+
+  /* 이력 새로고침 */
+  document.getElementById('email-refresh-history').addEventListener('click', () => renderEmailHistory());
+})();
 
 /* ---- 리포팅 하위 탭 이벤트 ---- */
 document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(btn => {
@@ -4666,6 +5171,7 @@ document.getElementById('refDateInput').value = refDate;
 document.getElementById('refDateInput').addEventListener('change', e => {
   refDate = e.target.value;
   renderAll();
+  saveRefDateToSupabase(refDate); // 자동 발송에서도 사용 가능하도록 저장
 });
 
 /* ===== 주간 리포팅 이전/다음 주 버튼 ===== */
@@ -4673,11 +5179,13 @@ document.getElementById('wkrpt-prev-btn').addEventListener('click', () => {
   refDate = addDays(refDate, -7);
   document.getElementById('refDateInput').value = refDate;
   renderAll();
+  saveRefDateToSupabase(refDate);
 });
 document.getElementById('wkrpt-next-btn').addEventListener('click', () => {
   refDate = addDays(refDate, 7);
   document.getElementById('refDateInput').value = refDate;
   renderAll();
+  saveRefDateToSupabase(refDate);
 });
 
 /* ===== 기초잔액 수정 ===== */
@@ -5822,6 +6330,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   // 4. Supabase에서 최신 데이터 로드 (비동기)
   const ok = await loadDataFromSupabase();
   if (ok) {
+    document.getElementById('refDateInput').value = refDate; // 저장된 보고기준일 반영
     ensureCFIds();
     loadCatData(); // Supabase에서 받은 카테고리로 갱신
     buildMidCatSelect();
