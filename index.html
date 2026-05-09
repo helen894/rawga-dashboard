@@ -1635,21 +1635,41 @@ async function loadDataFromSupabase() {
       _supa.from('ar_data').select('id, data').limit(1).single(),
     ]);
 
-    if (cfRes.data) cfData = Array.isArray(cfRes.data.data) ? cfRes.data.data : JSON.parse(cfRes.data.data);
-    if (arRes.data) arData = Array.isArray(arRes.data.data) ? arRes.data.data : JSON.parse(arRes.data.data);
+    // 기본 데이터 복원 정책:
+    //   row 자체가 없는 경우(첫 설치, _supa row 미생성) → getDefault*() 로 초기값 삽입
+    //   row가 있으나 data가 [] → 사용자가 의도적으로 비운 상태 → 그대로 [] 유지
+    //   즉, .length === 0 이라는 이유만으로 기본 데이터를 복원해서는 안 됨
+    if (cfRes.data) {
+      cfData = Array.isArray(cfRes.data.data) ? cfRes.data.data : JSON.parse(cfRes.data.data);
+    } else {
+      cfData = getDefaultCF(); // row 자체 없음 = 첫 설치 → 기본값
+    }
+    if (arRes.data) {
+      arData = Array.isArray(arRes.data.data) ? arRes.data.data : JSON.parse(arRes.data.data);
+    } else {
+      arData = getDefaultAR(); // row 자체 없음 = 첫 설치 → 기본값
+    }
 
-    // 비어있으면 기본값 적용
-    if (!cfData.length) cfData = getDefaultCF();
-    if (!arData.length) arData = getDefaultAR();
-
-    // cf_data_safe_count: Supabase 실데이터 기준으로만 갱신 (upward-only — 낮은 값으로는 덮어쓰지 않음)
-    // localStorage fallback 경로에서는 절대 갱신하지 않음
+    // cf_data_safe_count / ar_data_safe_count:
+    //   Supabase 실데이터 기준으로만 갱신 (upward-only — 낮은 값으로는 덮어쓰지 않음)
+    //   localStorage fallback 경로에서는 절대 갱신하지 않음
     if (cfRes.data) {
       const prevSafeCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
       if (!prevSafeCount || cfData.length > prevSafeCount) {
         localStorage.setItem('cf_data_safe_count', String(cfData.length));
         localStorage.setItem('cf_data_safe_count_updated_at', new Date().toISOString());
         console.log('[loadData] cf_data_safe_count 갱신 (' + prevSafeCount + ' → ' + cfData.length + '건)');
+      }
+    }
+    // Fix 3: ar_data_safe_count 부팅 초기화
+    //   cf_data_safe_count와 동일한 upward-only 방식으로 초기화
+    //   미초기화 상태에서는 급감 감지 기준이 없어 auto-save 경로의 guard가 무의미해지는 문제 방지
+    //   AR 전체 삭제 같은 명시적 삭제는 saveDataExplicit(bypassCountCheck:true)로 우회하므로 영향 없음
+    if (arRes.data) {
+      const prevArSafeCount = parseInt(localStorage.getItem('ar_data_safe_count') || '0');
+      if (!prevArSafeCount || arData.length > prevArSafeCount) {
+        localStorage.setItem('ar_data_safe_count', String(arData.length));
+        console.log('[loadData] ar_data_safe_count 갱신 (' + prevArSafeCount + ' → ' + arData.length + '건)');
       }
     }
 
@@ -1660,10 +1680,13 @@ async function loadDataFromSupabase() {
     setSyncStatus('offline');
     const savedCF = localStorage.getItem('cf_data');
     const savedAR = localStorage.getItem('ar_data');
-    if (savedCF) cfData = JSON.parse(savedCF);
-    if (savedAR) arData = JSON.parse(savedAR);
-    if (!cfData.length) cfData = getDefaultCF();
-    if (!arData.length) arData = getDefaultAR();
+    // 기본 데이터 복원 정책 (localStorage 폴백 경로):
+    //   key가 존재하면(null이 아니면) → JSON.parse 결과 사용 ('[]' 포함 — 빈 배열도 유효한 상태)
+    //   key 자체가 없으면(null) → 첫 설치 상태 → 기본값 적용
+    if (savedCF !== null) cfData = JSON.parse(savedCF);
+    else                  cfData = getDefaultCF();
+    if (savedAR !== null) arData = JSON.parse(savedAR);
+    else                  arData = getDefaultAR();
     // cf_data 로드 실패 → cat_data도 시도하지 않고 조기 반환
     return false;
   }
@@ -1724,8 +1747,13 @@ async function loadDataFromSupabase() {
 /* ---- Supabase에 데이터 저장 ---- */
 async function saveDataToSupabase(opts = {}) {
   // opts.bypassCountCheck = true : 명시적 사용자 삭제 등에서 급감 감지 우회
+  // opts.bypassSyncing    = true : 명시적 사용자 액션에서 _isSyncing guard 우회
+  //   → 자동 저장 경로는 bypassSyncing 없이 호출 — Realtime 루프 방지
+  //   → saveDataExplicit()만 bypassSyncing: true 로 호출
   // _isSyncing 중에도 localStorage는 항상 저장 (데이터 유실 방지)
   // Supabase 원격 저장은 동기화 충돌 방지 및 초기화 완료 후에만 실행
+  const { bypassCountCheck = false, bypassSyncing = false } = opts;
+
   try {
     localStorage.setItem('cf_data', JSON.stringify(cfData));
     localStorage.setItem('ar_data', JSON.stringify(arData));
@@ -1741,10 +1769,11 @@ async function saveDataToSupabase(opts = {}) {
   }
 
   // ── Guard 2: Realtime 수신 중 저장 skip ──
-  if (_isSyncing) return;
+  // bypassSyncing: true(명시적 사용자 액션)일 때만 우회 — 자동 저장 경로는 항상 차단 유지
+  if (_isSyncing && !bypassSyncing) return;
 
   // ── Guard 3: 데이터 건수 급감 감지 — 자동 저장 경로에서 대량 손실 방지 ──
-  if (!opts.bypassCountCheck) {
+  if (!bypassCountCheck) {
     const prevCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
     if (prevCount > 10 && cfData.length < prevCount * 0.5) {
       console.error(
@@ -1820,6 +1849,8 @@ function subscribeRealtime() {
         const newData = payload.new.data;
         cfData = Array.isArray(newData) ? newData : JSON.parse(newData);
         ensureCFIds();
+        // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
+        localStorage.setItem('cf_data', JSON.stringify(cfData));
         renderAll();
         showToast('🔄 입출금 내역이 업데이트됐습니다.', 'green');
       } finally { _isSyncing = false; }
@@ -1829,6 +1860,8 @@ function subscribeRealtime() {
       try {
         const newData = payload.new.data;
         arData = Array.isArray(newData) ? newData : JSON.parse(newData);
+        // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
+        localStorage.setItem('ar_data', JSON.stringify(arData));
         renderAll();
         showToast('🔄 매출채권 데이터가 업데이트됐습니다.', 'green');
       } finally { _isSyncing = false; }
@@ -1904,8 +1937,12 @@ function saveData() {
   saveDataToSupabase();
 }
 function saveDataExplicit() {
-  // 명시적 사용자 액션(추가/수정/삭제) 저장 경로 — 급감 차단 우회
-  saveDataToSupabase({ bypassCountCheck: true });
+  // 명시적 사용자 액션(추가/수정/삭제) 저장 경로
+  //   bypassCountCheck: 급감 감지 guard 우회 (사용자가 의도적으로 대량 삭제하는 경우 허용)
+  //   bypassSyncing:    Realtime 수신 중(_isSyncing) 저장 skip guard 우회
+  //     → Realtime echo 수신 타이밍과 삭제가 겹쳐도 Supabase 저장이 누락되지 않도록 보장
+  //     → 자동 저장 경로(saveData)에는 적용하지 않아 Realtime 루프 방지 유지
+  saveDataToSupabase({ bypassCountCheck: true, bypassSyncing: true });
 }
 function saveCatData() {
   saveCatDataToSupabase();
