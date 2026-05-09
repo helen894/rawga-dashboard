@@ -691,18 +691,18 @@
         💰 주간 입금 내역
         <small id="wkrpt-in-count" style="font-weight:400;color:var(--text3)"></small>
       </div>
-      <div style="max-height:300px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
+        <table style="width:100%;min-width:460px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col style="width:44px">
-            <col>
-            <col style="width:86px">
-            <col style="width:80px">
+            <col style="width:12%">
+            <col style="width:38%">
+            <col style="width:25%">
+            <col style="width:25%">
           </colgroup>
           <thead>
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
@@ -718,18 +718,18 @@
         💸 주간 지출 내역
         <small id="wkrpt-out-count" style="font-weight:400;color:var(--text3)"></small>
       </div>
-      <div style="max-height:300px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
+        <table style="width:100%;min-width:460px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col style="width:44px">
-            <col>
-            <col style="width:86px">
-            <col style="width:80px">
+            <col style="width:12%">
+            <col style="width:38%">
+            <col style="width:25%">
+            <col style="width:25%">
           </colgroup>
           <thead>
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
@@ -743,20 +743,20 @@
   <!-- 거래처 집계 + 매출채권 요약 2열 -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 
-    <!-- 거래처별 주간 집계 -->
+    <!-- 거래처별 주간 현황 -->
     <div class="chart-box">
-      <div class="chart-title">🏢 거래처별 주간 집계</div>
-      <div style="max-height:300px;overflow-y:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
+      <div class="chart-title">🏢 거래처별 주간 현황</div>
+      <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
+        <table style="width:100%;min-width:480px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col>
-            <col style="width:68px">
-            <col style="width:68px">
-            <col style="width:80px">
+            <col style="width:32%">
+            <col style="width:22%">
+            <col style="width:22%">
+            <col style="width:24%">
           </colgroup>
           <thead>
             <tr>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처(중분류)</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처(중분류)</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">입금</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">지출</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
@@ -801,28 +801,80 @@
       ⚠️ 고위험 매출채권
       <small id="wkrpt-highrisk-label" style="font-weight:400;color:var(--text3)">경과일 60일 이상 또는 지연 상태</small>
     </div>
-    <div style="max-height:320px;overflow-y:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-        <colgroup>
-          <col>
-          <col style="width:58px">
-          <col style="width:78px">
-          <col style="width:74px">
-          <col style="width:52px">
-          <col style="width:46px">
-        </colgroup>
-        <thead>
-          <tr>
-            <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처</th>
-            <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">시작일</th>
-            <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">예상회수액</th>
-            <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
-            <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">경과일</th>
-            <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">상태</th>
-          </tr>
-        </thead>
-        <tbody id="wkrpt-highrisk-tbody"></tbody>
-      </table>
+    <!-- 2단: 테이블(좌) + 위험 요약 패널(우) -->
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+
+      <!-- 좌: AR 테이블 -->
+      <div style="flex:1;min-width:300px;max-height:320px;overflow-y:auto;overflow-x:auto">
+        <table style="width:100%;min-width:380px;border-collapse:collapse;font-size:12px;table-layout:fixed">
+          <colgroup>
+            <col style="width:26%">
+            <col style="width:15%">
+            <col style="width:20%">
+            <col style="width:20%">
+            <col style="width:10%">
+            <col style="width:9%">
+          </colgroup>
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">시작일</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">예상회수액</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
+              <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">경과일</th>
+              <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">상태</th>
+            </tr>
+          </thead>
+          <tbody id="wkrpt-highrisk-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- 우: 위험 요약 패널 -->
+      <div style="width:196px;flex-shrink:0;display:flex;flex-direction:column;gap:8px">
+
+        <!-- 핵심 지표 -->
+        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">고위험 현황</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:11px;color:var(--text2)">건수</span>
+            <span id="wkrpt-hr-cnt" style="font-size:11px;font-weight:600;color:var(--text)">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:11px;color:var(--text2)">총 미회수액</span>
+            <span id="wkrpt-hr-amt" style="font-size:11px;font-weight:600;color:var(--amber);font-family:var(--mono)">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:var(--text2)">평균 경과일</span>
+            <span id="wkrpt-hr-avg" style="font-size:11px;font-weight:600;color:var(--red)">—</span>
+          </div>
+        </div>
+
+        <!-- 경과일 구간 -->
+        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">경과일 구간</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:11px;color:var(--amber)">60–89일</span>
+            <span id="wkrpt-hr-r60" style="font-size:11px;font-weight:500;color:var(--text)">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:11px;color:var(--red)">90–179일</span>
+            <span id="wkrpt-hr-r90" style="font-size:11px;font-weight:500;color:var(--text)">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;font-weight:600;color:var(--red)">180일↑</span>
+            <span id="wkrpt-hr-r180" style="font-size:11px;font-weight:600;color:var(--red)">—</span>
+          </div>
+        </div>
+
+        <!-- 상태별 분포 -->
+        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
+          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">상태별</div>
+          <div id="wkrpt-hr-status" style="display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:11px;color:var(--text3)">—</div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 
@@ -882,12 +934,10 @@
         </div>
       </div>
 
-      <!-- ④ 발신자 이메일 -->
+      <!-- ④ 발신자 이메일 (Gmail SMTP 고정) -->
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
         <label style="font-size:13px;font-weight:600;color:var(--text);min-width:110px">발신 주소</label>
-        <input type="email" id="email-from-addr" placeholder="noreply@yourdomain.com"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
-        <span style="font-size:11px;color:var(--text2)">Resend 도메인 인증 필요 (기본: onboarding@resend.dev)</span>
+        <span style="font-size:12px;color:var(--text2);padding:6px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;flex:1">서버 설정의 <b>GMAIL_USER</b> 값으로 고정됩니다.</span>
       </div>
 
       <!-- ⑤ 버튼 행 -->
@@ -1519,7 +1569,7 @@ let emailSettings = {
   sendTime:           '22:00',     // HH:MM (Asia/Seoul)
   timezone:           'Asia/Seoul',
   reportTargetPolicy: 'current_week',
-  fromEmail:          'onboarding@resend.dev', // Resend 인증 도메인 없을 때 기본값
+  // fromEmail: Edge Function의 GMAIL_USER Secret 값으로 서버에서 고정 (프론트엔드 미사용)
 };
 
 /* =============================================
@@ -1530,7 +1580,9 @@ const SUPA_KEY = 'sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
 
 let _supa = null;
 let _realtimeChannel = null;
-let _isSyncing = false; // 원격 업데이트 수신 중 로컬 저장 방지
+let _isSyncing = false;      // 원격 업데이트 수신 중 로컬 저장 방지
+let _isInitialized = false;  // Supabase 초기 로드 완료 전 원격 저장 차단 (Race Condition 방지)
+let _isOnline = false;       // 현재 Supabase 연결 상태 — offline 시 위험 작업 차단에 사용
 
 function initSupabase() {
   // Supabase JS v2 CDN (UMD)
@@ -1540,6 +1592,9 @@ function initSupabase() {
 
 /* ---- 상태 표시 ---- */
 function setSyncStatus(status) {
+  // _isOnline: online/saving 상태에서만 true (offline/error/connecting → false)
+  _isOnline = (status === 'online' || status === 'saving');
+
   const el = document.getElementById('sync-status');
   if (!el) return;
   const map = {
@@ -1554,8 +1609,24 @@ function setSyncStatus(status) {
   el.style.color = s.color;
 }
 
+/* ---- offline 상태 위험 작업 차단 헬퍼 ---- */
+// 반환값: true = 차단됨(호출측은 즉시 return), false = 허용
+function blockIfOffline(actionName) {
+  if (_isOnline) return false;
+  alert(
+    '⚠ 오프라인 상태\n\n' +
+    '현재 Supabase에 연결되어 있지 않습니다.\n' +
+    '"' + actionName + '" 작업은 온라인 상태에서만 실행할 수 있습니다.\n\n' +
+    '데이터 충돌 방지를 위해 연결이 복구된 후 다시 시도해 주세요.\n' +
+    '(화면 상단 동기화 상태: ● 실시간 동기화 표시 확인)'
+  );
+  return true; // 차단
+}
+
 /* ---- Supabase에서 데이터 로드 ---- */
 async function loadDataFromSupabase() {
+  // ── Section 1: 핵심 데이터 (cf_data / ar_data) ───────────────────────────
+  // 이 블록 실패 시에만 localStorage fallback 사용. 성공 시 cfData/arData는 절대 덮어쓰지 않음.
   try {
     setSyncStatus('connecting');
 
@@ -1567,7 +1638,39 @@ async function loadDataFromSupabase() {
     if (cfRes.data) cfData = Array.isArray(cfRes.data.data) ? cfRes.data.data : JSON.parse(cfRes.data.data);
     if (arRes.data) arData = Array.isArray(arRes.data.data) ? arRes.data.data : JSON.parse(arRes.data.data);
 
-    // 카테고리 로드
+    // 비어있으면 기본값 적용
+    if (!cfData.length) cfData = getDefaultCF();
+    if (!arData.length) arData = getDefaultAR();
+
+    // cf_data_safe_count: Supabase 실데이터 기준으로만 갱신 (upward-only — 낮은 값으로는 덮어쓰지 않음)
+    // localStorage fallback 경로에서는 절대 갱신하지 않음
+    if (cfRes.data) {
+      const prevSafeCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
+      if (!prevSafeCount || cfData.length > prevSafeCount) {
+        localStorage.setItem('cf_data_safe_count', String(cfData.length));
+        localStorage.setItem('cf_data_safe_count_updated_at', new Date().toISOString());
+        console.log('[loadData] cf_data_safe_count 갱신 (' + prevSafeCount + ' → ' + cfData.length + '건)');
+      }
+    }
+
+    console.log('[loadData] cf_data 로드 성공 (' + cfData.length + '건), ar_data 로드 성공 (' + arData.length + '건)');
+  } catch(e) {
+    // Supabase 전체 연결 실패 시에만 localStorage fallback 사용
+    console.warn('[loadData] cf_data/ar_data 로드 실패 — localStorage 폴백:', e);
+    setSyncStatus('offline');
+    const savedCF = localStorage.getItem('cf_data');
+    const savedAR = localStorage.getItem('ar_data');
+    if (savedCF) cfData = JSON.parse(savedCF);
+    if (savedAR) arData = JSON.parse(savedAR);
+    if (!cfData.length) cfData = getDefaultCF();
+    if (!arData.length) arData = getDefaultAR();
+    // cf_data 로드 실패 → cat_data도 시도하지 않고 조기 반환
+    return false;
+  }
+
+  // ── Section 2: 설정/카테고리 (cat_data) ──────────────────────────────────
+  // 이 블록 실패 시 카테고리/설정만 localStorage fallback. cfData/arData는 절대 건드리지 않음.
+  try {
     const catRes = await _supa.from('cat_data').select('key, data');
     if (catRes.data && catRes.data.length > 0) {
       for (const row of catRes.data) {
@@ -1596,47 +1699,70 @@ async function loadDataFromSupabase() {
           localStorage.setItem('weekly_email_settings', JSON.stringify(emailSettings));
         }
         if (row.key === 'report_base_date' && row.data) {
-          refDate = row.data; // 저장된 보고기준일 복원
+          reportBaseDate = row.data; // 리포팅 전용 기준일만 갱신 — refDate(입출금 기준)는 건드리지 않음
         }
       }
     }
-
-    // 비어있으면 기본값 적용 후 업로드
-    if (!cfData.length)  cfData = getDefaultCF();
-    if (!arData.length)  arData = getDefaultAR();
     if (!Object.keys(catMidToBig).length)  catMidToBig  = {...DEFAULT_MID_TO_BIG};
     if (!Object.keys(catDescToMid).length) catDescToMid = {...DEFAULT_DESC_TO_MID};
-
-    setSyncStatus('online');
-    return true;
   } catch(e) {
-    console.warn('Supabase 로드 실패, localStorage 폴백:', e);
-    setSyncStatus('offline');
-    const savedCF    = localStorage.getItem('cf_data');
-    const savedAR    = localStorage.getItem('ar_data');
-    const savedRecur        = localStorage.getItem('recur_data');
+    // cat_data 실패 → 카테고리/설정만 localStorage fallback. cfData/arData는 건드리지 않음.
+    console.warn('[loadData] cat_data 로드 실패 — 카테고리/설정만 localStorage 폴백 (cfData 보존):', e);
+    const savedRecur         = localStorage.getItem('recur_data');
     const savedEmailSettings = localStorage.getItem('weekly_email_settings');
-    if (savedCF)             cfData        = JSON.parse(savedCF);
-    if (savedAR)             arData        = JSON.parse(savedAR);
     if (savedRecur)          recurData     = JSON.parse(savedRecur);
     if (savedEmailSettings)  emailSettings = { ...emailSettings, ...JSON.parse(savedEmailSettings) };
-    if (!cfData.length) cfData = getDefaultCF();
-    if (!arData.length) arData = getDefaultAR();
-    return false;
+    if (!Object.keys(catMidToBig).length)  catMidToBig  = {...DEFAULT_MID_TO_BIG};
+    if (!Object.keys(catDescToMid).length) catDescToMid = {...DEFAULT_DESC_TO_MID};
+    // cf_data는 Section 1에서 이미 정상 로드됨 — true 반환 유지
   }
+
+  setSyncStatus('online');
+  return true; // cf_data 로드 성공 기준 — cat_data 실패 여부와 무관
 }
 
 /* ---- Supabase에 데이터 저장 ---- */
-async function saveDataToSupabase() {
+async function saveDataToSupabase(opts = {}) {
+  // opts.bypassCountCheck = true : 명시적 사용자 삭제 등에서 급감 감지 우회
   // _isSyncing 중에도 localStorage는 항상 저장 (데이터 유실 방지)
-  // Supabase 원격 저장은 동기화 충돌 방지를 위해 _isSyncing 해소 후 재시도
+  // Supabase 원격 저장은 동기화 충돌 방지 및 초기화 완료 후에만 실행
   try {
     localStorage.setItem('cf_data', JSON.stringify(cfData));
     localStorage.setItem('ar_data', JSON.stringify(arData));
   } catch(e) {
     console.warn('localStorage 저장 실패:', e);
   }
-  if (_isSyncing) return; // 원격 수신 중이면 Supabase 저장만 skip
+
+  // ── Guard 1: 초기화 완료 전 Supabase 원격 저장 차단 ──
+  // Supabase 로드가 끝나기 전 localStorage 기반 cfData가 원본을 덮어쓰는 Race Condition 방지
+  if (!_isInitialized) {
+    console.warn('[saveData] 초기화 전 Supabase 저장 차단 (cfData:', cfData.length, '건)');
+    return;
+  }
+
+  // ── Guard 2: Realtime 수신 중 저장 skip ──
+  if (_isSyncing) return;
+
+  // ── Guard 3: 데이터 건수 급감 감지 — 자동 저장 경로에서 대량 손실 방지 ──
+  if (!opts.bypassCountCheck) {
+    const prevCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
+    if (prevCount > 10 && cfData.length < prevCount * 0.5) {
+      console.error(
+        '[saveData] ⚠️ cf_data 건수 급감 감지 — 저장 차단!',
+        '현재:', cfData.length, '건 / 이전 정상:', prevCount, '건'
+      );
+      return; // 자동 경로에서는 무조건 차단
+    }
+    const arPrevCount = parseInt(localStorage.getItem('ar_data_safe_count') || '0');
+    if (arPrevCount > 5 && arData.length < arPrevCount * 0.5) {
+      console.error(
+        '[saveData] ⚠️ ar_data 건수 급감 감지 — 저장 차단!',
+        '현재:', arData.length, '건 / 이전 정상:', arPrevCount, '건'
+      );
+      return;
+    }
+  }
+
   try {
     setSyncStatus('saving');
 
@@ -1649,6 +1775,11 @@ async function saveDataToSupabase() {
       _supa.from('cf_data').update({ data: cfData, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id),
       _supa.from('ar_data').update({ data: arData, updated_at: new Date().toISOString() }).eq('id', arRow.data.id),
     ]);
+
+    // 정상 저장 완료 시 기준 건수 갱신 (명시적 사용자 저장은 현재 건수를 새 기준으로 확정)
+    localStorage.setItem('cf_data_safe_count', String(cfData.length));
+    localStorage.setItem('cf_data_safe_count_updated_at', new Date().toISOString());
+    localStorage.setItem('ar_data_safe_count', String(arData.length));
     setSyncStatus('online');
   } catch(e) {
     console.warn('Supabase 저장 실패:', e);
@@ -1723,7 +1854,13 @@ function subscribeRealtime() {
             if (row.key === 'recur_data' && Array.isArray(row.data)) {
               recurData = row.data;
               localStorage.setItem('recur_data', JSON.stringify(recurData));
-              renderRecurTable();
+              // R-3: 편집 중인 행이 있으면 강제 재렌더 대신 toast만 표시
+              const _isRecEditing = !!document.querySelector('#rec-tbody tr.rec-editing');
+              if (_isRecEditing) {
+                showToast('🔄 다른 기기에서 반복 거래가 변경됐습니다. 편집 완료 후 반영됩니다.', 'amber');
+              } else {
+                renderRecurTable();
+              }
             }
             if (row.key === 'settings' && row.data?.init_cash !== undefined) {
               INIT_CASH = row.data.init_cash;
@@ -1736,9 +1873,15 @@ function subscribeRealtime() {
             if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
           });
           buildBigCatSelects();
-          renderCategoryTab();
-          renderAll();
-          showToast('🔄 카테고리가 업데이트됐습니다.', 'green');
+          // C-4: 카테고리 탭이 열려 있으면 편집 중일 수 있으므로 알림만 표시하고 렌더 보류
+          const isCatTabOpen = !!document.querySelector('.tab[data-tab="category"].active');
+          if (isCatTabOpen) {
+            showToast('🔄 다른 기기에서 카테고리가 변경됐습니다. 저장하거나 새로고침하면 최신 설정이 적용됩니다.', 'amber');
+          } else {
+            renderCategoryTab();
+            renderAll();
+            showToast('🔄 카테고리가 업데이트됐습니다.', 'green');
+          }
         }
       } finally { _isSyncing = false; }
     })
@@ -1757,8 +1900,12 @@ function loadData() {
   arData = savedAR ? JSON.parse(savedAR) : getDefaultAR();
 }
 function saveData() {
-  // Supabase 저장 (비동기) + localStorage 백업
+  // 자동 저장 경로 (반복거래 생성, ID보정 등) — 급감 차단 적용
   saveDataToSupabase();
+}
+function saveDataExplicit() {
+  // 명시적 사용자 액션(추가/수정/삭제) 저장 경로 — 급감 차단 우회
+  saveDataToSupabase({ bypassCountCheck: true });
 }
 function saveCatData() {
   saveCatDataToSupabase();
@@ -1786,6 +1933,9 @@ function fmtM(n) {
 
 // 보고 기준일: 접속일 기준 자동 초기화
 let refDate = new Date().toISOString().slice(0,10);
+// 리포팅 전용 기준일 (Supabase cat_data.report_base_date 로드값 — refDate와 분리)
+// 목적: 주간 리포팅/이메일 자동 발송 기준으로만 사용, 입출금 내역 필터에 영향 없음
+let reportBaseDate = refDate;
 function getRefDate() { return new Date(refDate + 'T00:00:00'); }
 
 // 날짜 유틸 — N일 이동
@@ -1856,8 +2006,18 @@ function calcKPIs() {
 
   const wNet = wIn - wOut;
   const nextCash = cash + nwIn - nwOut;
-  const totalAR = arData.reduce((s, r) => s + (r.remaining || 0), 0);
-  const delayedAR = arData.filter(r => r.status === '지연' && r.remaining > 0).length;
+
+  // arView — refDate 기준 elapsed 재계산 (arData 원본 불변)
+  const baseMs = new Date(ref + 'T00:00:00').getTime();
+  const arView = arData.map(a => ({
+    ...a,
+    elapsed: ((a.remaining || 0) > 0 && a.start)
+      ? Math.max(0, Math.floor((baseMs - new Date((a.start) + 'T00:00:00').getTime()) / 86400000))
+      : 0,
+  }));
+  const totalAR    = arView.reduce((s, r) => s + (r.remaining || 0), 0);
+  const delayedAR  = arView.filter(r => r.status === '지연' && r.remaining > 0).length;
+  const highRiskAR = arView.filter(r => (r.remaining || 0) > 0 && ((r.elapsed || 0) >= 60 || r.status === '지연')).length;
 
   // 런웨이: 최근 3개월 평균 지출 기준
   const months3 = [];
@@ -1900,7 +2060,7 @@ function calcKPIs() {
   }
   const nextMonthCash = cash + nmIn - nmOut;
 
-  return { cash, wIn, wOut, wNet, nextCash, totalAR, delayedAR,
+  return { cash, wIn, wOut, wNet, nextCash, totalAR, delayedAR, highRiskAR,
            wStart, wEnd, nwStart, nwEnd, pwStart, pwEnd,
            runway, avgMonthlyOut, mOut, mIn, mNet, pmOut, momOutGrowth,
            pwIn, pwOut, wowInGrowth, wowOutGrowth,
@@ -1942,7 +2102,7 @@ function renderKPIs() {
   if (sejongEl) {
     sejongEl.textContent = fmt(sejongTotal);
     sejongEl.className = 'kpi-value neg';
-    document.getElementById('kpi-sejong-sub').textContent = `세종시 분류 ${sejongCount}건`;
+    document.getElementById('kpi-sejong-sub').textContent = `세종시 분류 ${sejongCount}건 (예정 포함)`;
   }
 
   // 라오스 — 대분류 '라오스' 지출 합계
@@ -1954,7 +2114,7 @@ function renderKPIs() {
   if (laosEl) {
     laosEl.textContent = fmt(laosTotal);
     laosEl.className = 'kpi-value neg';
-    document.getElementById('kpi-laos-sub').textContent = `라오스 분류 ${laosCount}건`;
+    document.getElementById('kpi-laos-sub').textContent = `라오스 분류 ${laosCount}건 (예정 포함)`;
   }
 
   // 총 현물자산 — 세종F2 + 라오스
@@ -1969,7 +2129,8 @@ function renderKPIs() {
 
   // 매출채권
   document.getElementById('kpi-ar').textContent = fmt(k.totalAR);
-  document.getElementById('kpi-ar-sub').textContent = `기준: ${refDate}`;
+  document.getElementById('kpi-ar-sub').textContent =
+    `기준: ${refDate}` + (k.highRiskAR > 0 ? ` · 고위험 ${k.highRiskAR}건` : '');
 
   // 금주 순현금
   const wn = document.getElementById('kpi-weekly-net');
@@ -1981,7 +2142,7 @@ function renderKPIs() {
   const nc = document.getElementById('kpi-next-cash');
   nc.textContent = fmt(k.nextCash);
   nc.className = 'kpi-value ' + (k.nextCash >= 0 ? 'blue' : 'neg');
-  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)}`;
+  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} (예정+실제)`;
 
   // 금주 입금 + 전주 대비
   const winEl = document.getElementById('kpi-w-in');
@@ -2648,6 +2809,7 @@ function renderCFTable() {
 
 /* ---- 삭제 / 수정: 이벤트 위임 방식 ---- */
 function deleteCF(id) {
+  if (blockIfOffline('입출금 삭제')) return;
   const idx = cfData.findIndex(r => r._id === id);
   if (idx === -1) { alert('해당 항목을 찾을 수 없습니다.'); return; }
   const row = cfData[idx];
@@ -2677,7 +2839,7 @@ function deleteCF(id) {
   }
 
   cfData.splice(idx, 1);
-  saveData();
+  saveDataExplicit();
   renderAll();
   showToast('삭제됐습니다.' + deleteMsg, 'red');
 }
@@ -2769,7 +2931,7 @@ function saveCFEdit() {
           ar_applied: '실패', ar_applied_error: `원복 실패: ${rv.reason}`,
         };
         cfData.sort((a,b) => a.date.localeCompare(b.date));
-        saveData(); closeCFEditModal(); renderAll();
+        saveDataExplicit(); closeCFEditModal(); renderAll();
         showToast(`⚠ 수정됐으나 AR 원복 실패: ${rv.reason}`, 'red');
         return;
       }
@@ -2781,7 +2943,7 @@ function saveCFEdit() {
         ar_applied: '실패', ar_applied_error: `원복 예외: ${e.message}`,
       };
       cfData.sort((a,b) => a.date.localeCompare(b.date));
-      saveData(); closeCFEditModal(); renderAll();
+      saveDataExplicit(); closeCFEditModal(); renderAll();
       showToast(`⚠ 수정됐으나 AR 원복 중 오류: ${e.message}`, 'red');
       return;
     }
@@ -2802,7 +2964,6 @@ function saveCFEdit() {
   let arMsg = creationRevertMsg;
   const updatedRow = cfData.find(x => x._id === cfEditId);
   let arInorgAdded  = false;
-  let arIncomeAdded = false;
 
   // ④-1 보호된 인오가닉 AR 직접 업데이트
   //      (collected>0 이라 revertARCreation이 삭제 못한 AR → 새 값으로 갱신 후 로그 재활성화)
@@ -2826,23 +2987,16 @@ function saveCFEdit() {
     else if (typeof _r === 'string' && _r !== '거래처이미존재' && _r !== '이미생성됨')
       arMsg += ` | ⚠ 인오가닉AR미생성(${_r})`;
   }
-  // 기존 거래처 입금 → AR 추가 (인오가닉 건 및 인오가닉 신규 생성 건 제외)
-  // 인오가닉(big_cat==='인오가닉')은 addARFromIncomeToPartner 경로 사용 안 함
-  if (!arInorgAdded && updatedRow && updatedRow.big_cat !== '인오가닉' &&
-      updatedRow.type === '입금' && updatedRow.mid_cat && (updatedRow.in || 0) > 0) {
-    arIncomeAdded = addARFromIncomeToPartner(updatedRow);
-    if (arIncomeAdded) arMsg += ' | 📋 기존 거래처 AR 추가';
-  }
 
-  // ⑤ 재차감: AR 신규 생성 건은 즉시 차감 제외
-  const arCreated = arInorgAdded || arIncomeAdded;
-  if (!arCreated && updatedRow && updatedRow.type === '입금' && updatedRow.mid_cat && (updatedRow.in || 0) > 0 && updatedRow.ar_applied !== '완료') {
+  // ⑤ 재차감: 입금 건은 항상 차감 우선 — addARFromIncomeToPartner는 자동 실행하지 않음
+  if (!arInorgAdded && updatedRow && updatedRow.type === '입금' && updatedRow.mid_cat && (updatedRow.in || 0) > 0 && updatedRow.ar_applied !== '완료') {
     try {
       const dr = deductARByIncome(updatedRow);
       if (dr.ok) {
         arMsg += needRevert
           ? ` | 💰 AR 원복 후 재차감 ${fmt(dr.totalCut)}원`
           : ` | 💰 AR 차감 ${fmt(dr.totalCut)}원`;
+        if ((dr.leftover || 0) > 0) arMsg += ` | ⚠ 초과 입금 ${fmt(dr.leftover)}원 (AR 미적용)`;
       } else if (needRevert) {
         arMsg += ` (AR 원복 완료, 재차감 불가: ${dr.reason})`;
       }
@@ -2851,12 +3005,12 @@ function saveCFEdit() {
       if (fi >= 0) { cfData[fi].ar_applied = '실패'; cfData[fi].ar_applied_error = e.message; }
       arMsg += needRevert ? ` (AR 원복 완료, 재차감 오류: ${e.message})` : '';
     }
-  } else if (!arCreated && needRevert) {
+  } else if (!arInorgAdded && needRevert) {
     // 원복됐지만 재차감 조건 미충족 (지출 건으로 변경 등) → ar_applied 비워둠
     arMsg += ' (AR 원복 완료, 재차감 조건 미충족)';
   }
 
-  saveData();
+  saveDataExplicit();
   closeCFEditModal();
   renderAll();
   showToast('✅ 수정됐습니다.' + arMsg, 'green');
@@ -2925,26 +3079,22 @@ function cfAddSingleRow(row) {
     arMsg += ` | ⚠ 인오가닉AR미생성(${_arInorgResult})`;
   }
 
-  // 기존 거래처 입금 → AR 추가 (인오가닉 건 및 인오가닉 신규 생성 건 제외)
-  // 인오가닉(big_cat==='인오가닉')은 addARFromIncomeToPartner 경로 사용 안 함
-  let arIncomeAdded = false;
-  if (!arInorgAdded && row.big_cat !== '인오가닉') {
-    arIncomeAdded = addARFromIncomeToPartner(row);
-    if (arIncomeAdded) arMsg += ' | 📋 기존 거래처 AR 추가';
-  }
-
   // 입금 건 → AR 미회수액 자동 차감 (AR 신규 생성 건은 차감 제외)
-  if (!arInorgAdded && !arIncomeAdded && row.type === '입금' && row.mid_cat && (row.in || 0) > 0) {
+  // 입금 건은 항상 차감 우선 — addARFromIncomeToPartner는 자동 실행하지 않음
+  if (!arInorgAdded && row.type === '입금' && row.mid_cat && (row.in || 0) > 0) {
     try {
       const dr = deductARByIncome(row);
-      if (dr.ok) arMsg += ` | 💰 AR 차감 ${fmt(dr.totalCut)}원`;
+      if (dr.ok) {
+        arMsg += ` | 💰 AR 차감 ${fmt(dr.totalCut)}원`;
+        if ((dr.leftover || 0) > 0) arMsg += ` | ⚠ 초과 입금 ${fmt(dr.leftover)}원 (AR 미적용)`;
+      }
     } catch(e) {
       const cfIdx = cfData.findIndex(r => r._id === row._id);
       if (cfIdx >= 0) { cfData[cfIdx].ar_applied = '실패'; cfData[cfIdx].ar_applied_error = e.message; }
     }
   }
 
-  saveData();
+  saveDataExplicit();
   buildARPartnerSelect();
   document.getElementById('cf-date').value = '';
   document.getElementById('cf-desc').value = '';
@@ -2999,8 +3149,9 @@ function buildCFFilterSelects() {
 
 /* ---- 필터 초기화 버튼 ---- */
 document.getElementById('cf-filter-reset-btn').addEventListener('click', () => {
-  document.getElementById('cf-from').value = monthStart(refDate);
-  document.getElementById('cf-to').value = monthEnd(refDate);
+  const _cfToday = new Date().toISOString().slice(0, 10);
+  document.getElementById('cf-from').value = monthStart(_cfToday);
+  document.getElementById('cf-to').value = monthEnd(_cfToday);
   document.getElementById('cf-filter-type').value = '';
   document.getElementById('cf-filter-status').value = '';
   document.getElementById('cf-filter-mid').value = '';
@@ -3074,6 +3225,7 @@ document.getElementById('cf-tbody').addEventListener('change', e => {
 
 /* ---- 선택 삭제 ---- */
 document.getElementById('cf-delete-selected-btn').addEventListener('click', () => {
+  if (blockIfOffline('입출금 선택 삭제')) return;
   const ids = getCheckedIds();
   if (!ids.length) return;
   if (!confirm(`선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
@@ -3099,7 +3251,7 @@ document.getElementById('cf-delete-selected-btn').addEventListener('click', () =
   }
 
   cfData = cfData.filter(r => !idSet.has(r._id));
-  saveData();
+  saveDataExplicit();
   renderAll();
   document.getElementById('cf-bulk-bar').style.display = 'none';
   document.getElementById('cf-check-all').checked = false;
@@ -3135,14 +3287,35 @@ document.getElementById('cf-download-selected-btn').addEventListener('click', ()
   showToast(`✅ 선택 ${rows.length}건 다운로드 완료`, 'green');
 });
 
-/* ---- 전체 삭제 ---- */
+/* ---- 필터된 항목 삭제 / 전체 삭제 ---- */
 document.getElementById('cf-delete-all-btn').addEventListener('click', () => {
+  if (blockIfOffline('입출금 전체/필터 삭제')) return;
   const total = cfFiltered.length;
   const isFiltered = cfFiltered.length < cfData.length;
-  const msg = isFiltered
-    ? `현재 필터에 해당하는 ${total}건을 삭제하시겠습니까?\n(전체 ${cfData.length}건 중 필터된 항목만 삭제)`
-    : `입출금 내역 전체 ${total}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
-  if (!confirm(msg)) return;
+  if (total === 0) return;
+
+  // 필터 상태에 따라 버튼 라벨과 경고 문구를 구분
+  const actionLabel = isFiltered ? '필터된 항목 삭제' : '전체 삭제';
+  const rangeInfo = (() => {
+    const dates = cfFiltered.map(r => r.date).sort();
+    return dates.length ? `기간: ${dates[0]} ~ ${dates[dates.length - 1]}` : '';
+  })();
+
+  const baseMsg = isFiltered
+    ? `⚠ [${actionLabel}]\n삭제 대상: ${total}건 (전체 ${cfData.length}건 중 필터된 항목)\n${rangeInfo}\n\n이 작업은 되돌릴 수 없습니다.`
+    : `⚠ [${actionLabel}]\n입출금 내역 전체 ${total}건을 삭제합니다.\n${rangeInfo}\n\n이 작업은 절대 되돌릴 수 없습니다!`;
+
+  if (!confirm(baseMsg)) return;
+
+  // 20건 초과 삭제 시 "삭제" 텍스트 입력 재확인
+  if (total > 20) {
+    const typed = prompt(`${total}건을 삭제하려면 아래 입력창에 "삭제"를 입력하세요.`);
+    if (typed !== '삭제') {
+      alert('취소됐습니다.');
+      return;
+    }
+  }
+
   const filteredIds = new Set(cfFiltered.map(r => r._id));
 
   // AR 연동 원복 (삭제 전 실행)
@@ -3157,7 +3330,7 @@ document.getElementById('cf-delete-all-btn').addEventListener('click', () => {
   }
 
   cfData = cfData.filter(r => !filteredIds.has(r._id));
-  saveData();
+  saveDataExplicit();
   renderAll();
   showToast(`🗑 ${total}건 삭제됐습니다.`, 'red');
 });
@@ -3197,7 +3370,7 @@ function getFilteredAR() {
     if (arSortCol === 'start')          { av = a.start||'';    bv = b.start||''; }
     else if (arSortCol === 'due')       { av = a.due_date||''; bv = b.due_date||''; }
     else if (arSortCol === 'remaining') { av = a.remaining||0; bv = b.remaining||0; }
-    else if (arSortCol === 'elapsed')   { av = a.elapsed||0;   bv = b.elapsed||0; }
+    else if (arSortCol === 'elapsed')   { av = calcARElapsed(a); bv = calcARElapsed(b); }
     else { av = a.remaining||0; bv = b.remaining||0; }
     if (typeof av === 'string') return arSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
     return arSortAsc ? av - bv : bv - av;
@@ -3217,8 +3390,14 @@ function renderARTable() {
 
   const tbody = document.getElementById('ar-tbody');
   tbody.innerHTML = slice.map(r => {
-    const risk = r.elapsed > 180 ? 'high' : r.elapsed > 60 ? 'med' : 'low';
-    const riskLabel = r.elapsed > 180 ? '고위험' : r.elapsed > 60 ? '주의' : '';
+    // refDate 기준 실시간 경과일 계산 (arData.elapsed 저장값 불사용)
+    const e = calcARElapsed(r);
+    // 위험 분류 기준 — 전 탭 공통: remaining > 0 && (elapsed >= 60 || status === '지연') → 고위험
+    // 180일 초과는 고위험 내 "장기" 보조 라벨로 표시 (집계 기준은 동일)
+    const isHigh = (r.remaining||0) > 0 && (e >= 60 || r.status === '지연');
+    const isLong = isHigh && e > 180;   // 장기지연 (180일+): 고위험 부분집합
+    const risk      = isHigh ? 'high' : 'low';
+    const riskLabel = isLong ? '고위험·장기' : isHigh ? '고위험' : '';
     return `<tr>
       <td style="text-align:center">
         <input type="checkbox" class="ar-row-check" data-id="${r._id}" style="cursor:pointer">
@@ -3233,7 +3412,7 @@ function renderARTable() {
         ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.round((n-25569)*86400*1000)); return d.toISOString().slice(0,10); } return v; })()}
       </td>
       <td><span class="badge ${r.status}">${r.status}</span></td>
-      <td class="num" style="color:${r.elapsed > 0 ? 'var(--amber)' : 'var(--text3)'}">${r.elapsed > 0 ? r.elapsed + '일' : '—'}${riskLabel ? ' <span class="ar-risk ' + risk + '">' + riskLabel + '</span>' : ''}</td>
+      <td class="num" style="color:${e > 0 ? 'var(--amber)' : 'var(--text3)'}">${e > 0 ? e + '일' : '—'}${riskLabel ? ' <span class="ar-risk ' + risk + '">' + riskLabel + '</span>' : ''}</td>
       <td style="font-size:11px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn sm ar-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
@@ -3271,11 +3450,18 @@ function renderARTable() {
 }
 
 function deleteAR(id) {
+  if (blockIfOffline('매출채권 삭제')) return;
   const idx = arData.findIndex(r => r._id === id);
   if (idx === -1) return;
-  if (!confirm(`삭제하시겠습니까?\n[${arData[idx].partner}]`)) return;
+  const ar = arData[idx];
+
+  // 삭제 보호: collected > 0 또는 CF 차감 이력 참조
+  const { blocked, reason } = checkARDeleteable(ar);
+  if (blocked) { alert(`⚠ "${ar.partner}" AR 삭제 불가\n\n${reason}`); return; }
+
+  if (!confirm(`삭제하시겠습니까?\n[${ar.partner}]`)) return;
   arData.splice(idx, 1);
-  saveData();
+  saveDataExplicit();
   renderAll();
   showToast('삭제됐습니다.', 'red');
 }
@@ -3372,7 +3558,7 @@ document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
 
   arData[idx] = { ...arData[idx], partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note };
 
-  saveData();
+  saveDataExplicit();
   buildARPartnerSelect();
   closeAREditModal();
   // renderAll() 대신 AR 관련만 렌더링 → 필터 상태 유지
@@ -3415,17 +3601,34 @@ document.getElementById('ar-tbody').addEventListener('change', e => {
 
 /* ---- AR 선택 삭제 ---- */
 document.getElementById('ar-delete-selected-btn').addEventListener('click', () => {
+  if (blockIfOffline('매출채권 선택 삭제')) return;
   const ids = getARCheckedIds();
   if (!ids.length) return;
-  if (!confirm(`선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
   const idSet = new Set(ids);
-  arData = arData.filter(r => !idSet.has(r._id));
-  saveData();
+  const selected  = arData.filter(r => idSet.has(r._id));
+  const protected_ = selected.filter(r => checkARDeleteable(r).blocked);
+  const deletable  = selected.filter(r => !checkARDeleteable(r).blocked);
+
+  if (protected_.length && !deletable.length) {
+    alert(`⚠ 선택한 ${protected_.length}건 모두 삭제 불가\n(회수액 있거나 차감 이력이 연결된 AR)\n\n먼저 연결된 입출금 내역을 수정/삭제하여 차감분을 원복하세요.`);
+    return;
+  }
+  const confirmMsg = protected_.length
+    ? `선택 ${ids.length}건 중 ${deletable.length}건만 삭제됩니다.\n(보호 ${protected_.length}건 제외 — 회수액 있거나 차감 이력 연결)\n\n계속하시겠습니까?`
+    : `선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
+  if (!confirm(confirmMsg)) return;
+
+  const deletableIds = new Set(deletable.map(r => r._id));
+  arData = arData.filter(r => !deletableIds.has(r._id));
+  saveDataExplicit();
   buildARPartnerSelect();
   renderAll();
   document.getElementById('ar-bulk-bar').style.display = 'none';
   document.getElementById('ar-check-all').checked = false;
-  showToast(`🗑 ${ids.length}건 삭제됐습니다.`, 'red');
+  let msg = `🗑 ${deletable.length}건 삭제됐습니다.`;
+  if (protected_.length) msg += ` | ⚠ ${protected_.length}건 보호됨 (삭제 불가)`;
+  showToast(msg, 'red');
 });
 
 /* ---- AR 선택 취소 ---- */
@@ -3454,20 +3657,61 @@ document.getElementById('ar-download-selected-btn').addEventListener('click', ()
   showToast(`✅ 선택 ${rows.length}건 다운로드 완료`, 'green');
 });
 
-/* ---- AR 전체 삭제 ---- */
+/* ---- AR 전체/필터 삭제 ---- */
 document.getElementById('ar-delete-all-btn').addEventListener('click', () => {
+  if (blockIfOffline('매출채권 전체/필터 삭제')) return;
   const total = arFiltered.length;
   const isFiltered = arFiltered.length < arData.length;
-  const msg = isFiltered
-    ? `현재 필터에 해당하는 ${total}건을 삭제하시겠습니까?\n(전체 ${arData.length}건 중 필터된 항목만 삭제)`
-    : `AR 전체 ${total}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
-  if (!confirm(msg)) return;
-  const filteredIds = new Set(arFiltered.map(r => r._id));
-  arData = arData.filter(r => !filteredIds.has(r._id));
-  saveData();
+  if (total === 0) return;
+
+  // 필터 상태에 따라 버튼 라벨과 경고 문구를 구분
+  const actionLabel = isFiltered ? '필터된 항목 삭제' : '전체 삭제';
+
+  // 적용 중인 필터 조건 수집
+  const filterStatus  = document.getElementById('ar-filter-status').value;
+  const filterPartner = document.getElementById('ar-filter-partner').value;
+  const filterSearch  = document.getElementById('ar-search').value.trim();
+  const filterParts = [];
+  if (filterStatus)  filterParts.push(`상태: ${filterStatus}`);
+  if (filterPartner) filterParts.push(`거래처: ${filterPartner}`);
+  if (filterSearch)  filterParts.push(`검색: "${filterSearch}"`);
+  const filterInfo = filterParts.length ? `적용 필터: ${filterParts.join(', ')}` : '';
+
+  // 시작일 범위 정보
+  const rangeInfo = (() => {
+    const dates = arFiltered.map(r => r.start).filter(Boolean).sort();
+    return dates.length ? `시작일 범위: ${dates[0]} ~ ${dates[dates.length - 1]}` : '';
+  })();
+
+  const baseMsg = isFiltered
+    ? `⚠ [${actionLabel}]\n삭제 대상: ${total}건 (전체 ${arData.length}건 중 필터된 항목)\n${rangeInfo ? rangeInfo + '\n' : ''}${filterInfo ? filterInfo + '\n' : ''}\n이 작업은 되돌릴 수 없습니다.`
+    : `⚠ [${actionLabel}]\n매출채권 전체 ${total}건을 삭제합니다.\n${rangeInfo ? rangeInfo + '\n' : ''}\n이 작업은 절대 되돌릴 수 없습니다!`;
+
+  if (!confirm(baseMsg)) return;
+
+  // 20건 초과 삭제 시 "삭제" 텍스트 입력 재확인
+  if (total > 20) {
+    const typed = prompt(`${total}건을 삭제하려면 아래 입력창에 "삭제"를 입력하세요.`);
+    if (typed !== '삭제') {
+      alert('취소됐습니다.');
+      return;
+    }
+  }
+
+  // 보호 AR 제외 — collected > 0 또는 CF 차감 이력 참조
+  const protected_ = arFiltered.filter(r => checkARDeleteable(r).blocked);
+  const deletable  = arFiltered.filter(r => !checkARDeleteable(r).blocked);
+  if (protected_.length) {
+    if (!confirm(`⚠ ${protected_.length}건은 보호 상태입니다.\n(회수액 있거나 차감 이력 연결)\n\n보호 건을 제외한 ${deletable.length}건만 삭제합니다. 계속하시겠습니까?`)) return;
+  }
+  const deletableIds = new Set(deletable.map(r => r._id));
+  arData = arData.filter(r => !deletableIds.has(r._id));
+  saveDataExplicit();
   buildARPartnerSelect();
   renderAll();
-  showToast(`🗑 ${total}건 삭제됐습니다.`, 'red');
+  let toastMsg = `🗑 ${deletable.length}건 삭제됐습니다.`;
+  if (protected_.length) toastMsg += ` | ⚠ ${protected_.length}건 보호됨 (삭제 불가)`;
+  showToast(toastMsg, 'red');
 });
 
 document.getElementById('ar-add-btn').addEventListener('click', () => {
@@ -3488,8 +3732,10 @@ document.getElementById('ar-add-btn').addEventListener('click', () => {
   }
   const elapsed = remaining > 0 && start ? Math.max(0, Math.floor((new Date(refDate) - new Date(start)) / 86400000)) : 0;
 
-  arData.push({ partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note });
-  saveData();
+  // saveDataExplicit() 전에 _id 부여 — id 없는 상태로 Supabase 저장되지 않도록
+  const _newArId = 'ar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  arData.push({ _id: _newArId, partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note });
+  saveDataExplicit();
   buildARPartnerSelect();
   renderARTable();
   renderARBarChart();
@@ -3517,6 +3763,42 @@ document.getElementById('ar-next').addEventListener('click', () => {
   if (arPage < pages) { arPage++; renderARTable(); }
 });
 
+/* ===== 거래처명 정규화 =====
+ * 입출금 중분류와 AR 거래처 비교 시 앞뒤 공백 불일치로 매칭 실패하지 않도록 통일 처리.
+ */
+function normalizePartnerName(name) {
+  return (name || '').trim();
+}
+
+/* ===== AR 경과일 실시간 계산 (refDate 기준) =====
+ * AR 탭 표시·정렬·위험분류 모두 이 함수로 계산 — arData.elapsed 저장값 불사용.
+ * remaining <= 0 이면 0 반환 (완료 건은 경과일 표시 불필요).
+ */
+function calcARElapsed(r) {
+  if (!r.start || (r.remaining || 0) <= 0) return 0;
+  return Math.max(0, Math.floor(
+    (new Date(refDate + 'T00:00:00').getTime() - new Date(r.start + 'T00:00:00').getTime()) / 86400000
+  ));
+}
+
+/* ===== AR 삭제 보호 체크 =====
+ * collected > 0 이거나 CF 차감 이력에 참조된 AR은 삭제 전 원복 필요.
+ * @returns {{ blocked: boolean, reason: string }}
+ */
+function checkARDeleteable(ar) {
+  if ((ar.collected || 0) > 0) {
+    return { blocked: true, reason: `이미 ${fmt(ar.collected)}원이 회수된 AR입니다.\n삭제하려면 먼저 연결된 입출금 내역을 수정/삭제하여 차감분을 원복하세요.` };
+  }
+  if (ar._id && cfData.some(cf =>
+    cf.ar_applied === '완료' &&
+    Array.isArray(cf.ar_deduct_log) &&
+    cf.ar_deduct_log.some(l => l.ar_id === ar._id)
+  )) {
+    return { blocked: true, reason: `입출금 내역의 차감 이력에 연결된 AR입니다.\n삭제하려면 먼저 연결된 입출금 내역을 수정/삭제하여 차감분을 원복하세요.` };
+  }
+  return { blocked: false, reason: '' };
+}
+
 /* ===== 입금 CF → AR 미회수액 자동 차감 =====
  * 입금 CF의 중분류가 AR 거래처와 일치하면 경과일 내림차순으로 미회수액을 순차 차감.
  * 신규 등록·수정·일괄 업로드 시 자동 호출되며, ar_applied='완료'인 건은 건너뜀.
@@ -3534,13 +3816,18 @@ function deductARByIncome(cfRow) {
     if (!a._id) a._id = 'ar_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 7);
   });
 
-  const partner = cfRow.mid_cat;
+  const partner = normalizePartnerName(cfRow.mid_cat);
+  // refDate 기준 실시간 경과일 계산 (저장된 elapsed 불사용 — refDate 변경 시도 정확한 순서 보장)
+  const _deductBaseMs = new Date(refDate + 'T00:00:00').getTime();
+  const _liveElapsed  = r => r.start
+    ? Math.max(0, Math.floor((_deductBaseMs - new Date(r.start + 'T00:00:00').getTime()) / 86400000))
+    : 0;
   const targets = arData
     .map((r, i) => ({ ...r, _i: i }))
-    .filter(r => r.partner === partner && (r.remaining || 0) > 0)
+    .filter(r => normalizePartnerName(r.partner) === partner && (r.remaining || 0) > 0)
     .sort((a, b) => {
-      // 경과일 내림차순(오래된 건 먼저), 동률이면 시작일 오름차순
-      const ed = (b.elapsed || 0) - (a.elapsed || 0);
+      // refDate 기준 실시간 경과일 내림차순(오래된 건 먼저), 동률이면 시작일 오름차순
+      const ed = _liveElapsed(b) - _liveElapsed(a);
       if (ed !== 0) return ed;
       return (a.start || '').localeCompare(b.start || '');
     });
@@ -3667,13 +3954,13 @@ function revertARDeduction(cfRow) {
 function addARFromCF(cfRow) {
   if (cfRow.type !== '지출' || !cfRow.mid_cat || cfRow.out <= 0) return false;
 
-  const partner = cfRow.mid_cat;
-  const partnerExists = arData.some(ar => ar.partner === partner);
+  const partner = normalizePartnerName(cfRow.mid_cat);
+  const partnerExists = arData.some(ar => normalizePartnerName(ar.partner) === partner);
   if (!partnerExists) return false;
 
   // 중복 방지: 같은 거래처 + 같은 날짜 + 같은 금액이 이미 있으면 스킵
   const isDup = arData.some(ar =>
-    ar.partner === partner &&
+    normalizePartnerName(ar.partner) === partner &&
     ar.start   === cfRow.date &&
     Math.abs((ar.expected || 0) - cfRow.out) < 1
   );
@@ -3727,11 +4014,11 @@ function addARFromInorganicIncome(cfRow) {
   if ((cfRow.out || 0) <= 0)         return '지출액='+cfRow.out;
 
   // ① 전역 거래처 중복 방지: arData에 이미 같은 partner가 있으면 신규 생성 안 함
-  if (arData.some(a => a.partner === cfRow.mid_cat)) return '거래처이미존재';
+  if (arData.some(a => normalizePartnerName(a.partner) === normalizePartnerName(cfRow.mid_cat))) return '거래처이미존재';
 
   // ② 이 CF 행이 이미 이 파트너에 대한 미원복 AR을 생성했으면 skip (재저장·재수정 중복 방지)
   const alreadyCreated = (cfRow.ar_created_log || []).some(
-    e => !e.reverted && e.partner === cfRow.mid_cat && e.type === '신규거래처생성'
+    e => !e.reverted && normalizePartnerName(e.partner) === normalizePartnerName(cfRow.mid_cat) && e.type === '신규거래처생성'
   );
   if (alreadyCreated) return '이미생성됨';
 
@@ -4106,13 +4393,14 @@ function getWeekNumByThursday(thuDateStr) {
 }
 
 function renderWeeklyReport() {
-  const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(refDate);
+  // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
+  const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
 
   // ── 헤더 ──────────────────────────────────────────────
   // 주차 표시 기준: 해당 주의 목요일(wStart + 3일)이 속한 년/월/주차
-  // → 월/연 경계에서도 "목요일이 어느 달이냐"로 일관되게 결정
-  const thuDate = new Date(new Date(wStart + 'T00:00:00').getTime() + 3 * 86400000);
-  const thuStr  = thuDate.toISOString().slice(0, 10);
+  // addDays 사용으로 이메일 로직(buildWeeklyReportHTML)과 완전 통일
+  const thuStr  = addDays(wStart, 3);
+  const thuDate = new Date(thuStr + 'T00:00:00');
   const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
   const wNum  = getWeekNumByThursday(thuStr);
   const fmtMD = s => s ? s.slice(5).replace('-', '/') : '';
@@ -4160,34 +4448,38 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-wk-end-sub').textContent = `기준일: ${wEnd} (일)`;
 
   // ── 입금 내역 테이블 ──────────────────────────────────
-  const inRows  = wCF.filter(r => r.in  > 0).sort((a, b) => b.in  - a.in);
-  const outRows = wCF.filter(r => r.out > 0).sort((a, b) => b.out - a.out);
+  // KPI와 동일 기준: 실제 거래만 표시 (예정 거래 제외)
+  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
+  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
   const empty = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>`;
 
   document.getElementById('wkrpt-in-count').textContent  = inRows.length  ? `${inRows.length}건` : '';
   document.getElementById('wkrpt-out-count').textContent = outRows.length ? `${outRows.length}건` : '';
 
+  const tdBase  = 'padding:5px 6px;white-space:nowrap;overflow:hidden;';
+  const tdEll   = tdBase + 'text-overflow:ellipsis;';
   document.getElementById('wkrpt-in-tbody').innerHTML = inRows.length ? inRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${r.date.slice(5).replace('-','/')}</td>
-      <td style="padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
-      <td style="padding:5px 6px;font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.mid_cat || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--green);font-family:var(--mono);white-space:nowrap;overflow:hidden">+${fmt(r.in)}</td>
+      <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
+      <td style="${tdEll}" title="${r.desc||''}">${r.desc || '—'}</td>
+      <td style="${tdEll}font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
+      <td style="${tdBase}text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(r.in)}</td>
     </tr>`).join('') : empty;
 
   document.getElementById('wkrpt-out-tbody').innerHTML = outRows.length ? outRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${r.date.slice(5).replace('-','/')}</td>
-      <td style="padding:5px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
-      <td style="padding:5px 6px;font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.mid_cat || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--red);font-family:var(--mono);white-space:nowrap;overflow:hidden">-${fmt(r.out)}</td>
+      <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
+      <td style="${tdEll}" title="${r.desc||''}">${r.desc || '—'}</td>
+      <td style="${tdEll}font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
+      <td style="${tdBase}text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(r.out)}</td>
     </tr>`).join('') : empty;
 
   // ── 거래처별 주간 집계 ────────────────────────────────
-  // 이번 주 CF mid_cat 기준으로 집계
+  // CF: mid_cat(중분류) 기준 / AR: partner(거래처명) 기준
+  // 두 키가 다른 필드여서 자동 매칭은 오매칭 위험 → 구조 변경 없이 trim만 적용
   const partnerMap = {};
   wCF.forEach(r => {
-    const key = r.mid_cat || '(미분류)';
+    const key = (r.mid_cat || '').trim() || '(미분류)';
     if (!partnerMap[key]) partnerMap[key] = { in: 0, out: 0 };
     partnerMap[key].in  += r.in  || 0;
     partnerMap[key].out += r.out || 0;
@@ -4195,7 +4487,8 @@ function renderWeeklyReport() {
   // AR 미회수 잔액 병합
   const arRemMap = {};
   arData.filter(a => (a.remaining || 0) > 0).forEach(a => {
-    arRemMap[a.partner] = (arRemMap[a.partner] || 0) + (a.remaining || 0);
+    const key = (a.partner || '').trim() || '(미분류)';
+    arRemMap[key] = (arRemMap[key] || 0) + (a.remaining || 0);
   });
   // 모든 파트너 통합 (CF에 없고 AR만 있는 거래처도 포함)
   const allPartners = new Set([...Object.keys(partnerMap), ...Object.keys(arRemMap)]);
@@ -4207,15 +4500,25 @@ function renderWeeklyReport() {
   const partnerTbody = document.getElementById('wkrpt-partner-tbody');
   partnerTbody.innerHTML = partnerRows.length ? partnerRows.map(x => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.p}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
-      <td style="padding:5px 6px;text-align:right;color:${x.rem > 0 ? 'var(--amber)' : 'var(--text3)'};font-family:var(--mono);white-space:nowrap;overflow:hidden">${x.rem > 0 ? fmt(x.rem) : '—'}</td>
+      <td style="${tdEll}font-weight:500" title="${x.p}">${x.p}</td>
+      <td style="${tdBase}text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
+      <td style="${tdBase}text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono)">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
+      <td style="${tdBase}text-align:right;color:${x.rem > 0 ? 'var(--amber)' : 'var(--text3)'};font-family:var(--mono)">${x.rem > 0 ? fmt(x.rem) : '—'}</td>
     </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">이번 주 거래 없음</td></tr>`;
 
   // ── 매출채권 요약 ─────────────────────────────────────
+  // elapsed 실시간 재계산: arData 원본 불변, 렌더링 전용 복사본에 경과일만 덮어씀
+  // 기준일: reportBaseDate (이메일 발송 기준과 동일)
+  const baseMs = new Date(reportBaseDate + 'T00:00:00').getTime();
+  const arView = arData.map(a => {
+    const elapsedCalc = (a.remaining || 0) > 0 && a.start
+      ? Math.max(0, Math.floor((baseMs - new Date(a.start + 'T00:00:00').getTime()) / 86400000))
+      : 0;
+    return { ...a, elapsed: elapsedCalc };
+  });
+
   // 주간 신규 발생: start가 이번 주에 해당하는 AR
-  const wNewAR   = arData.filter(a => a.start >= wStart && a.start <= wEnd);
+  const wNewAR   = arView.filter(a => a.start >= wStart && a.start <= wEnd);
   const wNewAmt  = wNewAR.reduce((s, a) => s + (a.expected || 0), 0);
 
   // 주간 회수: CF에서 ar_applied='완료' AND ar_applied_date가 이번 주
@@ -4223,11 +4526,11 @@ function renderWeeklyReport() {
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
 
   // 전체 미회수 잔액 (현재 스냅샷)
-  const remAll   = arData.filter(a => (a.remaining || 0) > 0);
+  const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
 
-  // 고위험: 경과일 60일+ 또는 상태 '지연', remaining > 0
-  const highRisk = arData.filter(a => (a.remaining || 0) > 0 && ((a.elapsed || 0) >= 60 || a.status === '지연'))
+  // 고위험: 재계산된 경과일 60일+ 또는 상태 '지연', remaining > 0
+  const highRisk = arView.filter(a => (a.remaining || 0) > 0 && ((a.elapsed || 0) >= 60 || a.status === '지연'))
     .sort((a, b) => (b.elapsed || 0) - (a.elapsed || 0));
   const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
 
@@ -4250,18 +4553,38 @@ function renderWeeklyReport() {
   const hrTbody = document.getElementById('wkrpt-highrisk-tbody');
   hrTbody.innerHTML = highRisk.length ? highRisk.map(a => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.partner || '—'}</td>
-      <td style="padding:5px 6px;color:var(--text2);white-space:nowrap;overflow:hidden">${a.start || '—'}</td>
-      <td style="padding:5px 6px;text-align:right;font-family:var(--mono);white-space:nowrap;overflow:hidden">${fmt(a.expected || 0)}</td>
-      <td style="padding:5px 6px;text-align:right;color:var(--amber);font-family:var(--mono);white-space:nowrap;overflow:hidden">${fmt(a.remaining || 0)}</td>
-      <td style="padding:5px 6px;text-align:center;overflow:hidden">
-        <span style="font-weight:600;color:${(a.elapsed||0)>=90?'var(--red)':'var(--amber)'};white-space:nowrap">${a.elapsed || 0}일</span>
-      </td>
-      <td style="padding:5px 6px;text-align:center;overflow:hidden">
-        <span style="font-size:11px;font-weight:600;color:${statusColor(a.status)};white-space:nowrap">${a.status || '—'}</span>
-      </td>
+      <td style="${tdEll}font-weight:500" title="${a.partner||''}">${a.partner || '—'}</td>
+      <td style="${tdBase}color:var(--text2)">${a.start || '—'}</td>
+      <td style="${tdBase}text-align:right;font-family:var(--mono)">${fmt(a.expected || 0)}</td>
+      <td style="${tdBase}text-align:right;color:var(--amber);font-family:var(--mono)">${fmt(a.remaining || 0)}</td>
+      <td style="${tdBase}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?'var(--red)':'var(--amber)'}">${a.elapsed || 0}일</td>
+      <td style="${tdBase}text-align:center;font-size:11px;font-weight:600;color:${statusColor(a.status)}">${a.status || '—'}</td>
     </tr>`).join('') :
     `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">고위험 매출채권이 없습니다. 👍</td></tr>`;
+
+  // ── 고위험 요약 패널 ────────────────────────────────────
+  const hrAvgEl = highRisk.length
+    ? Math.round(highRisk.reduce((s, a) => s + (a.elapsed || 0), 0) / highRisk.length) : 0;
+  const hrR60  = highRisk.filter(a => (a.elapsed||0) >= 60  && (a.elapsed||0) < 90);
+  const hrR90  = highRisk.filter(a => (a.elapsed||0) >= 90  && (a.elapsed||0) < 180);
+  const hrR180 = highRisk.filter(a => (a.elapsed||0) >= 180);
+  const hrStMap = {};
+  highRisk.forEach(a => { const s = a.status || '미정'; hrStMap[s] = (hrStMap[s] || 0) + 1; });
+  const hrStColor = { '지연':'var(--red)', '부분회수':'var(--amber)', '완료':'var(--green)' };
+
+  document.getElementById('wkrpt-hr-cnt').textContent  = highRisk.length ? `${highRisk.length}건` : '없음';
+  document.getElementById('wkrpt-hr-amt').textContent  = highRisk.length ? fmt(highRiskAmt) : '—';
+  document.getElementById('wkrpt-hr-avg').textContent  = highRisk.length ? `${hrAvgEl}일` : '—';
+  document.getElementById('wkrpt-hr-r60').textContent  = hrR60.length  ? `${hrR60.length}건`  : '없음';
+  document.getElementById('wkrpt-hr-r90').textContent  = hrR90.length  ? `${hrR90.length}건`  : '없음';
+  document.getElementById('wkrpt-hr-r180').textContent = hrR180.length ? `${hrR180.length}건` : '없음';
+  document.getElementById('wkrpt-hr-status').innerHTML = Object.keys(hrStMap).length
+    ? Object.entries(hrStMap).sort((a, b) => b[1] - a[1]).map(([s, c]) =>
+        `<div style="display:flex;justify-content:space-between;align-items:center">` +
+        `<span style="font-size:11px;color:${hrStColor[s] || 'var(--text2)'}">${s}</span>` +
+        `<span style="font-size:11px;font-weight:500;color:var(--text)">${c}건</span></div>`
+      ).join('')
+    : `<div style="font-size:11px;color:var(--text3)">—</div>`;
 }
 
 /* =================================================================
@@ -4301,29 +4624,36 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     if (r.status === '실제 지출' && r.date <= wEnd)  wkEndCash -= (r.out || 0);
   }
 
-  // ── 입금/지출 내역 ──
-  const inRows  = wCF.filter(r => (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
-  const outRows = wCF.filter(r => (r.out || 0) > 0).sort((a, b) => b.out - a.out);
+  // ── 입금/지출 내역 (KPI와 동일 기준: 실제 거래만) ──
+  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
+  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
 
-  // ── 거래처별 집계 ──
+  // ── 거래처별 집계 (trim 정규화) ──
   const pMap = {};
-  wCF.forEach(r => { const k = r.mid_cat || '(미분류)'; if (!pMap[k]) pMap[k]={in:0,out:0}; pMap[k].in+=(r.in||0); pMap[k].out+=(r.out||0); });
+  wCF.forEach(r => { const k = (r.mid_cat||'').trim()||'(미분류)'; if (!pMap[k]) pMap[k]={in:0,out:0}; pMap[k].in+=(r.in||0); pMap[k].out+=(r.out||0); });
   const arRemMap = {};
-  arArr.filter(a => (a.remaining||0) > 0).forEach(a => { arRemMap[a.partner] = (arRemMap[a.partner]||0) + (a.remaining||0); });
+  arArr.filter(a => (a.remaining||0) > 0).forEach(a => { const k=(a.partner||'').trim()||'(미분류)'; arRemMap[k] = (arRemMap[k]||0) + (a.remaining||0); });
   const allPartners = new Set([...Object.keys(pMap), ...Object.keys(arRemMap)]);
   const partnerRows = [...allPartners]
     .map(p => ({ p, in: pMap[p]?.in||0, out: pMap[p]?.out||0, rem: arRemMap[p]||0 }))
     .filter(x => x.in>0||x.out>0||x.rem>0).sort((a,b)=>(b.in+b.out)-(a.in+a.out));
 
-  // ── AR 집계 ──
-  const wNewAR   = arArr.filter(a => a.start >= wStart && a.start <= wEnd);
+  // ── AR 집계 (elapsed 실시간 재계산) ──
+  const baseMsB  = new Date(targetDate + 'T00:00:00').getTime();
+  const arView   = arArr.map(a => ({
+    ...a,
+    elapsed: (a.remaining||0) > 0 && a.start
+      ? Math.max(0, Math.floor((baseMsB - new Date(a.start + 'T00:00:00').getTime()) / 86400000))
+      : 0,
+  }));
+  const wNewAR   = arView.filter(a => a.start >= wStart && a.start <= wEnd);
   const wNewAmt  = wNewAR.reduce((s, a) => s + (a.expected || 0), 0);
   const wColCF   = cfArr.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= wStart && r.ar_applied_date <= wEnd);
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
-  const remAll   = arArr.filter(a => (a.remaining || 0) > 0);
+  const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
-  const highRisk = arArr.filter(a => (a.remaining||0) > 0 && ((a.elapsed||0) >= 60 || a.status === '지연'))
-                        .sort((a, b) => (b.elapsed||0) - (a.elapsed||0));
+  const highRisk = arView.filter(a => (a.remaining||0) > 0 && ((a.elapsed||0) >= 60 || a.status === '지연'))
+                         .sort((a, b) => (b.elapsed||0) - (a.elapsed||0));
   const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
 
   // ── 헬퍼: HTML 조각 생성 ──
@@ -4395,23 +4725,22 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div></td></tr>
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
-<!-- 입금/지출 2열 -->
-<tr><td style="background:${C.card};padding:18px">
-<table width="100%" cellpadding="0" cellspacing="0"><tr>
-<td width="50%" style="padding-right:8px;vertical-align:top">
+<!-- 입금 내역 -->
+<tr><td style="background:${C.card};padding:18px 18px 0">
   <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
     <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
     ${inHtml}
   </table>
-</td>
-<td width="50%" style="padding-left:8px;vertical-align:top">
+</td></tr>
+<!-- 지출 내역 -->
+<tr><td style="background:${C.card};padding:18px 18px 0">
   <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
     <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
     ${outHtml}
   </table>
-</td></tr></table></td></tr>
+</td></tr>
 <!-- 거래처 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 거래처별 주간 현황</div>
@@ -4456,7 +4785,6 @@ function renderEmailSettingsUI() {
   el('email-send-day').value    = String(emailSettings.sendDayOfWeek ?? 5);
   el('email-send-time').value   = emailSettings.sendTime || '22:00';
   el('email-recipients').value  = (emailSettings.recipients || []).join('\n');
-  el('email-from-addr').value   = emailSettings.fromEmail || '';
   el('email-auto-badge').style.display = emailSettings.enabled ? 'inline-block' : 'none';
 }
 
@@ -4539,19 +4867,25 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
   statusEl.textContent = '처리 중...';
   statusEl.style.color = 'var(--text2)';
   try {
-    const body = { send_type: sendType, dry_run: dryRun, target_date: targetDate || refDate };
+    if (!_supa) throw new Error('Supabase 연결이 없습니다. 페이지를 새로고침하세요.');
+    const body = { send_type: sendType, dry_run: dryRun, target_date: targetDate || reportBaseDate };
     if (recipientOverride) body.recipient_override = recipientOverride;
 
-    const res = await fetch(EDGE_FN_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPA_KEY}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const { data, error } = await _supa.functions.invoke('send-weekly-report', { body });
+
+    if (error) {
+      // FunctionsHttpError: Edge Function non-2xx 응답 → response body에서 실제 오류 추출
+      let msg = error.message || String(error);
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          const errBody = await error.context.json();
+          if (errBody.message || errBody.error) {
+            msg = errBody.message || errBody.error;
+          }
+        }
+      } catch(_) {}
+      throw new Error(msg);
+    }
     return data;
   } catch(e) {
     statusEl.textContent = `오류: ${e.message}`;
@@ -4588,7 +4922,6 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
     emailSettings.sendDayOfWeek  = parseInt(document.getElementById('email-send-day').value, 10);
     emailSettings.sendTime       = document.getElementById('email-send-time').value;
     emailSettings.recipients     = list;
-    emailSettings.fromEmail      = document.getElementById('email-from-addr').value.trim() || 'onboarding@resend.dev';
 
     const statusEl = document.getElementById('email-action-status');
     statusEl.textContent = '저장 중...';
@@ -4610,7 +4943,8 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
     const statusEl = document.getElementById('email-action-status');
     try {
       const res = await callEdgeFunction('manual', false, null, refDate);
-      statusEl.textContent = `✓ 발송 완료 (${(emailSettings.recipients||[]).length}명)`;
+      const sentCount = (res.recipients || emailSettings.recipients || []).length;
+      statusEl.textContent = `✓ 발송 완료 (${sentCount}명)`;
       statusEl.style.color = 'var(--green)';
       setTimeout(() => renderEmailHistory(), 800);
     } catch(e) { /* callEdgeFunction이 statusEl 업데이트 */ }
@@ -4679,14 +5013,40 @@ function loadRecurData() {
 }
 function saveRecurData() {
   localStorage.setItem('recur_data', JSON.stringify(recurData));
-  saveCatDataToSupabase();
+  // R-2: saveCatDataToSupabase()는 _isSyncing 가드로 Realtime 중 저장이 차단됨
+  // 반복 거래는 사용자 액션이므로 cat_data의 recur_data 키를 직접 upsert (가드 우회)
+  if (_supa) {
+    _supa.from('cat_data')
+      .upsert([{ key: 'recur_data', data: recurData }], { onConflict: 'key' })
+      .catch(e => console.warn('[saveRecurData] Supabase 저장 실패:', e));
+  }
 }
 
-function recurDupExists(date, desc, inAmt, outAmt) {
+/* R-3: recurData 마이그레이션 — _id 없는 기존 템플릿에 _id 부여 */
+function ensureRecurIds() {
+  let dirty = false;
+  recurData.forEach(r => {
+    if (!r._id) {
+      r._id = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+      dirty = true;
+    }
+  });
+  if (dirty) saveRecurData();
+}
+
+/* R-1: 중복 체크 개선
+ * - recur_id 있는 신규 데이터: recur_id + date 기준 (상태 무관)
+ * - recur_id 없는 과거 데이터 fallback: date + desc + amount 기준 (상태 무관, 예정→실제 변경 후 재생성 방지)
+ */
+function recurDupExists(date, desc, inAmt, outAmt, recurId) {
+  if (recurId) {
+    // 신규: recur_id + date 기준 (상태 무관 — 예정→실제 변경 후에도 중복 방지)
+    return cfData.some(r => r.recur_id === recurId && r.date === date);
+  }
+  // fallback: recur_id 없는 과거 생성분 — 날짜+내용+금액 기준 (상태 무관)
   return cfData.some(r =>
     r.date === date && r.desc === desc &&
-    Math.abs((r.in||0) - inAmt) < 1 && Math.abs((r.out||0) - outAmt) < 1 &&
-    (r.status === '입금 예정' || r.status === '지출 예정')
+    Math.abs((r.in||0) - inAmt) < 1 && Math.abs((r.out||0) - outAmt) < 1
   );
 }
 
@@ -4699,9 +5059,9 @@ function generateRecurring(showToastMsg = true) {
   let added = 0;
 
   for (const rec of recurData) {
-    // 당월: 기준일이 오늘 이후(당일 포함)면 당월도 생성
+    // R-4: 당월 포함 조건 — rec.day >= todayDay (기준일이 오늘이거나 이후이면 당월 생성)
     const offsets = [];
-    if (rec.day > todayDay) offsets.push(0);    // 당월 포함 (기준일 > 오늘인 경우만)
+    if (rec.day >= todayDay) offsets.push(0);   // 당월 포함 (>= : 당일 첫 등록 시 당월 생성)
     for (let i = 1; i <= months; i++) offsets.push(i); // 이후 N개월
 
     for (const offset of offsets) {
@@ -4710,9 +5070,10 @@ function generateRecurring(showToastMsg = true) {
       const last = new Date(ny, nm, 0).getDate();
       const day = Math.min(rec.day, last);
       const targetDate = `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-      // 이미 지난 날짜는 생성 안 함 (당월 offset=0 시 오늘 기준 이미 지난 날 제외)
+      // 이미 지난 날짜는 생성 안 함
       if (targetDate < today) continue;
-      if (recurDupExists(targetDate, rec.desc, rec.in||0, rec.out||0)) continue;
+      // R-1: recur_id 기반 중복 체크 (없으면 desc/금액 기반 fallback)
+      if (recurDupExists(targetDate, rec.desc, rec.in||0, rec.out||0, rec._id)) continue;
       const type = (rec.in||0) > 0 ? '입금' : '지출';
       const status = type === '입금' ? '입금 예정' : '지출 예정';
       const mid = rec.mid_cat || getMidCat(rec.desc, type) || '';
@@ -4722,7 +5083,9 @@ function generateRecurring(showToastMsg = true) {
         date: targetDate, desc: rec.desc,
         in: rec.in||0, out: rec.out||0,
         amount: (rec.in||0) - (rec.out||0),
-        type, status, mid_cat: mid, big_cat: getBigCat(mid)
+        type, status, mid_cat: mid, big_cat: getBigCat(mid),
+        recur_id:  rec._id  || null, // R-1: 반복 거래 추적 ID
+        recur_day: rec.day  || null, // 디버깅/표시용 원본 반복일
       });
       added++;
     }
@@ -4843,8 +5206,46 @@ function expandRecurRow(tr, idx) {
     const memo   = tr.querySelector('.rec-edit-memo').value.trim();
     if (!day || day < 1 || day > 31) { tr.querySelector('.rec-edit-day').style.borderColor='var(--red)'; return; }
     if (!desc) { tr.querySelector('.rec-edit-desc').style.borderColor='var(--red)'; return; }
-    recurData[idx] = { day, desc, in: inAmt, out: outAmt, mid_cat: mid, memo };
+    const _oldRec = recurData[idx];
+    // R-3: _id 보존 (수정 시 기존 _id 유지)
+    recurData[idx] = { _id: _oldRec._id, day, desc, in: inAmt, out: outAmt, mid_cat: mid, memo };
     saveRecurData();
+
+    // R-5: recur_id로 생성된 미래 예정 CF가 있으면 업데이트 confirm
+    const _today = new Date().toISOString().slice(0, 10);
+    const _recurId = _oldRec._id;
+    if (_recurId) {
+      const _futurePlanned = cfData.filter(r =>
+        r.recur_id === _recurId &&
+        r.date >= _today &&
+        (r.status === '입금 예정' || r.status === '지출 예정')
+      );
+      if (_futurePlanned.length > 0 && confirm(
+        `이미 생성된 미래 예정 거래 ${_futurePlanned.length}건도 업데이트하시겠습니까?\n(실제 입금/지출 상태인 건은 제외됩니다)`
+      )) {
+        const _newType   = inAmt > 0 ? '입금' : '지출';
+        const _newStatus = _newType === '입금' ? '입금 예정' : '지출 예정';
+        const _newMid    = mid || getMidCat(desc, _newType) || '';
+        _futurePlanned.forEach(r => {
+          const _ci = cfData.findIndex(c => c._id === r._id);
+          if (_ci >= 0) {
+            cfData[_ci] = {
+              ...cfData[_ci],
+              desc,
+              in: inAmt, out: outAmt,
+              amount: inAmt - outAmt,
+              type: _newType, status: _newStatus,
+              mid_cat: _newMid, big_cat: getBigCat(_newMid),
+              recur_day: day,
+            };
+          }
+        });
+        cfData.sort((a, b) => a.date.localeCompare(b.date));
+        saveDataExplicit();
+        renderAll();
+      }
+    }
+
     renderRecurTable();
     showToast(`✅ "${desc}" 수정됐습니다.`, 'green');
   });
@@ -4934,7 +5335,9 @@ document.getElementById('rec-add-btn').addEventListener('click', () => {
   if (!desc) return alert('거래내용을 입력하세요.');
   if (inAmt === 0 && outAmt === 0) return alert('입금액 또는 출금액을 입력하세요.');
 
-  recurData.push({ day, desc, in: inAmt, out: outAmt, mid_cat: mid, memo });
+  // R-3: 신규 템플릿에 고유 _id 부여
+  const _newRecId = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  recurData.push({ _id: _newRecId, day, desc, in: inAmt, out: outAmt, mid_cat: mid, memo });
   saveRecurData();
 
   document.getElementById('rec-day').value  = '';
@@ -5119,14 +5522,16 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const panel = document.getElementById('panel-' + tab.dataset.tab);
     panel.classList.add('active');
+    if (tab.dataset.tab === 'dashboard')      { renderKPIs(); renderCharts(); }
     if (tab.dataset.tab === 'reporting')      renderWeeklyReport();
     if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
     if (tab.dataset.tab === 'recurring')      renderRecurringTab();
 
-    // 탭 전환 시 필터 초기화
+    // 탭 전환 시 필터 초기화 — 입출금 내역은 항상 오늘 기준 (report_base_date 영향 없음)
     if (tab.dataset.tab === 'cashflow') {
-      document.getElementById('cf-from').value = monthStart(refDate);
-      document.getElementById('cf-to').value = monthEnd(refDate);
+      const _cfToday = new Date().toISOString().slice(0, 10);
+      document.getElementById('cf-from').value = monthStart(_cfToday);
+      document.getElementById('cf-to').value = monthEnd(_cfToday);
       document.getElementById('cf-filter-type').value = '';
       document.getElementById('cf-filter-status').value = '';
       document.getElementById('cf-filter-mid').value = '';
@@ -5675,16 +6080,29 @@ document.getElementById('mid-unassigned-btn').addEventListener('click', () => {
 document.getElementById('mid-big-list').addEventListener('click', e => {
   if (!e.target.closest('.cat-del-btn')) return;
   const mid = e.target.closest('.cat-row').dataset.mid;
-  if (!confirm(`"${mid}" 중분류를 삭제하시겠습니까?\n이 중분류를 사용하는 거래내용 매핑도 해제됩니다.`)) return;
-  catMidToBig = readMidBigFromDOM();
-  delete catMidToBig[mid];
-  // 해당 중분류 사용하는 desc 매핑도 제거
+  // C-5/Q-CAT-4: 삭제 전 영향 받는 매핑 건수 확인 후 경고
+  catMidToBig  = readMidBigFromDOM();
   catDescToMid = readDescMidFromDOM();
-  for (const [d, m] of Object.entries(catDescToMid)) { if (m === mid) delete catDescToMid[d]; }
+  const affectedDesc  = Object.entries(catDescToMid).filter(([, m]) => m === mid).map(([d]) => d);
+  const affectedCombo = Object.entries(catDescTypeToMid).filter(([, m]) => m === mid).map(([k]) => k);
+  const total = affectedDesc.length + affectedCombo.length;
+  let msg = `"${mid}" 중분류를 삭제하시겠습니까?`;
+  if (total > 0) {
+    msg += `\n\n⚠ 이 중분류를 참조하는 매핑 ${total}건이 있습니다:`;
+    if (affectedDesc.length)  msg += `\n  · 거래내용 단독 매핑: ${affectedDesc.length}건`;
+    if (affectedCombo.length) msg += `\n  · 조합(내용+유형) 매핑: ${affectedCombo.length}건`;
+    msg += `\n\n확인을 누르면 해당 매핑도 함께 삭제됩니다.`;
+  }
+  if (!confirm(msg)) return;
+  delete catMidToBig[mid];
+  affectedDesc.forEach(d => delete catDescToMid[d]);
+  affectedCombo.forEach(k => delete catDescTypeToMid[k]); // C-5: 콤보키 유령 참조 제거
+  saveCatData(); // C-5: 삭제 즉시 저장
   renderMidBigList();
   renderDescMidList();
+  renderComboList(); // C-5: 콤보 목록도 갱신
   refreshDescAddMidSelect();
-  showToast(`"${mid}" 삭제됐습니다.`, 'red');
+  showToast(`"${mid}" 삭제됐습니다${total > 0 ? ` (연관 매핑 ${total}건 함께 삭제)` : ''}.`, 'red');
 });
 
 /* ------ 이벤트: 거래내용→중분류 ------ */
@@ -5697,6 +6115,7 @@ document.getElementById('desc-add-btn').addEventListener('click', () => {
   if (!mid)  { midSel.style.borderColor = 'var(--red)'; setTimeout(() => midSel.style.borderColor = '', 1200); return; }
   catDescToMid = readDescMidFromDOM();
   catDescToMid[desc] = mid;
+  saveCatData(); // C-1: 추가 즉시 저장 — 탭 이동 시 소실 방지
   input.value = '';
   descSearchQ = '';
   document.getElementById('desc-search').value = '';
@@ -5715,6 +6134,7 @@ document.getElementById('desc-mid-list').addEventListener('click', e => {
   if (!confirm(`"${desc}" 항목을 삭제하시겠습니까?`)) return;
   catDescToMid = readDescMidFromDOM();
   delete catDescToMid[desc];
+  saveCatData(); // C-2: 삭제 즉시 저장 — 탭 이동 후 복구 방지
   renderDescMidList();
   showToast(`"${desc}" 삭제됐습니다.`, 'red');
 });
@@ -5822,14 +6242,47 @@ document.getElementById('combo-delete-selected-btn').addEventListener('click', (
 });
 
 document.getElementById('cat-save-btn').addEventListener('click', () => {
-  catMidToBig  = readMidBigFromDOM();
-  catDescToMid = readDescMidFromDOM();
-  // combo는 이미 catDescTypeToMid에 실시간 반영됨 (DOM 읽기 불필요)
-  Object.keys(catMidToBig).forEach(k  => { if (!k.trim()) delete catMidToBig[k];  });
-  Object.keys(catDescToMid).forEach(k => { if (!k.trim()) delete catDescToMid[k]; });
-  Object.keys(catDescTypeToMid).forEach(k => { if (!k.trim()) delete catDescTypeToMid[k]; });
-  saveCatData();
+  if (blockIfOffline('카테고리 저장 & 재매핑')) return;
 
+  // C-3a: DOM → 임시 메모리 (아직 catMidToBig/catDescToMid 교체 전)
+  const newMidToBig  = readMidBigFromDOM();
+  const newDescToMid = readDescMidFromDOM();
+  Object.keys(newMidToBig).forEach(k  => { if (!k.trim()) delete newMidToBig[k];  });
+  Object.keys(newDescToMid).forEach(k => { if (!k.trim()) delete newDescToMid[k]; });
+  Object.keys(catDescTypeToMid).forEach(k => { if (!k.trim()) delete catDescTypeToMid[k]; });
+
+  // C-3a: 재매핑 건수 dry-run (메모리 임시 교체 후 카운트)
+  const _oldMidToBig  = catMidToBig;
+  const _oldDescToMid = catDescToMid;
+  catMidToBig  = newMidToBig;
+  catDescToMid = newDescToMid;
+  let dryCount = 0;
+  cfData.forEach(r => {
+    const mid = getMidCat(r.desc, r.type);
+    const big = getBigCat(mid);
+    if (r.mid_cat !== mid || r.big_cat !== big) dryCount++;
+  });
+
+  if (dryCount > 0) {
+    // C-6: AR 연관 CF 중 재매핑 대상 건수 확인
+    const arLinkedCount = cfData.filter(r => {
+      if (r.ar_applied !== '완료') return false;
+      const mid = getMidCat(r.desc, r.type);
+      const big = getBigCat(mid);
+      return r.mid_cat !== mid || r.big_cat !== big;
+    }).length;
+    let confirmMsg = `저장 시 기존 입출금 내역 ${dryCount}건이 재매핑됩니다.\n계속하시겠습니까?`;
+    if (arLinkedCount > 0) confirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${arLinkedCount}건 포함 — 카테고리 집계에 영향을 줍니다.`;
+    if (!confirm(confirmMsg)) {
+      // 취소: 메모리 원복
+      catMidToBig  = _oldMidToBig;
+      catDescToMid = _oldDescToMid;
+      return;
+    }
+  }
+
+  // 확인 완료 → 실제 저장
+  saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
@@ -5837,7 +6290,7 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
   buildBigCatSelects();
 
   const remapped = remapAllCfData();
-  if (remapped > 0) saveData();
+  if (remapped > 0) saveDataExplicit();
 
   renderMidBigList();
   renderDescMidList();
@@ -5852,9 +6305,29 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
 /* ------ 초기값 복원 ------ */
 document.getElementById('cat-reset-btn').addEventListener('click', () => {
   if (!confirm('모든 카테고리 설정을 초기값으로 복원하시겠습니까?\n조합 매핑도 모두 삭제됩니다.')) return;
+
+  // C-3b: 리셋 후 재매핑 건수 dry-run → 두 번째 confirm
+  const _oldMidToBig      = catMidToBig;
+  const _oldDescToMid     = catDescToMid;
+  const _oldDescTypeToMid = catDescTypeToMid;
   catMidToBig      = {...DEFAULT_MID_TO_BIG};
   catDescToMid     = {...DEFAULT_DESC_TO_MID};
   catDescTypeToMid = {};
+  let dryCount = 0;
+  cfData.forEach(r => {
+    const mid = getMidCat(r.desc, r.type);
+    const big = getBigCat(mid);
+    if (r.mid_cat !== mid || r.big_cat !== big) dryCount++;
+  });
+  if (dryCount > 0 && !confirm(`초기화 시 기존 입출금 내역 ${dryCount}건이 재매핑됩니다.\n계속하시겠습니까?`)) {
+    // 취소: 메모리 원복
+    catMidToBig      = _oldMidToBig;
+    catDescToMid     = _oldDescToMid;
+    catDescTypeToMid = _oldDescTypeToMid;
+    return;
+  }
+
+  // 확인 완료 → 저장 진행
   saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
@@ -5862,7 +6335,7 @@ document.getElementById('cat-reset-btn').addEventListener('click', () => {
   });
   buildBigCatSelects();
   const remapped = remapAllCfData();
-  if (remapped > 0) saveData();
+  if (remapped > 0) saveDataExplicit();
   renderMidBigList();
   renderDescMidList();
   renderComboList();
@@ -6196,16 +6669,24 @@ document.getElementById('cat-s2-next').addEventListener('click', () => {
 
 document.getElementById('cat-s3-back').addEventListener('click', () => resetCatSteps(2));
 document.getElementById('cat-apply-btn').addEventListener('click', () => {
+  if (blockIfOffline('카테고리 적용 & 재매핑')) return;
   const merge = document.getElementById('cat-merge-chk').checked;
   const descCount = Object.keys(catParsedDesc).length;
   const midCount  = Object.keys(catParsedMid).length;
 
   if (!descCount && !midCount) return;
 
+  let conflictDesc = 0, conflictMid = 0;
   if (merge) {
-    // 기존에 병합
-    Object.assign(catDescToMid, catParsedDesc);
-    Object.assign(catMidToBig,  catParsedMid);
+    // C-7: 병합 시 기존 키 보존 — 충돌 키는 건너뛰고 신규만 추가
+    for (const [k, v] of Object.entries(catParsedDesc)) {
+      if (catDescToMid[k] !== undefined) { conflictDesc++; }
+      else { catDescToMid[k] = v; }
+    }
+    for (const [k, v] of Object.entries(catParsedMid)) {
+      if (catMidToBig[k] !== undefined) { conflictMid++; }
+      else { catMidToBig[k] = v; }
+    }
   } else {
     // 전체 교체 (데이터 있는 것만)
     if (descCount) catDescToMid = {...catParsedDesc};
@@ -6223,14 +6704,16 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
 
   // cfData 재매핑
   const remapped = remapAllCfData();
-  if (remapped > 0) saveData();
+  if (remapped > 0) saveDataExplicit();
 
   document.getElementById('cat-modal').classList.add('hidden');
   renderCategoryTab();
   renderAll();
 
   const mode = merge ? '병합' : '교체';
-  showToast(`✅ 카테고리 ${mode} 완료 — 거래내용 ${descCount}건, 중분류 ${midCount}건${remapped > 0 ? ` / 내역 ${remapped}건 재매핑` : ''}`, 'green');
+  const conflictNote = (merge && (conflictDesc + conflictMid) > 0)
+    ? ` (충돌 ${conflictDesc + conflictMid}건은 기존 유지)` : '';
+  showToast(`✅ 카테고리 ${mode} 완료 — 거래내용 ${descCount}건, 중분류 ${midCount}건${conflictNote}${remapped > 0 ? ` / 내역 ${remapped}건 재매핑` : ''}`, 'green');
 });
 
 // 양식 다운로드 (빈 샘플 파일)
@@ -6292,8 +6775,12 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   loadRecurData();
 
   // 3. localStorage로 즉시 렌더 (빠른 초기 화면)
+  // ⚠ 이 단계에서는 Supabase 원격 저장 금지:
+  //   - ensureCFIds() / generateRecurring() 을 여기서 호출하면,
+  //     내부 saveData()가 async로 실행돼 Supabase 로드보다 먼저 완료될 수 있음
+  //   - 그 경우 오래된 localStorage 데이터가 Supabase 원본을 덮어쓰는 Race Condition 발생
+  //   - 따라서 두 함수는 Supabase 로드 완료(_isInitialized=true) 이후에만 실행
   loadData();
-  ensureCFIds();
   buildMidCatSelect();
   buildARPartnerSelect();
   (function buildEditMidCatSelect() {
@@ -6320,30 +6807,51 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   document.getElementById('ar-start').value = today;
   updateInitCashDisplay();
 
-  const autoChanged = autoUpdateStatus();
-  const recurGenerated = generateRecurring(false);
-  renderAll();
-  if (autoChanged > 0)    setTimeout(() => showToast(`🔄 ${autoChanged}건 자동 업데이트 완료 (예정 → 실제)`, 'green'), 400);
-  if (recurGenerated > 0) setTimeout(() => showToast(`🔄 반복 거래 ${recurGenerated}건 예정 항목 자동 생성됐습니다.`, 'green'), 900);
-
+  renderAll(); // localStorage 기반 초기 렌더 (Supabase 로드 전)
 
   // 4. Supabase에서 최신 데이터 로드 (비동기)
   const ok = await loadDataFromSupabase();
   if (ok) {
-    document.getElementById('refDateInput').value = refDate; // 저장된 보고기준일 반영
-    ensureCFIds();
-    loadCatData(); // Supabase에서 받은 카테고리로 갱신
+    refDate = reportBaseDate; // 저장된 보고기준일을 주간 리포팅 기준으로 반영
+    document.getElementById('refDateInput').value = refDate;
+
+    // ✅ _isInitialized = true — 이 라인 이후부터 saveDataToSupabase() 원격 저장 허용
+    // ensureCFIds / generateRecurring 은 반드시 이 라인 이후에 실행해야 안전함
+    _isInitialized = true;
+
+    ensureCFIds();            // Supabase 데이터 기준으로 _id 보정 (필요 시 저장)
+    loadCatData();            // Supabase에서 받은 카테고리로 갱신
+    ensureRecurIds();         // 기존 반복 거래 템플릿에 _id 마이그레이션 (필요 시 저장)
     buildMidCatSelect();
     buildARPartnerSelect();
     buildBigCatSelects();
+
+    // 기준 건수 초기화 (Supabase 로드 직후 정상 건수를 safe_count로 등록, upward-only 유지)
+    const _bootPrevSafe = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
+    if (!_bootPrevSafe || cfData.length > _bootPrevSafe) {
+      localStorage.setItem('cf_data_safe_count', String(cfData.length));
+      localStorage.setItem('cf_data_safe_count_updated_at', new Date().toISOString());
+    }
+
     const autoChanged2 = autoUpdateStatus();
-    const recurGenerated2 = generateRecurring(false);
+    const recurGenerated2 = generateRecurring(false); // Supabase 데이터 기준 반복거래 생성
     renderAll();
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
 
     // 5. Realtime 구독 시작
     subscribeRealtime();
+  } else {
+    // Supabase 로드 실패(오프라인) 시에도 localStorage 기반으로 초기화 완료 처리
+    // 단, 오프라인 상태이므로 원격 저장은 어차피 실패 — 플래그는 세우지 않음
+    _isInitialized = false;
+    ensureCFIds();            // _id 보정 (localStorage 저장만 실행됨)
+    ensureRecurIds();         // 반복 거래 _id 마이그레이션 (오프라인 시 localStorage만)
+    const autoChanged2 = autoUpdateStatus();
+    const recurGenerated2 = generateRecurring(false); // 오프라인 시 localhost만 저장
+    renderAll();
+    if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
+    if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
   }
 })();
 
@@ -6575,6 +7083,7 @@ document.getElementById('cf-import-btn').addEventListener('click', () => {
 
 // mode: 'add' = 그냥 등록, 'skip' = 건너뛰기, 'overwrite' = 덮어쓰기
 function cfDoImport(mode) {
+  if (blockIfOffline('입출금 엑셀 가져오기')) return;
   const isSingle = window._cfDupMode === 'single';
 
   if (isSingle) {
@@ -6584,10 +7093,24 @@ function cfDoImport(mode) {
     if (mode === 'add') {
       cfAddSingleRow(row);
     } else if (mode === 'overwrite' && dupIdx >= 0) {
-      row._id = cfData[dupIdx]._id;
+      const _oldRow = cfData[dupIdx];
+      // 기존 CF의 AR 생성·차감 연동 원복 후 교체
+      if ((_oldRow.ar_created_log || []).some(e => !e.reverted)) {
+        try { revertARCreation(_oldRow); } catch(e2) { /* 계속 진행 */ }
+      }
+      if (_oldRow.ar_applied === '완료') {
+        try { revertARDeduction(_oldRow); } catch(e2) { /* 계속 진행 */ }
+      }
+      row._id = _oldRow._id;
       cfData[dupIdx] = row;
       cfData.sort((a,b) => a.date.localeCompare(b.date));
-      saveData();
+      // 새 행에 AR 연동 재적용
+      addARFromCF(row);
+      addARFromInorganicIncome(row);
+      if (row.type === '입금' && row.mid_cat && (row.in || 0) > 0) {
+        try { deductARByIncome(cfData.find(d => d._id === row._id) || row); } catch(e2) { /* 계속 */ }
+      }
+      saveDataExplicit();
       document.getElementById('cf-date').value = '';
       document.getElementById('cf-desc').value = '';
       document.getElementById('cf-in').value = '';
@@ -6595,7 +7118,7 @@ function cfDoImport(mode) {
       document.getElementById('cf-midcat').value = '';
       document.getElementById('cf-status').value = '';
       renderAll();
-      showToast(`✅ 1건 덮어쓰기 완료`, 'green');
+      showToast(`✅ 1건 덮어쓰기 완료 (AR 원복 후 재적용)`, 'green');
     } else if (mode === 'skip') {
       showToast('건너뛰었습니다.', 'green');
     }
@@ -6622,7 +7145,15 @@ function cfDoImport(mode) {
         cfData.push(r);
         added++;
       } else if (mode === 'overwrite') {
-        r._id = cfData[dupIdx]._id;
+        const _oldBulkRow = cfData[dupIdx];
+        // 기존 CF의 AR 연동 원복 후 교체
+        if ((_oldBulkRow.ar_created_log || []).some(e => !e.reverted)) {
+          try { revertARCreation(_oldBulkRow); } catch(e2) { /* 계속 */ }
+        }
+        if (_oldBulkRow.ar_applied === '완료') {
+          try { revertARDeduction(_oldBulkRow); } catch(e2) { /* 계속 */ }
+        }
+        r._id = _oldBulkRow._id;
         cfData[dupIdx] = r;
         replaced++;
       } else {
@@ -6658,20 +7189,8 @@ function cfDoImport(mode) {
     }
   }
 
-  // 추가/교체된 기존 거래처 입금 CF → AR 추가 (인오가닉 건 및 이미 생성된 건 제외)
-  let arIncomeAutoAdded = 0;
-  for (const r of cfParsed) {
-    if (r._id && r.type === '입금' && r.mid_cat && (r.in || 0) > 0 && r.big_cat !== '인오가닉') {
-      if (arCreatedIds.has(r._id)) continue;
-      const cfRow = cfData.find(d => d._id === r._id);
-      if (cfRow && addARFromIncomeToPartner(cfRow)) {
-        arIncomeAutoAdded++;
-        arCreatedIds.add(r._id);
-      }
-    }
-  }
-
   // 추가/교체된 입금 CF → AR 미회수액 자동 차감 (AR 신규 생성 건 제외)
+  // 입금 건은 항상 차감 우선 — addARFromIncomeToPartner는 자동 실행하지 않음
   let arAutoDeducted = 0;
   for (const r of cfParsed) {
     if (r._id && r.type === '입금' && r.mid_cat && (r.in || 0) > 0) {
@@ -6690,12 +7209,12 @@ function cfDoImport(mode) {
     }
   }
 
-  saveData();
-  if (arAutoAdded > 0 || arInorgAutoAdded > 0 || arIncomeAutoAdded > 0) buildARPartnerSelect();
+  saveDataExplicit();
+  if (arAutoAdded > 0 || arInorgAutoAdded > 0) buildARPartnerSelect();
   renderAll();
   document.getElementById('cf-modal').classList.add('hidden');
   document.getElementById('cf-dup-modal').classList.add('hidden');
-  const msg = [`✅ 가져오기 완료`, `추가: ${added}건`, replaced ? `교체: ${replaced}건` : '', skipped ? `건너뜀: ${skipped}건` : '', arAutoAdded ? `📋 AR 자동등록: ${arAutoAdded}건` : '', arInorgAutoAdded ? `🆕 인오가닉 거래처 AR: ${arInorgAutoAdded}건` : '', arIncomeAutoAdded ? `📋 기존 거래처 AR 추가: ${arIncomeAutoAdded}건` : '', arAutoDeducted ? `💰 AR 차감: ${arAutoDeducted}건` : ''].filter(Boolean).join(' | ');
+  const msg = [`✅ 가져오기 완료`, `추가: ${added}건`, replaced ? `교체: ${replaced}건` : '', skipped ? `건너뜀: ${skipped}건` : '', arAutoAdded ? `📋 AR 자동등록: ${arAutoAdded}건` : '', arInorgAutoAdded ? `🆕 인오가닉 거래처 AR: ${arInorgAutoAdded}건` : '', arAutoDeducted ? `💰 AR 차감: ${arAutoDeducted}건` : ''].filter(Boolean).join(' | ');
   showToast(msg, 'green');
 }
 
@@ -6853,6 +7372,7 @@ document.getElementById('ar-import-btn').addEventListener('click', () => {
 });
 
 function arDoImport(mode) {
+  if (blockIfOffline('매출채권 엑셀 가져오기')) return;
   let added = 0, skipped = 0, replaced = 0;
   const originalData = arData.slice(); // 원본 스냅샷 기준 중복 비교 (엑셀 내부 중복 모두 등록)
   for (const r of arParsed) {
@@ -6871,7 +7391,7 @@ function arDoImport(mode) {
       arData.push(r); added++;
     }
   }
-  saveData();
+  saveDataExplicit();
   buildARPartnerSelect();
   renderAll();
   document.getElementById('ar-modal').classList.add('hidden');
