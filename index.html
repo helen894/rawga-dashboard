@@ -5789,6 +5789,43 @@ function buildBigCatSelects(curAddBig, curEditBig) {
   if (editSel) editSel.innerHTML = makeOpts(curEditBig || editSel.value || '');
 }
 
+/* ===== 재매핑 dry-run 미리보기 =====
+ * catMidToBig / catDescToMid / catDescTypeToMid가 이미 교체된 상태에서 호출.
+ * remapAllCfData()와 완전히 동일한 폴백 로직을 사용하여 실제 변경될 건수를 계산.
+ *   - getMidCat() 결과가 없으면 r.mid_cat 보존 (폴백) — dry-run 오탐 방지
+ * AR 연관 판정: ar_applied==='완료' 또는 ar_deduct_log 이력 존재
+ * @returns {{ dryCount: number, arLinkedCount: number, arLinkedRows: Array }}
+ */
+function calcRemapPreview() {
+  let dryCount = 0;
+  const arLinkedRows = [];
+  cfData.forEach(r => {
+    const mappedMid = getMidCat(r.desc, r.type) || '';
+    const newMid    = mappedMid || r.mid_cat || '';  // 매핑 없으면 기존 mid_cat 유지
+    const newBig    = getBigCat(newMid);
+    if (r.mid_cat !== newMid || r.big_cat !== newBig) {
+      dryCount++;
+      const isARLinked = r.ar_applied === '완료' ||
+        (Array.isArray(r.ar_deduct_log) && r.ar_deduct_log.length > 0);
+      if (isARLinked) arLinkedRows.push(r);
+    }
+  });
+  return { dryCount, arLinkedCount: arLinkedRows.length, arLinkedRows };
+}
+
+/* AR 연관 재매핑 대상 상세 문구 생성 (최대 5건 표시, 초과분은 "외 N건") */
+function buildARLinkedMsg(arLinkedRows) {
+  const MAX_SHOW = 5;
+  const shown = arLinkedRows.slice(0, MAX_SHOW);
+  const rest  = arLinkedRows.length - shown.length;
+  const lines = shown.map(r => {
+    const amt = r.type === '입금' ? (r.in || 0) : (r.out || 0);
+    return `  - ${r.mid_cat || '(미분류)'} / ${r.date} / ${r.type} / ${fmt(amt)}원`;
+  });
+  if (rest > 0) lines.push(`  외 ${rest}건`);
+  return lines.join('\n');
+}
+
 // cfData 전체 중분류+대분류 재매핑 (type 기반 조합 키 반영)
 function remapAllCfData() {
   let changed = 0;
@@ -6326,28 +6363,20 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
   Object.keys(newDescToMid).forEach(k => { if (!k.trim()) delete newDescToMid[k]; });
   Object.keys(catDescTypeToMid).forEach(k => { if (!k.trim()) delete catDescTypeToMid[k]; });
 
-  // C-3a: 재매핑 건수 dry-run (메모리 임시 교체 후 카운트)
+  // C-3a: 재매핑 건수 dry-run (메모리 임시 교체 후 공통 함수로 카운트)
   const _oldMidToBig  = catMidToBig;
   const _oldDescToMid = catDescToMid;
   catMidToBig  = newMidToBig;
   catDescToMid = newDescToMid;
-  let dryCount = 0;
-  cfData.forEach(r => {
-    const mid = getMidCat(r.desc, r.type);
-    const big = getBigCat(mid);
-    if (r.mid_cat !== mid || r.big_cat !== big) dryCount++;
-  });
+  const { dryCount, arLinkedCount, arLinkedRows } = calcRemapPreview(); // remapAllCfData()와 동일 폴백 로직
 
   if (dryCount > 0) {
-    // C-6: AR 연관 CF 중 재매핑 대상 건수 확인
-    const arLinkedCount = cfData.filter(r => {
-      if (r.ar_applied !== '완료') return false;
-      const mid = getMidCat(r.desc, r.type);
-      const big = getBigCat(mid);
-      return r.mid_cat !== mid || r.big_cat !== big;
-    }).length;
     let confirmMsg = `저장 시 기존 입출금 내역 ${dryCount}건이 재매핑됩니다.\n계속하시겠습니까?`;
-    if (arLinkedCount > 0) confirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${arLinkedCount}건 포함 — 카테고리 집계에 영향을 줍니다.`;
+    if (arLinkedCount > 0) {
+      confirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${arLinkedCount}건 포함:\n`;
+      confirmMsg += buildARLinkedMsg(arLinkedRows);
+      confirmMsg += '\n→ 카테고리 집계에 영향을 줍니다.';
+    }
     if (!confirm(confirmMsg)) {
       // 취소: 메모리 원복
       catMidToBig  = _oldMidToBig;
@@ -6381,25 +6410,28 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
 document.getElementById('cat-reset-btn').addEventListener('click', () => {
   if (!confirm('모든 카테고리 설정을 초기값으로 복원하시겠습니까?\n조합 매핑도 모두 삭제됩니다.')) return;
 
-  // C-3b: 리셋 후 재매핑 건수 dry-run → 두 번째 confirm
+  // C-3b: 리셋 후 재매핑 건수 dry-run → 두 번째 confirm (공통 함수 사용)
   const _oldMidToBig      = catMidToBig;
   const _oldDescToMid     = catDescToMid;
   const _oldDescTypeToMid = catDescTypeToMid;
   catMidToBig      = {...DEFAULT_MID_TO_BIG};
   catDescToMid     = {...DEFAULT_DESC_TO_MID};
   catDescTypeToMid = {};
-  let dryCount = 0;
-  cfData.forEach(r => {
-    const mid = getMidCat(r.desc, r.type);
-    const big = getBigCat(mid);
-    if (r.mid_cat !== mid || r.big_cat !== big) dryCount++;
-  });
-  if (dryCount > 0 && !confirm(`초기화 시 기존 입출금 내역 ${dryCount}건이 재매핑됩니다.\n계속하시겠습니까?`)) {
-    // 취소: 메모리 원복
-    catMidToBig      = _oldMidToBig;
-    catDescToMid     = _oldDescToMid;
-    catDescTypeToMid = _oldDescTypeToMid;
-    return;
+  const { dryCount: resetDryCount, arLinkedCount: resetArLinkedCount, arLinkedRows: resetArLinkedRows } = calcRemapPreview();
+  if (resetDryCount > 0) {
+    let resetConfirmMsg = `초기화 시 기존 입출금 내역 ${resetDryCount}건이 재매핑됩니다.\n계속하시겠습니까?`;
+    if (resetArLinkedCount > 0) {
+      resetConfirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${resetArLinkedCount}건 포함:\n`;
+      resetConfirmMsg += buildARLinkedMsg(resetArLinkedRows);
+      resetConfirmMsg += '\n→ 카테고리 집계에 영향을 줍니다.';
+    }
+    if (!confirm(resetConfirmMsg)) {
+      // 취소: 메모리 원복
+      catMidToBig      = _oldMidToBig;
+      catDescToMid     = _oldDescToMid;
+      catDescTypeToMid = _oldDescTypeToMid;
+      return;
+    }
   }
 
   // 확인 완료 → 저장 진행
