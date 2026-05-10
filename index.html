@@ -2212,9 +2212,32 @@ function renderKPIs() {
   if (nmrEl) nmrEl.textContent = `${k.ny2}년 ${k.nm2}월 예상`;
 }
 
+// Supabase 로드 전 KPI 카드 로딩 상태 표시
+// localStorage 없는 환경(GitHub Pages 첫 방문 등)에서 기본값이 실제 값처럼 보이는 것 방지
+// renderKPIs()가 실행되면 자동으로 실제 값으로 덮어써짐
+function showKPILoading() {
+  const valueIds = [
+    'kpi-cash', 'kpi-ar', 'kpi-total-liquid', 'kpi-weekly-net',
+    'kpi-next-cash', 'kpi-sejong', 'kpi-laos', 'kpi-total-physical',
+    'kpi-w-in', 'kpi-w-out',
+  ];
+  const subIds = [
+    'kpi-cash-sub', 'kpi-ar-sub', 'kpi-total-liquid-sub', 'kpi-weekly-range',
+    'kpi-next-range', 'kpi-sejong-sub', 'kpi-laos-sub', 'kpi-total-physical-sub',
+    'kpi-win-sub', 'kpi-wout-sub',
+  ];
+  valueIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '···'; });
+  subIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '연결 중...'; });
+}
+
 let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst;
 
 function renderCharts() {
+  // Chart.js는 display:none 캔버스에 렌더링 시 크기를 0×0으로 인식해 빈 차트가 됨
+  // 대시보드 패널이 active(visible) 상태가 아니면 렌더링 건너뜀
+  // → 탭 재진입 시 클릭 핸들러에서 renderCharts()를 명시 호출하므로 정상 복구됨
+  if (!document.getElementById('panel-dashboard').classList.contains('active')) return;
+
   updateDashboardDateLabels();
   renderCashChart();
   renderDonutChart();
@@ -3002,6 +3025,15 @@ function saveCFEdit() {
   const updatedRow = cfData.find(x => x._id === cfEditId);
   let arInorgAdded  = false;
 
+  // ④-0 지출 건 → 기존 거래처 AR 신규 생성 (addARFromCF)
+  //      partner가 arData에 이미 존재할 때만 동작 (신규 인오가닉 거래처는 ④-2에서 처리)
+  let arFromCFAdded = false;
+  if (updatedRow && updatedRow.type === '지출' && updatedRow.mid_cat && (updatedRow.out || 0) > 0) {
+    const _cfArResult = addARFromCF(updatedRow);
+    arFromCFAdded = (_cfArResult === true);
+    if (arFromCFAdded) arMsg += ' | 📋 매출채권 자동 등록';
+  }
+
   // ④-1 보호된 인오가닉 AR 직접 업데이트
   //      (collected>0 이라 revertARCreation이 삭제 못한 AR → 새 값으로 갱신 후 로그 재활성화)
   if (_creationRevertResult && _creationRevertResult.protected > 0 && updatedRow) {
@@ -3015,8 +3047,9 @@ function saveCFEdit() {
     }
   }
 
-  // ④-2 인오가닉 신규 거래처 AR 생성 (보호 AR 업데이트가 없었던 경우에만)
-  if (!arInorgAdded && updatedRow && updatedRow.type === '지출' && updatedRow.big_cat === '인오가닉' &&
+  // ④-2 인오가닉 신규 거래처 AR 생성 (④-0 기존 거래처 AR 등록과 보호 AR 업데이트가 없었던 경우에만)
+  //      addARFromCF 가 성공했으면 거래처가 이미 존재하므로 인오가닉 신규 생성 불필요
+  if (!arFromCFAdded && !arInorgAdded && updatedRow && updatedRow.type === '지출' && updatedRow.big_cat === '인오가닉' &&
       updatedRow.mid_cat && (updatedRow.out || 0) > 0) {
     const _r = addARFromInorganicIncome(updatedRow);
     arInorgAdded = (_r === true);
@@ -3985,7 +4018,8 @@ function revertARDeduction(cfRow) {
 
 /* ===== CF 지출 → AR 자동 추가 =====
  * 지출 CF의 중분류가 기존 AR 거래처와 일치하면 새 AR 항목을 생성.
- * 중복 기준: partner + start(date) + expected(out) 모두 일치하면 건너뜀.
+ * 중복 기준: 이 CF 행의 ar_created_log에 미원복(reverted:false) '지출AR등록' 항목이 있고
+ *           해당 ar_id의 AR이 arData에 실제로 존재하면 스킵. (수동 삭제·원복 시 재생성 허용)
  * @returns {boolean} 추가됐으면 true, 중복/미해당이면 false
  */
 function addARFromCF(cfRow) {
@@ -3995,13 +4029,17 @@ function addARFromCF(cfRow) {
   const partnerExists = arData.some(ar => normalizePartnerName(ar.partner) === partner);
   if (!partnerExists) return false;
 
-  // 중복 방지: 같은 거래처 + 같은 날짜 + 같은 금액이 이미 있으면 스킵
-  const isDup = arData.some(ar =>
-    normalizePartnerName(ar.partner) === partner &&
-    ar.start   === cfRow.date &&
-    Math.abs((ar.expected || 0) - cfRow.out) < 1
-  );
-  if (isDup) return false;
+  // 중복 방지: 이 CF 행이 이미 미원복 AR을 생성했으면 스킵
+  // - reverted:true 로그는 중복으로 보지 않음 (재생성 허용)
+  // - 로그는 있지만 실제 AR이 수동 삭제된 경우에도 재생성 허용
+  const alreadyCreated = (cfRow.ar_created_log || []).some(e => {
+    if (e.reverted || e.type !== '지출AR등록') return false;
+    if (normalizePartnerName(e.partner) !== partner) return false;
+    // ar_id가 있으면 실제 arData에 해당 AR이 남아있을 때만 중복 처리
+    if (e.ar_id) return arData.some(ar => ar._id === e.ar_id);
+    return true;
+  });
+  if (alreadyCreated) return false;
 
   const newArId = 'ar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   arData.push({
@@ -6845,6 +6883,10 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   updateInitCashDisplay();
 
   renderAll(); // localStorage 기반 초기 렌더 (Supabase 로드 전)
+  // localStorage가 없는 환경(GitHub Pages 첫 방문, 오리진 다른 브라우저 등)에서는
+  // loadData()가 getDefaultCF/AR() 기본값을 사용하므로 KPI가 잘못된 값처럼 보일 수 있음
+  // → Supabase 로드가 완료되기 전까지 KPI 카드를 "연결 중..." 상태로 덮어써 혼동 방지
+  if (!localStorage.getItem('cf_data')) showKPILoading();
 
   // 4. Supabase에서 최신 데이터 로드 (비동기)
   const ok = await loadDataFromSupabase();
@@ -6873,6 +6915,14 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     const autoChanged2 = autoUpdateStatus();
     const recurGenerated2 = generateRecurring(false); // Supabase 데이터 기준 반복거래 생성
     renderAll();
+    // Supabase 로드 완료 후 대시보드가 활성 탭이면 KPI/차트를 rAF로 한 번 더 보장 갱신
+    //   renderAll() → renderCharts()는 active guard를 통과해 이미 실행됐으나,
+    //   requestAnimationFrame으로 브라우저가 레이아웃을 확정한 다음 프레임에 재실행해
+    //   canvas 크기가 완전히 정해진 상태에서 Chart.js가 그려지도록 보장
+    // 대시보드가 아닌 탭에 있으면 renderCharts guard가 건너뜀 → 탭 재진입 시 클릭 핸들러가 처리
+    if (document.getElementById('panel-dashboard').classList.contains('active')) {
+      requestAnimationFrame(() => { renderKPIs(); renderCharts(); });
+    }
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
 
