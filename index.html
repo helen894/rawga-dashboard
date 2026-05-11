@@ -4707,15 +4707,13 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
   const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
 
-  // ── 거래처별 집계 (trim 정규화) ──
-  const pMap = {};
-  wCF.forEach(r => { const k = (r.mid_cat||'').trim()||'(미분류)'; if (!pMap[k]) pMap[k]={in:0,out:0}; pMap[k].in+=(r.in||0); pMap[k].out+=(r.out||0); });
-  const arRemMap = {};
-  arArr.filter(a => (a.remaining||0) > 0).forEach(a => { const k=(a.partner||'').trim()||'(미분류)'; arRemMap[k] = (arRemMap[k]||0) + (a.remaining||0); });
-  const allPartners = new Set([...Object.keys(pMap), ...Object.keys(arRemMap)]);
-  const partnerRows = [...allPartners]
-    .map(p => ({ p, in: pMap[p]?.in||0, out: pMap[p]?.out||0, rem: arRemMap[p]||0 }))
-    .filter(x => x.in>0||x.out>0||x.rem>0).sort((a,b)=>(b.in+b.out)-(a.in+a.out));
+  // ── 대분류별 집계 (big_cat 기준, 입금+지출 합계 큰 순) ──
+  const bigMap = {};
+  wCF.forEach(r => { const k = (r.big_cat||'').trim()||'(미분류)'; if (!bigMap[k]) bigMap[k]={in:0,out:0}; bigMap[k].in+=(r.in||0); bigMap[k].out+=(r.out||0); });
+  const bigCatRows = Object.entries(bigMap)
+    .map(([cat, v]) => ({ cat, in: v.in, out: v.out }))
+    .filter(x => x.in > 0 || x.out > 0)
+    .sort((a, b) => (b.in + b.out) - (a.in + a.out));
 
   // ── AR 집계 (elapsed 실시간 재계산) ──
   const baseMsB  = new Date(targetDate + 'T00:00:00').getTime();
@@ -4747,30 +4745,35 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
       <div style="font-size:10px;color:${C.t3};margin-top:4px">${sub}</div>
     </div></td>`;
 
+  const MAX_ROWS = 10;
+  const extraRow = (n, cols) => `<tr><td colspan="${cols}" style="text-align:center;color:${C.t3};padding:10px;font-size:11px">외 ${n}건 더 있음</td></tr>`;
   const empty4 = `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">내역 없음</td></tr>`;
-  const inHtml = inRows.length ? inRows.slice(0,25).map(r =>
+  const inHtml = inRows.length ? (inRows.slice(0,MAX_ROWS).map(r =>
     `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
          <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
          <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('') : empty4;
-  const outHtml = outRows.length ? outRows.slice(0,25).map(r =>
+         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('')
+    + (inRows.length > MAX_ROWS ? extraRow(inRows.length - MAX_ROWS, 4) : '')) : empty4;
+  const outHtml = outRows.length ? (outRows.slice(0,MAX_ROWS).map(r =>
     `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
          <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
          <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('') : empty4;
-  const partnerHtml = partnerRows.length ? partnerRows.slice(0,20).map(x =>
-    `<tr><td style="${TDS}font-weight:500">${x.p}</td>
+         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('')
+    + (outRows.length > MAX_ROWS ? extraRow(outRows.length - MAX_ROWS, 4) : '')) : empty4;
+  const bigCatHtml = bigCatRows.length ? (bigCatRows.slice(0,MAX_ROWS).map(x =>
+    `<tr><td style="${TDS}font-weight:500">${x.cat}</td>
          <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
-         <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td>
-         <td style="${TDS}text-align:right;color:${x.rem>0?C.amber:C.t3}">${x.rem>0?fmt(x.rem):'—'}</td></tr>`).join('')
-    : `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
-  const hrHtml = highRisk.length ? highRisk.slice(0,15).map(a =>
+         <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td></tr>`).join('')
+    + (bigCatRows.length > MAX_ROWS ? extraRow(bigCatRows.length - MAX_ROWS, 3) : ''))
+    : `<tr><td colspan="3" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
+  const hrHtml = highRisk.length ? (highRisk.slice(0,MAX_ROWS).map(a =>
     `<tr><td style="${TDS}font-weight:500">${a.partner||'—'}</td>
          <td style="${TDS}color:${C.t2}">${a.start||'—'}</td>
          <td style="${TDS}text-align:right">${fmt(a.expected||0)}</td>
          <td style="${TDS}text-align:right;color:${C.amber}">${fmt(a.remaining||0)}</td>
          <td style="${TDS}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?C.red:C.amber}">${a.elapsed||0}일</td>
          <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:C.amber}">${a.status||'—'}</td></tr>`).join('')
+    + (highRisk.length > MAX_ROWS ? extraRow(highRisk.length - MAX_ROWS, 6) : ''))
     : `<tr><td colspan="6" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">고위험 매출채권이 없습니다 👍</td></tr>`;
 
   const title  = `${wYear}년 ${wMon}월 ${wNum}주차`;
@@ -4820,12 +4823,12 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     ${outHtml}
   </table>
 </td></tr>
-<!-- 거래처 -->
+<!-- 대분류 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
-  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 거래처별 주간 현황</div>
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 대분류별 주간 현황</div>
   <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
-    <tr><th style="${THS}left">거래처</th><th style="${THS}right">입금</th><th style="${THS}right">지출</th><th style="${THS}right">AR 미회수</th></tr>
-    ${partnerHtml}
+    <tr><th style="${THS}left">대분류</th><th style="${THS}right">입금</th><th style="${THS}right">지출</th></tr>
+    ${bigCatHtml}
   </table></td></tr>
 <!-- AR 요약 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
