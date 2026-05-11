@@ -1968,10 +1968,14 @@ function fmtM(n) {
   return fmt(n);
 }
 
-// 보고 기준일: 접속일 기준 자동 초기화
-let refDate = new Date().toISOString().slice(0,10);
-// 리포팅 전용 기준일 (Supabase cat_data.report_base_date 로드값 — refDate와 분리)
-// 목적: 주간 리포팅/이메일 자동 발송 기준으로만 사용, 입출금 내역 필터에 영향 없음
+// Asia/Seoul(KST) 기준 오늘 날짜 — UTC 자정~09:00 사이 하루 차이 방지
+function todayKST() {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+}
+// 보고 기준일: 접속일(KST) 기준 자동 초기화
+let refDate = todayKST();
+// 리포팅 전용 기준일 (주간 탭·이메일 발송 기준, 입출금 내역 필터에 영향 없음)
+// 앱 실행 시 항상 오늘(KST)로 시작 — Supabase 저장값은 서버측 자동발송 전용
 let reportBaseDate = refDate;
 function getRefDate() { return new Date(refDate + 'T00:00:00'); }
 
@@ -5650,19 +5654,22 @@ document.getElementById('refDateInput').value = refDate;
 
 document.getElementById('refDateInput').addEventListener('change', e => {
   refDate = e.target.value;
+  reportBaseDate = refDate; // 리포팅 주간 탭·이메일 발송 기준일도 즉시 동기화
   renderAll();
   saveRefDateToSupabase(refDate); // 자동 발송에서도 사용 가능하도록 저장
 });
 
 /* ===== 주간 리포팅 이전/다음 주 버튼 ===== */
 document.getElementById('wkrpt-prev-btn').addEventListener('click', () => {
-  refDate = addDays(refDate, -7);
+  reportBaseDate = addDays(reportBaseDate, -7); // 리포팅 기준일 기준으로 이동
+  refDate = reportBaseDate;                      // refDate·input·Supabase 동기화
   document.getElementById('refDateInput').value = refDate;
   renderAll();
   saveRefDateToSupabase(refDate);
 });
 document.getElementById('wkrpt-next-btn').addEventListener('click', () => {
-  refDate = addDays(refDate, 7);
+  reportBaseDate = addDays(reportBaseDate, 7);  // 리포팅 기준일 기준으로 이동
+  refDate = reportBaseDate;                      // refDate·input·Supabase 동기화
   document.getElementById('refDateInput').value = refDate;
   renderAll();
   saveRefDateToSupabase(refDate);
@@ -6923,7 +6930,10 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   // 4. Supabase에서 최신 데이터 로드 (비동기)
   const ok = await loadDataFromSupabase();
   if (ok) {
-    refDate = reportBaseDate; // 저장된 보고기준일을 주간 리포팅 기준으로 반영
+    // 앱 실행 시 보고기준일은 항상 오늘(KST)로 시작
+    // Supabase의 report_base_date는 서버측 자동발송 전용 — UI 초기값에는 적용하지 않음
+    refDate = todayKST();
+    reportBaseDate = refDate;
     document.getElementById('refDateInput').value = refDate;
 
     // ✅ _isInitialized = true — 이 라인 이후부터 saveDataToSupabase() 원격 저장 허용
