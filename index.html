@@ -145,6 +145,37 @@
   .report-table tbody td { padding: 7px 12px; }
   .total-row td { background: var(--bg3); font-weight: 600; border-top: 1px solid var(--border2); }
 
+  /* MONTHLY REPORTING */
+  .monthly-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding:14px 20px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
+  .monthly-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+  .monthly-scroll { max-height:260px; overflow:auto; border-radius:8px; border:1px solid var(--border); }
+  .monthly-table { width:100%; min-width:430px; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+  .monthly-table th { position:sticky; top:0; z-index:1; background:var(--bg3); color:var(--text2); font-size:11px; font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .monthly-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .monthly-table tr:last-child td { border-bottom:none; }
+  .monthly-section-stack { display:flex; flex-direction:column; gap:16px; margin-bottom:20px; }
+  .monthly-diagnosis-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:16px; align-items:center; }
+  .monthly-diagnosis-card.good { border-color:rgba(46,199,122,.35); background:linear-gradient(90deg, rgba(46,199,122,.08), var(--card) 42%); }
+  .monthly-diagnosis-card.warn { border-color:rgba(245,166,35,.42); background:linear-gradient(90deg, rgba(245,166,35,.11), var(--card) 42%); }
+  .monthly-diagnosis-card.danger { border-color:rgba(255,77,106,.42); background:linear-gradient(90deg, rgba(255,77,106,.10), var(--card) 42%); }
+  .monthly-diagnosis-title { font-size:15px; font-weight:700; color:var(--text); margin-bottom:10px; }
+  .monthly-diagnosis-meta { display:grid; grid-template-columns:120px minmax(0,1fr); gap:8px 12px; font-size:12px; line-height:1.65; color:var(--text2); }
+  .monthly-diagnosis-meta b { color:var(--text); font-weight:600; }
+  .monthly-status-box { justify-self:stretch; text-align:center; border-radius:10px; padding:16px 12px; border:1px solid var(--border); background:rgba(255,255,255,.72); }
+  .monthly-status-label { font-size:11px; color:var(--text2); margin-bottom:8px; }
+  .monthly-status-pill { display:inline-flex; align-items:center; justify-content:center; min-width:84px; padding:7px 14px; border-radius:999px; font-size:13px; font-weight:700; }
+  .monthly-status-pill.good { background:var(--green2); color:var(--green); }
+  .monthly-status-pill.warn { background:var(--amber2); color:var(--amber); }
+  .monthly-status-pill.danger { background:var(--red2); color:var(--red); }
+  .monthly-list { margin:0; padding-left:17px; color:var(--text2); font-size:12px; line-height:1.9; }
+  .monthly-list li::marker { color:var(--blue); }
+  .monthly-full-card { margin-bottom:20px; }
+  @media (max-width: 900px) {
+    .monthly-grid-2 { grid-template-columns:1fr; }
+    .monthly-diagnosis-card { grid-template-columns:1fr; }
+    .monthly-status-box { text-align:left; }
+  }
+
   /* MESSAGE BOX */
 
   /* SCROLLBAR */
@@ -643,6 +674,7 @@
   <!-- 리포팅 하위 탭 -->
   <div class="sheet-tabs" id="reporting-sub-tabs" style="margin-bottom:20px">
     <div class="sheet-tab active" data-reporting-sub="weekly">주간</div>
+    <div class="sheet-tab" data-reporting-sub="monthly">월간</div>
   </div>
 
   <!-- 주간 하위 패널 -->
@@ -989,6 +1021,134 @@
   <!-- /이메일 자동 발송 설정 패널 -->
 
   </div><!-- /rpt-panel-weekly -->
+
+
+  <!-- 월간 하위 패널 -->
+  <div id="rpt-panel-monthly" style="display:none">
+
+    <div class="monthly-header">
+      <button id="mnrpt-prev-btn" class="btn" style="font-size:13px">◀ 이전 달</button>
+      <div style="text-align:center">
+        <div id="mnrpt-month-title" style="font-size:18px;font-weight:700;color:var(--text)">—</div>
+        <div id="mnrpt-month-range" style="font-size:12px;color:var(--text2);margin-top:3px">—</div>
+      </div>
+      <button id="mnrpt-next-btn" class="btn" style="font-size:13px">다음 달 ▶</button>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:20px">
+      <div class="kpi-card">
+        <div class="kpi-label">전월 기말</div>
+        <div class="kpi-value" id="mnrpt-pm-end">—</div>
+        <div class="kpi-sub" id="mnrpt-pm-end-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">월간 입금</div>
+        <div class="kpi-value pos" id="mnrpt-in">—</div>
+        <div class="kpi-sub" id="mnrpt-in-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">월간 지출</div>
+        <div class="kpi-value neg" id="mnrpt-out">—</div>
+        <div class="kpi-sub" id="mnrpt-out-sub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">당월 기말</div>
+        <div class="kpi-value" id="mnrpt-end">—</div>
+        <div class="kpi-sub" id="mnrpt-end-sub"></div>
+      </div>
+    </div>
+
+    <div class="monthly-grid-2">
+      <div class="chart-box">
+        <div class="chart-title">
+          <span style="color:var(--green)">월간 입금 내역</span>
+          <small id="mnrpt-in-count"></small>
+        </div>
+        <div class="monthly-scroll">
+          <table class="monthly-table">
+            <colgroup><col style="width:15%"><col style="width:45%"><col style="width:20%"><col style="width:20%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래처</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <tbody id="mnrpt-in-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="chart-box">
+        <div class="chart-title">
+          <span style="color:var(--red)">월간 지출 내역</span>
+          <small id="mnrpt-out-count"></small>
+        </div>
+        <div class="monthly-scroll">
+          <table class="monthly-table">
+            <colgroup><col style="width:15%"><col style="width:45%"><col style="width:20%"><col style="width:20%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래처</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <tbody id="mnrpt-out-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="monthly-section-stack">
+      <div class="monthly-diagnosis-card" id="mnrpt-operating-diagnosis">
+        <div>
+          <div class="monthly-diagnosis-title">영업/매출 활동 현금흐름 진단</div>
+          <div class="monthly-diagnosis-meta">
+            <b>정량적</b><span id="mnrpt-operating-metrics">—</span>
+            <b>판단</b><span id="mnrpt-operating-judgment">—</span>
+          </div>
+        </div>
+        <div class="monthly-status-box">
+          <div class="monthly-status-label">판단 상태</div>
+          <span class="monthly-status-pill" id="mnrpt-operating-status">—</span>
+        </div>
+      </div>
+
+      <div class="monthly-diagnosis-card" id="mnrpt-finance-diagnosis">
+        <div>
+          <div class="monthly-diagnosis-title">재무/이자 활동 현금흐름 진단</div>
+          <div class="monthly-diagnosis-meta">
+            <b>정량적</b><span id="mnrpt-finance-metrics">—</span>
+            <b>판단</b><span id="mnrpt-finance-judgment">—</span>
+          </div>
+        </div>
+        <div class="monthly-status-box">
+          <div class="monthly-status-label">판단 상태</div>
+          <span class="monthly-status-pill" id="mnrpt-finance-status">—</span>
+        </div>
+      </div>
+
+      <div class="monthly-diagnosis-card" id="mnrpt-finance-detail-diagnosis">
+        <div>
+          <div class="monthly-diagnosis-title">금융비용 정밀 진단</div>
+          <div class="monthly-diagnosis-meta">
+            <b>정량적</b><span id="mnrpt-finance-detail-metrics">—</span>
+            <b>판단</b><span id="mnrpt-finance-detail-judgment">—</span>
+          </div>
+        </div>
+        <div class="monthly-status-box">
+          <div class="monthly-status-label">판단 상태</div>
+          <span class="monthly-status-pill" id="mnrpt-finance-detail-status">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="monthly-grid-2">
+      <div class="chart-box">
+        <div class="chart-title">권장 액션</div>
+        <ul class="monthly-list" id="mnrpt-actions"></ul>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">다음 달 체크</div>
+        <ul class="monthly-list" id="mnrpt-next-checks"></ul>
+      </div>
+    </div>
+
+    <div class="chart-box monthly-full-card">
+      <div class="chart-title">거래처 및 AR 진단</div>
+      <div id="mnrpt-ar-diagnosis" style="font-size:12px;color:var(--text2);line-height:1.9">—</div>
+    </div>
+
+  </div><!-- /rpt-panel-monthly -->
 
 </div><!-- /panel-reporting -->
 
@@ -1754,9 +1914,14 @@ async function saveDataToSupabase(opts = {}) {
   // Supabase 원격 저장은 동기화 충돌 방지 및 초기화 완료 후에만 실행
   const { bypassCountCheck = false, bypassSyncing = false } = opts;
 
+  // ── 스냅샷: 비동기 대기(SELECT) 중 Realtime 에코가 cfData/arData를 덮어써도
+  //    호출 시점의 정확한 데이터를 localStorage·Supabase에 저장하기 위해 즉시 캡처
+  const cfSnap = cfData.slice();
+  const arSnap = arData.slice();
+
   try {
-    localStorage.setItem('cf_data', JSON.stringify(cfData));
-    localStorage.setItem('ar_data', JSON.stringify(arData));
+    localStorage.setItem('cf_data', JSON.stringify(cfSnap));
+    localStorage.setItem('ar_data', JSON.stringify(arSnap));
   } catch(e) {
     console.warn('localStorage 저장 실패:', e);
   }
@@ -1775,18 +1940,18 @@ async function saveDataToSupabase(opts = {}) {
   // ── Guard 3: 데이터 건수 급감 감지 — 자동 저장 경로에서 대량 손실 방지 ──
   if (!bypassCountCheck) {
     const prevCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
-    if (prevCount > 10 && cfData.length < prevCount * 0.5) {
+    if (prevCount > 10 && cfSnap.length < prevCount * 0.5) {
       console.error(
         '[saveData] ⚠️ cf_data 건수 급감 감지 — 저장 차단!',
-        '현재:', cfData.length, '건 / 이전 정상:', prevCount, '건'
+        '현재:', cfSnap.length, '건 / 이전 정상:', prevCount, '건'
       );
       return; // 자동 경로에서는 무조건 차단
     }
     const arPrevCount = parseInt(localStorage.getItem('ar_data_safe_count') || '0');
-    if (arPrevCount > 5 && arData.length < arPrevCount * 0.5) {
+    if (arPrevCount > 5 && arSnap.length < arPrevCount * 0.5) {
       console.error(
         '[saveData] ⚠️ ar_data 건수 급감 감지 — 저장 차단!',
-        '현재:', arData.length, '건 / 이전 정상:', arPrevCount, '건'
+        '현재:', arSnap.length, '건 / 이전 정상:', arPrevCount, '건'
       );
       return;
     }
@@ -1801,14 +1966,19 @@ async function saveDataToSupabase(opts = {}) {
     ]);
 
     await Promise.all([
-      _supa.from('cf_data').update({ data: cfData, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id),
-      _supa.from('ar_data').update({ data: arData, updated_at: new Date().toISOString() }).eq('id', arRow.data.id),
+      _supa.from('cf_data').update({ data: cfSnap, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id),
+      _supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id),
     ]);
 
+    // Supabase 저장 완료 후 localStorage 재갱신
+    // → SELECT 대기 중 Realtime 에코가 localStorage를 덮어쓴 경우를 복원
+    localStorage.setItem('cf_data', JSON.stringify(cfSnap));
+    localStorage.setItem('ar_data', JSON.stringify(arSnap));
+
     // 정상 저장 완료 시 기준 건수 갱신 (명시적 사용자 저장은 현재 건수를 새 기준으로 확정)
-    localStorage.setItem('cf_data_safe_count', String(cfData.length));
+    localStorage.setItem('cf_data_safe_count', String(cfSnap.length));
     localStorage.setItem('cf_data_safe_count_updated_at', new Date().toISOString());
-    localStorage.setItem('ar_data_safe_count', String(arData.length));
+    localStorage.setItem('ar_data_safe_count', String(arSnap.length));
     setSyncStatus('online');
   } catch(e) {
     console.warn('Supabase 저장 실패:', e);
@@ -4348,107 +4518,180 @@ function renderReport() {
 }
 
 /* ---- 월간 보고 ---- */
+function addMonthsClamped(dateStr, delta) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const target = new Date(y, m - 1 + delta, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(d, last));
+  const yy = target.getFullYear();
+  const mm = String(target.getMonth() + 1).padStart(2, '0');
+  const dd = String(target.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
 function renderMonthlyReport() {
   const mStart = monthStart(refDate), mEnd = monthEnd(refDate);
   const pmStart = prevMonthStart(refDate), pmEnd = prevMonthEnd(refDate);
-  const [y, m] = refDate.slice(0,7).split('-').map(Number);
-  const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
+  const [y, m] = refDate.slice(0, 7).split('-').map(Number);
+  const fmtMD = s => s ? s.slice(5).replace('-', '/') : '';
+  const fmtPct = v => isFinite(v) ? `${(v * 100).toFixed(1)}%` : '—';
+  const safeText = v => String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
-  document.getElementById('rpt-month-label').textContent =
-    `${y}년 ${m}월 (전월: ${py}년 ${pm}월)`;
+  document.getElementById('mnrpt-month-title').textContent = `${y}년 ${m}월 월간 리포팅`;
+  document.getElementById('mnrpt-month-range').textContent = `${mStart} ~ ${mEnd}`;
 
-  function sumCFM(s, e, midCat) {
-    return cfData.filter(r => r.date >= s && r.date <= e && r.mid_cat === midCat &&
-      (r.status === '실제 입금' || r.status === '실제 지출'))
-      .reduce((acc, r) => acc + r.in - r.out, 0);
+  const actualInRows = cfData
+    .filter(r => r.date >= mStart && r.date <= mEnd && r.status === '실제 입금' && (r.in || 0) > 0)
+    .sort((a, b) => (b.in || 0) - (a.in || 0));
+  const actualOutRows = cfData
+    .filter(r => r.date >= mStart && r.date <= mEnd && r.status === '실제 지출' && (r.out || 0) > 0)
+    .sort((a, b) => (b.out || 0) - (a.out || 0));
+  const prevOutRows = cfData
+    .filter(r => r.date >= pmStart && r.date <= pmEnd && r.status === '실제 지출' && (r.out || 0) > 0);
+
+  const mIn = actualInRows.reduce((s, r) => s + (r.in || 0), 0);
+  const mOut = actualOutRows.reduce((s, r) => s + (r.out || 0), 0);
+  const pmIn = cfData.filter(r => r.date >= pmStart && r.date <= pmEnd && r.status === '실제 입금').reduce((s, r) => s + (r.in || 0), 0);
+  const pmOut = prevOutRows.reduce((s, r) => s + (r.out || 0), 0);
+
+  let pmEndCash = INIT_CASH;
+  let mEndCash = INIT_CASH;
+  for (const r of cfData) {
+    if (r.status === '실제 입금' && r.date <= pmEnd) pmEndCash += (r.in || 0);
+    if (r.status === '실제 지출' && r.date <= pmEnd) pmEndCash -= (r.out || 0);
+    if (r.status === '실제 입금' && r.date <= mEnd) mEndCash += (r.in || 0);
+    if (r.status === '실제 지출' && r.date <= mEnd) mEndCash -= (r.out || 0);
   }
-  function sumBigM(s, e, bigCat) {
-    return cfData.filter(r => r.date >= s && r.date <= e && r.big_cat === bigCat && r.type === '지출' &&
-      r.status === '실제 지출')
-      .reduce((acc, r) => acc + r.out, 0);
-  }
 
-  const color = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text3)';
-  const diffStyle = v => v > 0 ? 'color:var(--green)' : v < 0 ? 'color:var(--red)' : 'color:var(--text3)';
-  const arrow = v => v > 0 ? '▲' : v < 0 ? '▼' : '—';
-
-  // 중분류별
-  const tbody = document.getElementById('rpt-month-tbody');
-  tbody.innerHTML = REPORT_ITEMS.map(item => {
-    const cv = sumCFM(mStart, mEnd, item);
-    const pv = sumCFM(pmStart, pmEnd, item);
-    const diff = cv - pv;
-    if (cv === 0 && pv === 0) return '';
-    return `<tr>
-      <td>${item}</td>
-      <td class="num" style="color:${color(cv)}">${cv !== 0 ? fmt(cv) : '—'}</td>
-      <td class="num" style="color:${color(pv)}">${pv !== 0 ? fmt(pv) : '—'}</td>
-      <td class="num" style="${diffStyle(diff)}">${diff !== 0 ? arrow(diff)+' '+fmt(Math.abs(diff)) : '—'}</td>
-    </tr>`;
-  }).join('');
-
-  // 대분류별
-  const catTbody = document.getElementById('rpt-month-cat-tbody');
-  let totalC = 0, totalP = 0;
-  catTbody.innerHTML = REPORT_CATS.map(cat => {
-    const cv = sumBigM(mStart, mEnd, cat);
-    const pv = sumBigM(pmStart, pmEnd, cat);
-    const diff = cv - pv;
-    totalC += cv; totalP += pv;
-    if (cv === 0 && pv === 0) return '';
-    return `<tr>
-      <td>${cat}</td>
-      <td class="num">${cv > 0 ? fmt(cv) : '—'}</td>
-      <td class="num">${pv > 0 ? fmt(pv) : '—'}</td>
-      <td class="num" style="${diffStyle(diff)}">${diff !== 0 ? arrow(diff)+' '+fmt(Math.abs(diff)) : '—'}</td>
-    </tr>`;
-  }).join('') + `<tr class="total-row"><td>합계</td><td class="num">${fmt(totalC)}</td><td class="num">${fmt(totalP)}</td><td class="num" style="${diffStyle(totalC-totalP)}">${arrow(totalC-totalP)} ${fmt(Math.abs(totalC-totalP))}</td></tr>`;
-
-  // 입출금 합계
-  const mIn  = cfData.filter(r => r.date >= mStart && r.date <= mEnd && r.status === '실제 입금').reduce((s,r) => s+r.in, 0);
-  const mOut = cfData.filter(r => r.date >= mStart && r.date <= mEnd && r.status === '실제 지출').reduce((s,r) => s+r.out, 0);
-  const mNet = mIn - mOut;
-  const k = calcKPIs();
-  const refFmt = `${y}년 ${m}월`;
-
-  // 차월 날짜 계산
-  let nm = m + 1, ny = y;
-  if (nm > 12) { nm = 1; ny++; }
-  const nmStart = `${ny}-${String(nm).padStart(2,'0')}-01`;
-  const nmEnd   = `${ny}-${String(nm).padStart(2,'0')}-${new Date(ny,nm,0).getDate()}`;
-  const nmIn  = cfData.filter(r => r.date >= nmStart && r.date <= nmEnd && (r.status === '실제 입금' || r.status === '입금 예정')).reduce((s,r) => s+r.in,  0);
-  const nmOut = cfData.filter(r => r.date >= nmStart && r.date <= nmEnd && (r.status === '실제 지출' || r.status === '지출 예정')).reduce((s,r) => s+r.out, 0);
-  const nmLabel = `${ny}년 ${nm}월`;
-
-  // 카드 렌더
-  // 전월 입금 합계
-  const pmIn  = cfData.filter(r => r.date >= pmStart && r.date <= pmEnd && r.status === '실제 입금').reduce((s,r) => s+r.in,  0);
-  const pmOutT= cfData.filter(r => r.date >= pmStart && r.date <= pmEnd && r.status === '실제 지출').reduce((s,r) => s+r.out, 0);
-
-  // 증감률 헬퍼
   const momBadge = (cur, prev, isExpense) => {
     if (!prev) return '';
-    const pct = (cur - prev) / prev * 100;
+    const pct = (cur - prev) / prev;
+    if (Math.abs(pct) < 0.001) return '전월 동일';
     const up = pct > 0;
     const color = isExpense ? (up ? 'var(--red)' : 'var(--green)') : (up ? 'var(--green)' : 'var(--red)');
-    const arrow = up ? '▲' : pct < 0 ? '▼' : '';
-    return ` <span style="color:${color};font-size:11px">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+    return `<span style="color:${color};font-weight:600">${up ? '▲' : '▼'} ${Math.abs(pct * 100).toFixed(1)}%</span>`;
   };
 
-  const fmtMD = s => s ? s.slice(5).replace('-','/') : '';
-  document.getElementById('rpt-m-in').textContent    = fmt(mIn);
-  document.getElementById('rpt-m-in-sub').innerHTML  = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)}${momBadge(mIn, pmIn, false)}`;
-  document.getElementById('rpt-m-out').textContent   = fmt(mOut);
-  document.getElementById('rpt-m-out-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)}${momBadge(mOut, pmOutT, true)}`;
-  document.getElementById('rpt-nm-in').textContent   = fmt(nmIn);
-  document.getElementById('rpt-nm-in-sub').textContent = nmLabel;
-  document.getElementById('rpt-nm-out').textContent  = fmt(nmOut);
-  document.getElementById('rpt-nm-out-sub').textContent = nmLabel;
+  document.getElementById('mnrpt-pm-end').textContent = fmtM(pmEndCash);
+  document.getElementById('mnrpt-pm-end-sub').textContent = `기준: ${fmtMD(pmEnd)}`;
+  document.getElementById('mnrpt-in').textContent = fmtM(mIn);
+  document.getElementById('mnrpt-in-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mIn, pmIn, false)}`;
+  document.getElementById('mnrpt-out').textContent = fmtM(mOut);
+  document.getElementById('mnrpt-out-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mOut, pmOut, true)}`;
+  document.getElementById('mnrpt-end').textContent = fmtM(mEndCash);
+  document.getElementById('mnrpt-end-sub').textContent = `기준: ${fmtMD(mEnd)}`;
+
+  const emptyRow = '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>';
+  const rowHtml = (rows, key, color, sign) => rows.length ? rows.map(r => `
+    <tr>
+      <td class="date-cell">${fmtMD(r.date)}</td>
+      <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.desc)}">${safeText(r.desc || '—')}</td>
+      <td style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.mid_cat)}">${safeText(r.mid_cat || '—')}</td>
+      <td class="num" style="color:${color};font-weight:600">${sign}${fmt(r[key] || 0)}</td>
+    </tr>`).join('') : emptyRow;
+  document.getElementById('mnrpt-in-tbody').innerHTML = rowHtml(actualInRows, 'in', 'var(--green)', '+');
+  document.getElementById('mnrpt-out-tbody').innerHTML = rowHtml(actualOutRows, 'out', 'var(--red)', '-');
+  document.getElementById('mnrpt-in-count').textContent = `${actualInRows.length}건 · 내부 스크롤`;
+  document.getElementById('mnrpt-out-count').textContent = `${actualOutRows.length}건 · 내부 스크롤`;
+
+  const isExcluded = r => {
+    const big = (r.big_cat || '').trim();
+    const mid = (r.mid_cat || '').trim();
+    return big === '자금이동/제외' || big === '인오가닉' ||
+      ['대여금 수취','대여금 지급','대여금 상환','투자금','계좌간이체','법인카드 대금'].includes(mid);
+  };
+  const isFinance = r => {
+    const txt = `${r.big_cat || ''} ${r.mid_cat || ''} ${r.desc || ''}`;
+    return r.big_cat === '금융비용' || /이자|금융|대출|차입|상환|수수료/.test(txt);
+  };
+
+  const operatingIn = actualInRows.filter(r => !isExcluded(r) && !isFinance(r)).reduce((s, r) => s + (r.in || 0), 0);
+  const operatingOut = actualOutRows.filter(r => !isExcluded(r) && !isFinance(r)).reduce((s, r) => s + (r.out || 0), 0);
+  const operatingNet = operatingIn - operatingOut;
+  const operatingProductivity = operatingIn ? operatingNet / operatingIn : 0;
+  const financeCost = actualOutRows.filter(isFinance).reduce((s, r) => s + (r.out || 0), 0);
+  const prevFinanceCost = prevOutRows.filter(isFinance).reduce((s, r) => s + (r.out || 0), 0);
+  const financeCostRate = operatingIn ? financeCost / operatingIn : 0;
+  const financeBurden = operatingNet > 0 ? financeCost / operatingNet : (financeCost > 0 ? Infinity : 0);
+  const financeIncrease = prevFinanceCost ? (financeCost - prevFinanceCost) / prevFinanceCost : 0;
+
+  const arView = arData.map(a => ({
+    ...a,
+    elapsed: (a.remaining || 0) > 0 && a.start ? Math.max(0, Math.floor((new Date(refDate + 'T00:00:00') - new Date(a.start + 'T00:00:00')) / 86400000)) : 0
+  }));
+  const mNewAR = arView.filter(a => a.start >= mStart && a.start <= mEnd);
+  const mNewAmt = mNewAR.reduce((s, a) => s + (a.expected || 0), 0);
+  const mColCF = cfData.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= mStart && r.ar_applied_date <= mEnd);
+  const mColAmt = mColCF.reduce((s, r) => s + (r.in || 0), 0);
+  const remAll = arView.filter(a => (a.remaining || 0) > 0);
+  const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
+  const highRisk = remAll.filter(a => (a.elapsed || 0) >= 60 || a.status === '지연')
+    .sort((a, b) => ((b.elapsed || 0) - (a.elapsed || 0)) || ((b.remaining || 0) - (a.remaining || 0)));
+
+  const statusLabel = { good: '양호', warn: '주의', danger: '위험' };
+  const setDiagnosis = (prefix, state, metrics, judgment) => {
+    const card = document.getElementById(`mnrpt-${prefix}-diagnosis`);
+    const pill = document.getElementById(`mnrpt-${prefix}-status`);
+    card.classList.remove('good', 'warn', 'danger');
+    card.classList.add(state);
+    pill.className = `monthly-status-pill ${state}`;
+    pill.textContent = statusLabel[state];
+    document.getElementById(`mnrpt-${prefix}-metrics`).innerHTML = metrics;
+    document.getElementById(`mnrpt-${prefix}-judgment`).textContent = judgment;
+  };
+
+  const opState = operatingNet < 0 ? 'danger' : operatingProductivity < 0.10 || mNewAmt > mColAmt ? 'warn' : 'good';
+  const finState = financeCostRate >= 0.10 || financeBurden >= 0.40 ? 'danger' : financeCostRate >= 0.05 || financeBurden >= 0.20 || financeIncrease > 0.10 ? 'warn' : 'good';
+  const detailState = financeCostRate >= 0.10 ? 'danger' : financeCostRate >= 0.05 ? 'warn' : 'good';
+
+  setDiagnosis(
+    'operating',
+    opState,
+    `영업성 입금 ${fmtM(operatingIn)} · 영업성 지출 ${fmtM(operatingOut)} · 순현금 ${fmtM(operatingNet)} · 생산성 ${fmtPct(operatingProductivity)}`,
+    opState === 'good' ? '영업성 입금이 지출을 상회하며 현금 생산성이 안정적입니다.' :
+      opState === 'warn' ? '영업성 현금흐름은 유지되나 신규 AR 증가 또는 낮은 생산성 확인이 필요합니다.' :
+      '영업성 지출이 입금을 초과해 매출 회수와 지출 통제가 필요합니다.'
+  );
+  setDiagnosis(
+    'finance',
+    finState,
+    `금융비용 ${fmtM(financeCost)} · 영업성 입금 대비 ${fmtPct(financeCostRate)} · 영업 순현금 대비 ${fmtPct(financeBurden)} · 전월 대비 ${fmtPct(financeIncrease)}`,
+    finState === 'good' ? '금융비용 부담이 관리 가능한 범위입니다.' :
+      finState === 'warn' ? '금융비용 증가가 영업 순현금흐름을 잠식하는지 추적이 필요합니다.' :
+      '금융비용 부담이 높아 차입/이자 구조에 대한 의사결정이 필요합니다.'
+  );
+  setDiagnosis(
+    'finance-detail',
+    detailState,
+    `금융비용 비중 ${fmtPct(financeCostRate)} · 금액 ${fmtM(financeCost)} · 전월 금융비용 ${fmtM(prevFinanceCost)}`,
+    detailState === 'good' ? '금융비용은 5% 미만 구간으로 판단됩니다.' :
+      detailState === 'warn' ? '금융비용이 5~10% 구간입니다. 차입 조건과 이자 항목 세부 확인을 권장합니다.' :
+      '금융비용이 10% 이상입니다. 자금 조달 구조 재검토가 필요합니다.'
+  );
+
+  const actions = [];
+  if (highRisk.length) actions.push(`60일 초과/지연 AR ${highRisk.length}건 우선 회수`);
+  if (financeCostRate >= 0.05) actions.push('이자비용 증가 원인과 차입 조건 확인');
+  if (operatingProductivity < 0.10) actions.push('영업성 지출 상위 항목 예산 재점검');
+  if (mNewAmt > mColAmt) actions.push('신규 AR 발생 대비 회수 계획 보강');
+  if (!actions.length) actions.push('현재 현금흐름 유지, 주요 거래처 회수 일정만 점검');
+
+  const checks = [
+    '금융비용 10% 초과 여부',
+    '고위험 AR 회수 여부',
+    '영업성 입금 대비 지출 증가율',
+    '당월 기말 현금 방어 가능 여부'
+  ];
+  document.getElementById('mnrpt-actions').innerHTML = actions.map(x => `<li>${safeText(x)}</li>`).join('');
+  document.getElementById('mnrpt-next-checks').innerHTML = checks.map(x => `<li>${safeText(x)}</li>`).join('');
+
+  const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.elapsed || 0}일`).join(' · ');
+  document.getElementById('mnrpt-ar-diagnosis').innerHTML =
+    `회수 우선: ${safeText(arPriority || '고위험 AR 없음')}<br>` +
+    `월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColCF.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>` +
+    `자동 경고 메일 또는 담당자 후속 조치 대상 표시`;
 }
 
-/* ===== 주간 리포팅 탭 ===== */
-
-// ISO 주차 번호 계산 (월요일 시작 기준, 연간 기준 — 내부 참조용으로 유지)
 function getISOWeekNum(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   const jan4 = new Date(d.getFullYear(), 0, 4);
@@ -4745,36 +4988,56 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
       <div style="font-size:10px;color:${C.t3};margin-top:4px">${sub}</div>
     </div></td>`;
 
+  // ── 스크롤 임계값: 이 건수 초과 시 해당 테이블에 개별 스크롤 영역 활성화 ──
+  // (이메일 HTML은 별도 Edge Function이 생성 — 이 함수는 Dry-run 미리보기 전용)
   const MAX_ROWS = 10;
-  const extraRow = (n, cols) => `<tr><td colspan="${cols}" style="text-align:center;color:${C.t3};padding:10px;font-size:11px">외 ${n}건 더 있음</td></tr>`;
   const empty4 = `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">내역 없음</td></tr>`;
-  const inHtml = inRows.length ? (inRows.slice(0,MAX_ROWS).map(r =>
+
+  // 전체 행 생성 (슬라이스 없음) — 표시 건수 제어는 스크롤 래퍼에서 처리
+  const inHtml = inRows.length ? inRows.map(r =>
     `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
          <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
          <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('')
-    + (inRows.length > MAX_ROWS ? extraRow(inRows.length - MAX_ROWS, 4) : '')) : empty4;
-  const outHtml = outRows.length ? (outRows.slice(0,MAX_ROWS).map(r =>
+         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('') : empty4;
+  const outHtml = outRows.length ? outRows.map(r =>
     `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
          <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
          <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('')
-    + (outRows.length > MAX_ROWS ? extraRow(outRows.length - MAX_ROWS, 4) : '')) : empty4;
-  const bigCatHtml = bigCatRows.length ? (bigCatRows.slice(0,MAX_ROWS).map(x =>
+         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('') : empty4;
+  const bigCatHtml = bigCatRows.length ? bigCatRows.map(x =>
     `<tr><td style="${TDS}font-weight:500">${x.cat}</td>
          <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
          <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td></tr>`).join('')
-    + (bigCatRows.length > MAX_ROWS ? extraRow(bigCatRows.length - MAX_ROWS, 3) : ''))
     : `<tr><td colspan="3" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
-  const hrHtml = highRisk.length ? (highRisk.slice(0,MAX_ROWS).map(a =>
+  const hrHtml = highRisk.length ? highRisk.map(a =>
     `<tr><td style="${TDS}font-weight:500">${a.partner||'—'}</td>
          <td style="${TDS}color:${C.t2}">${a.start||'—'}</td>
          <td style="${TDS}text-align:right">${fmt(a.expected||0)}</td>
          <td style="${TDS}text-align:right;color:${C.amber}">${fmt(a.remaining||0)}</td>
          <td style="${TDS}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?C.red:C.amber}">${a.elapsed||0}일</td>
          <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:C.amber}">${a.status||'—'}</td></tr>`).join('')
-    + (highRisk.length > MAX_ROWS ? extraRow(highRisk.length - MAX_ROWS, 6) : ''))
     : `<tr><td colspan="6" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">고위험 매출채권이 없습니다 👍</td></tr>`;
+
+  // ── 스크롤 테이블 래퍼 (Dry-run 미리보기 전용 — 브라우저 new window 렌더링) ──
+  // • MAX_ROWS 초과: overflow:auto 컨테이너 + position:sticky 헤더 (약 10행 높이 후 스크롤)
+  // • MAX_ROWS 이하: 기존 단순 테이블 (스크롤 없음, 자연 높이)
+  // ※ 이메일 클라이언트(Gmail/Outlook)는 overflow/position:sticky 지원 불안정 →
+  //    실제 발송 HTML(Edge Function)은 전체 행 표시 방식 사용 (JS·scroll 없음)
+  const SCROLL_H = '340px'; // 헤더(~36px) + 본문 10행(~30px×10) ≈ 336px
+  const STHS = `padding:7px 8px;font-size:11px;font-weight:600;color:${C.t2};background:${C.bg3};position:sticky;top:0;z-index:1;text-align:`;
+  const scrollTbl = (headers, body, count) => count > MAX_ROWS
+    ? `<div style="border:1px solid ${B};border-radius:6px;overflow:auto;max-height:${SCROLL_H}">`
+      + `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%">`
+      + `<thead><tr>${headers.map(([t, a]) => `<th style="${STHS}${a}">${t}</th>`).join('')}</tr></thead>`
+      + `<tbody>${body}</tbody></table></div>`
+    : `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">`
+      + `<tr>${headers.map(([t, a]) => `<th style="${THS}${a}">${t}</th>`).join('')}</tr>`
+      + `${body}</table>`;
+
+  // 섹션 제목 옆 건수 배지 (10건 초과 시 스크롤 안내 포함)
+  const cntBadge = (n, over) => n > 0
+    ? ` <span style="font-size:11px;font-weight:400;color:${C.t2};margin-left:6px">총 ${n}건${over ? ' · 스크롤로 전체 확인' : ''}</span>`
+    : '';
 
   const title  = `${wYear}년 ${wMon}월 ${wNum}주차`;
   const period = `${wStart} (월) ~ ${wEnd} (일)`;
@@ -4809,27 +5072,18 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 입금 내역 -->
 <tr><td style="background:${C.card};padding:18px 18px 0">
-  <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역</div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
-    <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
-    ${inHtml}
-  </table>
+  <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역${cntBadge(inRows.length, inRows.length > MAX_ROWS)}</div>
+  ${scrollTbl([['날짜','left'],['거래내용','left'],['중분류','left'],['금액','right']], inHtml, inRows.length)}
 </td></tr>
 <!-- 지출 내역 -->
 <tr><td style="background:${C.card};padding:18px 18px 0">
-  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역</div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
-    <tr><th style="${THS}left">날짜</th><th style="${THS}left">거래내용</th><th style="${THS}left">중분류</th><th style="${THS}right">금액</th></tr>
-    ${outHtml}
-  </table>
+  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역${cntBadge(outRows.length, outRows.length > MAX_ROWS)}</div>
+  ${scrollTbl([['날짜','left'],['거래내용','left'],['중분류','left'],['금액','right']], outHtml, outRows.length)}
 </td></tr>
 <!-- 대분류 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
-  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 대분류별 주간 현황</div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
-    <tr><th style="${THS}left">대분류</th><th style="${THS}right">입금</th><th style="${THS}right">지출</th></tr>
-    ${bigCatHtml}
-  </table></td></tr>
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">🏢 대분류별 주간 현황${cntBadge(bigCatRows.length, bigCatRows.length > MAX_ROWS)}</div>
+  ${scrollTbl([['대분류','left'],['입금','right'],['지출','right']], bigCatHtml, bigCatRows.length)}</td></tr>
 <!-- AR 요약 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
@@ -4842,11 +5096,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   </tr></table></td></tr>
 <!-- 고위험 AR -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
-  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">⚠️ 고위험 매출채권</div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">
-    <tr><th style="${THS}left">거래처</th><th style="${THS}left">시작일</th><th style="${THS}right">예상회수액</th><th style="${THS}right">미회수잔액</th><th style="${THS}center">경과일</th><th style="${THS}center">상태</th></tr>
-    ${hrHtml}
-  </table></td></tr>
+  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">⚠️ 고위험 매출채권${cntBadge(highRisk.length, highRisk.length > MAX_ROWS)}</div>
+  ${scrollTbl([['거래처','left'],['시작일','left'],['예상회수액','right'],['미회수잔액','right'],['경과일','center'],['상태','center']], hrHtml, highRisk.length)}</td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
   <div style="font-size:11px;color:${C.t3}">RAWGA 자금 대시보드 · 자동 발송 리포트 · ${sentAt}</div>
@@ -5070,16 +5321,23 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
 })();
 
 /* ---- 리포팅 하위 탭 이벤트 ---- */
+/* ---- 리포팅 하위 탭 이벤트 ---- */
+function renderActiveReportingSubTab() {
+  const active = document.querySelector('#reporting-sub-tabs .sheet-tab.active');
+  const sub = active?.dataset.reportingSub || 'weekly';
+  const weeklyPanel = document.getElementById('rpt-panel-weekly');
+  const monthlyPanel = document.getElementById('rpt-panel-monthly');
+  if (weeklyPanel) weeklyPanel.style.display = sub === 'weekly' ? '' : 'none';
+  if (monthlyPanel) monthlyPanel.style.display = sub === 'monthly' ? '' : 'none';
+  if (sub === 'monthly') renderMonthlyReport();
+  else renderWeeklyReport();
+}
+
 document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const sub = btn.dataset.reportingSub;
-    // 추후 월간·분기·연간 패널 추가 시 여기서 show/hide 처리
-    if (sub === 'weekly') {
-      document.getElementById('rpt-panel-weekly').style.display = '';
-      renderWeeklyReport();
-    }
+    renderActiveReportingSubTab();
   });
 });
 
@@ -5491,7 +5749,9 @@ function renderRecurringTab() {
 
 /* ===== TABS ===== */
 /* ===== 주간 리포팅으로 이동 헬퍼 ===== */
-function navigateToWeeklyReport() {
+// skipRender: true 를 명시적으로 전달한 경우에만 renderWeeklyReport() 생략
+// (click 이벤트 리스너에서 호출되면 Event 객체가 전달되므로 !== true 비교로 안전하게 처리)
+function navigateToWeeklyReport(skipRender) {
   // 리포팅 탭 활성화
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -5505,10 +5765,24 @@ function navigateToWeeklyReport() {
   const weeklyBtn = document.querySelector('#reporting-sub-tabs .sheet-tab[data-reporting-sub="weekly"]');
   if (weeklyBtn) weeklyBtn.classList.add('active');
   const weeklyPanel = document.getElementById('rpt-panel-weekly');
+  const monthlyPanel = document.getElementById('rpt-panel-monthly');
   if (weeklyPanel) weeklyPanel.style.display = '';
+  if (monthlyPanel) monthlyPanel.style.display = 'none';
 
-  renderWeeklyReport();
+  // skipRender === true 이면 탭 전환만 (데이터 로드 전 조기 호출 용도)
+  if (skipRender !== true) renderWeeklyReport();
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 딥링크 핸들러 — URL 해시 기반 탭 이동
+// 지원 해시: #reporting-weekly → 리포팅 > 주간 탭
+// skipRender=true : 탭 전환만 (Supabase 로드 전 조기 호출)
+// skipRender 생략  : 탭 전환 + renderWeeklyReport() (데이터 로드 완료 후 호출)
+function handleDeepLink(skipRender) {
+  if (window.location.hash === '#reporting-weekly') {
+    // requestAnimationFrame: DOM 레이아웃 확정 후 탭 전환 (canvas 등 크기 보장)
+    requestAnimationFrame(() => navigateToWeeklyReport(skipRender));
+  }
 }
 
 // 금주 순현금 클릭 → 주간 보고로 이동
@@ -5605,15 +5879,16 @@ document.querySelectorAll('.tab').forEach(tab => {
     const panel = document.getElementById('panel-' + tab.dataset.tab);
     panel.classList.add('active');
     if (tab.dataset.tab === 'dashboard')      { renderKPIs(); renderCharts(); }
-    if (tab.dataset.tab === 'reporting')      renderWeeklyReport();
+    if (tab.dataset.tab === 'reporting')      renderActiveReportingSubTab();
     if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
     if (tab.dataset.tab === 'recurring')      renderRecurringTab();
 
-    // 탭 전환 시 필터 초기화 — 입출금 내역은 항상 오늘 기준 (report_base_date 영향 없음)
+    // 탭 전환 시 필터 초기화 — 입출금 내역
     if (tab.dataset.tab === 'cashflow') {
-      const _cfToday = new Date().toISOString().slice(0, 10);
-      document.getElementById('cf-from').value = monthStart(_cfToday);
-      document.getElementById('cf-to').value = monthEnd(_cfToday);
+      // ⚠ cf-from / cf-to 는 탭 이동 시 초기화하지 않음
+      //   이번 달로 리셋하면 다음 달 날짜의 '입금 예정' / '지출 예정' 항목이
+      //   필터 범위 밖으로 밀려나 사라진 것처럼 보이는 버그 방지
+      //   날짜 범위 초기화는 '필터 초기화' 버튼(cf-filter-reset-btn)으로 수행
       document.getElementById('cf-filter-type').value = '';
       document.getElementById('cf-filter-status').value = '';
       document.getElementById('cf-filter-mid').value = '';
@@ -5679,6 +5954,24 @@ document.getElementById('wkrpt-next-btn').addEventListener('click', () => {
 });
 
 /* ===== 기초잔액 수정 ===== */
+
+
+/* ===== 월간 리포팅 이전/다음 달 버튼 ===== */
+document.getElementById('mnrpt-prev-btn')?.addEventListener('click', () => {
+  refDate = addMonthsClamped(refDate, -1);
+  reportBaseDate = refDate;
+  document.getElementById('refDateInput').value = refDate;
+  renderAll();
+  saveRefDateToSupabase(refDate);
+});
+document.getElementById('mnrpt-next-btn')?.addEventListener('click', () => {
+  refDate = addMonthsClamped(refDate, 1);
+  reportBaseDate = refDate;
+  document.getElementById('refDateInput').value = refDate;
+  renderAll();
+  saveRefDateToSupabase(refDate);
+});
+
 function updateInitCashDisplay() {
   const el = document.getElementById('init-cash-display');
   if (el) el.textContent = fmt(INIT_CASH) + '원';
@@ -5740,7 +6033,7 @@ function renderAll() {
   renderCFTable();
   renderARTable();
   if (document.getElementById('panel-reporting').classList.contains('active')) {
-    renderWeeklyReport();
+    renderActiveReportingSubTab();
   }
 }
 
@@ -6930,6 +7223,11 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   // → Supabase 로드가 완료되기 전까지 KPI 카드를 "연결 중..." 상태로 덮어써 혼동 방지
   if (!localStorage.getItem('cf_data')) showKPILoading();
 
+  // 딥링크 조기 처리 — Supabase 로드 전, 탭 전환만 실행 (renderWeeklyReport 지연)
+  // 사용자가 #reporting-weekly 링크로 진입하면 Supabase 응답을 기다리지 않고 즉시 탭 전환
+  // skipRender=true → 데이터 미준비 상태이므로 renderWeeklyReport()는 이 단계에서 생략
+  handleDeepLink(true);
+
   // 4. Supabase에서 최신 데이터 로드 (비동기)
   const ok = await loadDataFromSupabase();
   if (ok) {
@@ -6971,6 +7269,10 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
 
+    // 딥링크 처리 — Supabase 데이터 로드 완료 후 탭 전환 + renderWeeklyReport() 재실행
+    // (조기 처리에서 skipRender=true 로 탭만 열었으므로, 여기서 데이터와 함께 전체 렌더)
+    handleDeepLink();
+
     // 5. Realtime 구독 시작
     subscribeRealtime();
   } else {
@@ -6984,6 +7286,9 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     renderAll();
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
+
+    // 딥링크 처리 — 오프라인 초기화 후에도 URL 해시 확인
+    handleDeepLink();
   }
 })();
 
