@@ -4923,7 +4923,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   };
 
   // ── 주간 범위 & 주차 계산 ──
-  const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(targetDate);
+  const { wStart, wEnd, pwStart, pwEnd, nwStart, nwEnd } = getWeekRange(targetDate);
   const thuStr  = addDays(wStart, 3);
   const thuDate = new Date(thuStr + 'T00:00:00');
   const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
@@ -4938,13 +4938,21 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const wNet = wIn - wOut;
 
   // ── 잔액 계산 ──
-  let pwEndCash = initCash, wkEndCash = initCash;
+  let pwEndCash = initCash, wkEndCash = initCash, cash = initCash;
+  let nwIn = 0, nwOut = 0;
   for (const r of cfArr) {
-    if (r.status === '실제 입금' && r.date <= pwEnd) pwEndCash += (r.in  || 0);
-    if (r.status === '실제 지출' && r.date <= pwEnd) pwEndCash -= (r.out || 0);
-    if (r.status === '실제 입금' && r.date <= wEnd)  wkEndCash += (r.in  || 0);
-    if (r.status === '실제 지출' && r.date <= wEnd)  wkEndCash -= (r.out || 0);
+    if (r.status === '실제 입금' && r.date <= pwEnd)      pwEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= pwEnd)      pwEndCash -= (r.out || 0);
+    if (r.status === '실제 입금' && r.date <= wEnd)       wkEndCash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= wEnd)       wkEndCash -= (r.out || 0);
+    // 월간 대시보드 요약: 기준일(targetDate) 현재 현금잔액 (calcKPIs의 cash와 동일 기준)
+    if (r.status === '실제 입금' && r.date <= targetDate) cash += (r.in  || 0);
+    if (r.status === '실제 지출' && r.date <= targetDate) cash -= (r.out || 0);
+    // 차주 예상 기말현금: 입금예정+실제입금, 지출예정+실제지출 (calcKPIs의 nextCash와 동일 기준)
+    if ((r.status === '입금 예정' || r.status === '실제 입금') && r.date >= nwStart && r.date <= nwEnd) nwIn  += (r.in  || 0);
+    if ((r.status === '지출 예정' || r.status === '실제 지출') && r.date >= nwStart && r.date <= nwEnd) nwOut += (r.out || 0);
   }
+  const nextCash = cash + nwIn - nwOut;
 
   // ── 입금/지출 내역 (KPI와 동일 기준: 실제 거래만) ──
   const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
@@ -4975,6 +4983,22 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const highRisk = arView.filter(a => (a.remaining||0) > 0 && ((a.elapsed||0) >= 60 || a.status === '지연'))
                          .sort((a, b) => (b.elapsed||0) - (a.elapsed||0));
   const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
+
+  // ── 월간 대시보드 요약 KPI (calcKPIs와 동일 계산 기준) ──
+  const totalAR         = remTotal;          // 매출채권 잔액 = 전체 미회수 합계
+  const highRiskARCount = highRisk.length;   // 고위험 AR 건수 (elapsed≥60 or 지연)
+  const totalLiquid     = cash + totalAR;    // 총 유동자산 = 현금 + 채권
+  const sejongTotal = cfArr
+    .filter(r => r.big_cat === '세종시' && (r.status === '실제 지출' || r.status === '지출 예정'))
+    .reduce((s, r) => s + (r.out || 0), 0);
+  const sejongCount = cfArr.filter(r => r.big_cat === '세종시').length;
+  const laosTotal   = cfArr
+    .filter(r => r.big_cat === '라오스' && (r.status === '실제 지출' || r.status === '지출 예정'))
+    .reduce((s, r) => s + (r.out || 0), 0);
+  const laosCount   = cfArr.filter(r => r.big_cat === '라오스').length;
+  const totalPhysical   = sejongTotal + laosTotal;  // 총 현물자산 = 세종F2 + 라오스
+  const refYear  = parseInt(targetDate.slice(0, 4));
+  const refMonth = parseInt(targetDate.slice(5, 7));
 
   // ── 헬퍼: HTML 조각 생성 ──
   const B = C.border;
@@ -5056,8 +5080,27 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px">${title}</div>
   <div style="font-size:13px;color:rgba(255,255,255,.65)">${period}</div>
 </td></tr>
-<!-- KPI -->
+<!-- 📊 월간 대시보드 요약 -->
+<tr><td style="background:${C.card};padding:18px 18px 8px">
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📊 월간 대시보드 요약</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:12px">기준월: ${refYear}년 ${refMonth}월 &nbsp;·&nbsp; 기준일: ${targetDate}</div>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    ${kpi('현재 현금잔액', fmt(cash), cash>=0?C.green:C.red, `기준: ${targetDate}`)}
+    ${kpi('매출채권 잔액', fmt(totalAR), C.amber, `기준: ${targetDate}${highRiskARCount>0?' · 고위험 '+highRiskARCount+'건':''}`)}
+    ${kpi('총 유동자산', fmt(totalLiquid), totalLiquid>=0?C.blue:C.red, `현금 ${fmt(cash)} + 채권 ${fmt(totalAR)}`)}
+    ${kpi('금주 순현금', fmt(wNet), wNet>=0?C.green:C.red, `${fmtMD(wStart)}~${fmtMD(wEnd)}`)}
+  </tr></table>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px"><tr>
+    ${kpi('세종F2', fmt(sejongTotal), C.red, `세종시 ${sejongCount}건 (예정 포함)`)}
+    ${kpi('라오스', fmt(laosTotal), C.red, `라오스 ${laosCount}건 (예정 포함)`)}
+    ${kpi('총 현물자산', fmt(totalPhysical), C.amber, `세종 ${fmt(sejongTotal)} + 라오스 ${fmt(laosTotal)}`)}
+    ${kpi('차주 예상기말현금', fmt(nextCash), nextCash>=0?C.blue:C.red, `${fmtMD(nwStart)}~${fmtMD(nwEnd)} (예정+실제)`)}
+  </tr></table>
+</td></tr>
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<!-- 📅 주간 자금 요약 -->
 <tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:10px">📅 주간 자금 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     ${kpi('전주 기말잔액', fmt(pwEndCash), pwEndCash>=0?C.green:C.red, `기준: ${fmtMD(pwEnd)}`)}
     ${kpi('주간 입금', fmt(wIn), C.green, `${fmtMD(wStart)}~${fmtMD(wEnd)}`)}
