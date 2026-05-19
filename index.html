@@ -4702,14 +4702,41 @@ function renderMonthlyReport() {
   if (mNewAmt > mColAmt) actions.push('신규 AR 발생 대비 회수 계획 보강');
   if (!actions.length) actions.push('현재 현금흐름 유지, 주요 거래처 회수 일정만 점검');
 
-  const checks = [
-    '금융비용 10% 초과 여부',
-    '고위험 AR 회수 여부',
-    '영업성 입금 대비 지출 증가율',
-    '당월 기말 현금 방어 가능 여부'
-  ];
+  // 다음 달 체크: 이번 달 데이터 상태에 따라 동적 생성 (최대 5개)
+  const checks = [];
+  const monthlyNet = mIn - mOut;
+  // 1. 금융비용 비중 10% 이상 (financeCostRate는 소수 비율)
+  if (financeCostRate >= 0.10) {
+    checks.push(`금융비용 비중 ${(financeCostRate * 100).toFixed(1)}%: 다음 달 10% 이하 관리 필요`);
+  }
+  // 2. 고위험 AR (elapsed≥60 or 지연)
+  if (highRisk.length > 0) {
+    checks.push(`고위험 AR ${highRisk.length}건: 회수 일정 확인 필요`);
+  }
+  // 3. 월간 순현금 음수
+  if (monthlyNet < 0) {
+    checks.push(`월간 순현금 ${fmtM(monthlyNet)}: 주요 지출 항목 재점검 필요`);
+  }
+  // 4. 당월 기말현금 음수
+  if (mEndCash < 0) {
+    checks.push(`당월 기말현금 ${fmtM(mEndCash)}: 다음 달 초 현금 방어 계획 필요`);
+  }
+  // 5. 영업성 지출 > 영업성 입금
+  if (operatingOut > operatingIn) {
+    checks.push(`영업성 지출이 입금보다 ${fmtM(operatingOut - operatingIn)} 많음: 비용 구조 점검 필요`);
+  }
+  // 6. 월간 신규 AR (앞 항목이 이미 5개 미만일 때만 추가)
+  if (checks.length < 5 && mNewAR.length > 0) {
+    checks.push(`월간 신규 AR ${mNewAR.length}건: 회수예정일 등록 및 담당자 확인 필요`);
+  }
+  // 7. 안정 fallback — 위험 항목이 하나도 없으면
+  if (checks.length === 0) {
+    checks.push('특이 위험 없음: 다음 달 예정 입출금과 주요 거래처 회수 일정만 확인');
+    checks.push('금융비용과 고위험 AR은 정상 범위입니다');
+  }
+  const checksToRender = checks.slice(0, 5);
   document.getElementById('mnrpt-actions').innerHTML = actions.map(x => `<li>${safeText(x)}</li>`).join('');
-  document.getElementById('mnrpt-next-checks').innerHTML = checks.map(x => `<li>${safeText(x)}</li>`).join('');
+  document.getElementById('mnrpt-next-checks').innerHTML = checksToRender.map(x => `<li>${safeText(x)}</li>`).join('');
 
   const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.elapsed || 0}일`).join(' · ');
   document.getElementById('mnrpt-ar-diagnosis').innerHTML =
