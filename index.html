@@ -148,10 +148,10 @@
   /* MONTHLY REPORTING */
   .monthly-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding:14px 20px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
   .monthly-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
-  .monthly-scroll { max-height:260px; overflow:auto; border-radius:8px; border:1px solid var(--border); }
+  .monthly-scroll { max-height:300px; overflow:auto; border-radius:8px; border:1px solid var(--border); }
   .monthly-table { width:100%; min-width:430px; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-  .monthly-table th { position:sticky; top:0; z-index:1; background:var(--bg3); color:var(--text2); font-size:11px; font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
-  .monthly-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .monthly-table th { position:sticky; top:0; z-index:1; background:var(--card); color:var(--text3); font-size:11px; font-weight:600; padding:5px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .monthly-table td { padding:5px 6px; border-bottom:1px solid var(--border); vertical-align:middle; }
   .monthly-table tr:last-child td { border-bottom:none; }
   .monthly-section-stack { display:flex; flex-direction:column; gap:16px; margin-bottom:20px; }
   .monthly-diagnosis-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:16px; align-items:center; }
@@ -174,6 +174,9 @@
     .monthly-grid-2 { grid-template-columns:1fr; }
     .monthly-diagnosis-card { grid-template-columns:1fr; }
     .monthly-status-box { text-align:left; }
+  }
+  @media (max-width: 480px) {
+    .monthly-header { flex-direction:column; gap:10px; text-align:center; }
   }
 
   /* MESSAGE BOX */
@@ -1029,7 +1032,7 @@
     <div class="monthly-header">
       <button id="mnrpt-prev-btn" class="btn" style="font-size:13px">◀ 이전 달</button>
       <div style="text-align:center">
-        <div id="mnrpt-month-title" style="font-size:18px;font-weight:700;color:var(--text)">—</div>
+        <div id="mnrpt-month-title" style="font-size:16px;font-weight:700;color:var(--text)">—</div>
         <div id="mnrpt-month-range" style="font-size:12px;color:var(--text2);margin-top:3px">—</div>
       </div>
       <button id="mnrpt-next-btn" class="btn" style="font-size:13px">다음 달 ▶</button>
@@ -1061,13 +1064,13 @@
     <div class="monthly-grid-2">
       <div class="chart-box">
         <div class="chart-title">
-          <span style="color:var(--green)">월간 입금 내역</span>
+          <span style="color:var(--green)">💰 월간 입금 내역</span>
           <small id="mnrpt-in-count"></small>
         </div>
         <div class="monthly-scroll">
           <table class="monthly-table">
-            <colgroup><col style="width:15%"><col style="width:45%"><col style="width:20%"><col style="width:20%"></colgroup>
-            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래처</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <colgroup><col style="width:12%"><col style="width:38%"><col style="width:25%"><col style="width:25%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래내용</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
             <tbody id="mnrpt-in-tbody"></tbody>
           </table>
         </div>
@@ -1075,13 +1078,13 @@
 
       <div class="chart-box">
         <div class="chart-title">
-          <span style="color:var(--red)">월간 지출 내역</span>
+          <span style="color:var(--red)">💸 월간 지출 내역</span>
           <small id="mnrpt-out-count"></small>
         </div>
         <div class="monthly-scroll">
           <table class="monthly-table">
-            <colgroup><col style="width:15%"><col style="width:45%"><col style="width:20%"><col style="width:20%"></colgroup>
-            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래처</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <colgroup><col style="width:12%"><col style="width:38%"><col style="width:25%"><col style="width:25%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래내용</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
             <tbody id="mnrpt-out-tbody"></tbody>
           </table>
         </div>
@@ -1091,7 +1094,7 @@
     <div class="monthly-section-stack">
       <div class="monthly-diagnosis-card" id="mnrpt-operating-diagnosis">
         <div>
-          <div class="monthly-diagnosis-title">영업/매출 활동 현금흐름 진단</div>
+          <div class="monthly-diagnosis-title">📊 영업/매출 활동 현금흐름 진단</div>
           <div class="monthly-diagnosis-meta">
             <b>정량적</b><span id="mnrpt-operating-metrics">—</span>
             <b>판단</b><span id="mnrpt-operating-judgment">—</span>
@@ -1105,7 +1108,7 @@
 
       <div class="monthly-diagnosis-card" id="mnrpt-finance-diagnosis">
         <div>
-          <div class="monthly-diagnosis-title">재무/이자 활동 현금흐름 진단</div>
+          <div class="monthly-diagnosis-title">💳 재무/이자 활동 현금흐름 진단</div>
           <div class="monthly-diagnosis-meta">
             <b>정량적</b><span id="mnrpt-finance-metrics">—</span>
             <b>판단</b><span id="mnrpt-finance-judgment">—</span>
@@ -1119,7 +1122,7 @@
 
       <div class="monthly-diagnosis-card" id="mnrpt-finance-detail-diagnosis">
         <div>
-          <div class="monthly-diagnosis-title">금융비용 정밀 진단</div>
+          <div class="monthly-diagnosis-title">🔎 금융비용 정밀 진단</div>
           <div class="monthly-diagnosis-meta">
             <b>정량적</b><span id="mnrpt-finance-detail-metrics">—</span>
             <b>판단</b><span id="mnrpt-finance-detail-judgment">—</span>
@@ -1134,17 +1137,17 @@
 
     <div class="monthly-grid-2">
       <div class="chart-box">
-        <div class="chart-title">권장 액션</div>
+        <div class="chart-title">✅ 권장 액션</div>
         <ul class="monthly-list" id="mnrpt-actions"></ul>
       </div>
       <div class="chart-box">
-        <div class="chart-title">다음 달 체크</div>
+        <div class="chart-title">🗓️ 다음 달 체크</div>
         <ul class="monthly-list" id="mnrpt-next-checks"></ul>
       </div>
     </div>
 
     <div class="chart-box monthly-full-card">
-      <div class="chart-title">거래처 및 AR 진단</div>
+      <div class="chart-title">📋 거래처 및 AR 진단</div>
       <div id="mnrpt-ar-diagnosis" style="font-size:12px;color:var(--text2);line-height:1.9">—</div>
     </div>
 
@@ -4581,13 +4584,17 @@ function renderMonthlyReport() {
     return `<span style="color:${color};font-weight:600">${up ? '▲' : '▼'} ${Math.abs(pct * 100).toFixed(1)}%</span>`;
   };
 
-  document.getElementById('mnrpt-pm-end').textContent = fmtM(pmEndCash);
+  const pmEndEl = document.getElementById('mnrpt-pm-end');
+  pmEndEl.textContent = fmtM(pmEndCash);
+  pmEndEl.className = 'kpi-value' + (pmEndCash > 0 ? ' pos' : pmEndCash < 0 ? ' neg' : '');
   document.getElementById('mnrpt-pm-end-sub').textContent = `기준: ${fmtMD(pmEnd)}`;
   document.getElementById('mnrpt-in').textContent = fmtM(mIn);
   document.getElementById('mnrpt-in-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mIn, pmIn, false)}`;
   document.getElementById('mnrpt-out').textContent = fmtM(mOut);
   document.getElementById('mnrpt-out-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mOut, pmOut, true)}`;
-  document.getElementById('mnrpt-end').textContent = fmtM(mEndCash);
+  const mEndEl = document.getElementById('mnrpt-end');
+  mEndEl.textContent = fmtM(mEndCash);
+  mEndEl.className = 'kpi-value' + (mEndCash > 0 ? ' pos' : mEndCash < 0 ? ' neg' : '');
   document.getElementById('mnrpt-end-sub').textContent = `기준: ${fmtMD(mEnd)}`;
 
   const emptyRow = '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>';
