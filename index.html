@@ -2131,7 +2131,9 @@ function fmt(n) {
   return new Intl.NumberFormat('ko-KR').format(Math.round(n));
 }
 function fmtM(n) {
-  if (!n) return '—';
+  // !n 조건은 0도 falsy로 처리해 0원을 '—'로 표시하는 버그가 있었음
+  // null / undefined / NaN 만 '—' 처리하고, 0은 숫자로 표시
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
   const abs = Math.abs(n);
   if (abs >= 1e8) return (n < 0 ? '-' : '') + (abs/1e8).toFixed(1) + '억';
   if (abs >= 1e4) return (n < 0 ? '-' : '') + (abs/1e4).toFixed(0) + '만';
@@ -4529,6 +4531,13 @@ function addMonthsClamped(dateStr, delta) {
   return `${yy}-${mm}-${dd}`;
 }
 
+// TODO(향후 개선): 주간/월간 기준일 분리 검토
+//   현재 주간 탭(wkrpt-prev/next-btn), 월간 탭(mnrpt-prev/next-btn), 대시보드 KPI가
+//   모두 동일한 refDate / reportBaseDate 를 공유하고 있음.
+//   월간 탭에서 이전 달로 이동하면 refDate가 변경되어 주간 탭·대시보드 KPI까지 연동됨.
+//   개선 방향: weekRefDate(주간 전용), monthRefDate(월간 전용) 변수를 분리하고
+//   각 탭의 이전/다음 버튼이 전용 변수만 변경하도록 리팩터링.
+//   이번 수정에서는 동작 변경 없이 주석으로만 문서화.
 function renderMonthlyReport() {
   const mStart = monthStart(refDate), mEnd = monthEnd(refDate);
   const pmStart = prevMonthStart(refDate), pmEnd = prevMonthEnd(refDate);
@@ -4615,9 +4624,19 @@ function renderMonthlyReport() {
   const financeBurden = operatingNet > 0 ? financeCost / operatingNet : (financeCost > 0 ? Infinity : 0);
   const financeIncrease = prevFinanceCost ? (financeCost - prevFinanceCost) / prevFinanceCost : 0;
 
+  // monthlyArBaseDate: AR 경과일/고위험 판단 기준일
+  // refDate 전체 날짜가 아닌 해당 월 말일(mEnd)을 사용해
+  // "이전 달 조회 시 elapsed가 달 중간 날짜 기준으로 짧게 계산되는" 문제를 방지
+  // 예) refDate=2026-04-15 → 4월 리포트 elapsed는 4/30 기준 (4/15가 아님)
+  // ※ arData 원본 불변 — arView 복사본에서만 재계산
+  const monthlyArBaseDate = mEnd;
   const arView = arData.map(a => ({
     ...a,
-    elapsed: (a.remaining || 0) > 0 && a.start ? Math.max(0, Math.floor((new Date(refDate + 'T00:00:00') - new Date(a.start + 'T00:00:00')) / 86400000)) : 0
+    elapsed: (a.remaining || 0) > 0 && a.start
+      ? Math.max(0, Math.floor(
+          (new Date(monthlyArBaseDate + 'T00:00:00') - new Date(a.start + 'T00:00:00')) / 86400000
+        ))
+      : 0,
   }));
   const mNewAR = arView.filter(a => a.start >= mStart && a.start <= mEnd);
   const mNewAmt = mNewAR.reduce((s, a) => s + (a.expected || 0), 0);
