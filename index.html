@@ -2201,10 +2201,12 @@ function calcKPIs() {
   const pmStart = prevMonthStart(ref), pmEnd = prevMonthEnd(ref);
 
   let cash = INIT_CASH;
-  let wIn = 0, wOut = 0, nwIn = 0, nwOut = 0;
+  let wIn = 0, wOut = 0;
   let mOut = 0, pmOut = 0;
   let pwIn = 0, pwOut = 0;
-  let twIn = 0, twOut = 0; // 이번 주 나머지(refDate 다음날 ~ wEnd) 예정+실제
+  // 차주 예상 기말현금용: refDate 이후 ~ nwEnd 구간의 '입금 예정' / '지출 예정'만 누적
+  // 실제 입금/실제 지출은 cash(refDate 기준)에 이미 반영되어 있으므로 제외
+  let plannedInToNextWeekEnd = 0, plannedOutToNextWeekEnd = 0;
 
   for (const r of cfData) {
     const mid = r.mid_cat || '';
@@ -2212,30 +2214,20 @@ function calcKPIs() {
     if (r.status === '실제 지출' && r.date <= ref) cash -= r.out;
     if (r.status === '실제 입금' && r.date >= wStart && r.date <= wEnd) wIn += r.in;
     if (r.status === '실제 지출' && r.date >= wStart && r.date <= wEnd) wOut += r.out;
-    if ((r.status === '입금 예정' || r.status === '실제 입금') && r.date >= nwStart && r.date <= nwEnd) nwIn += r.in;
-    if ((r.status === '지출 예정' || r.status === '실제 지출') && r.date >= nwStart && r.date <= nwEnd) nwOut += r.out;
     if (r.status === '실제 지출' && r.date >= mStart && r.date <= mEnd) mOut += r.out;
     if (r.status === '실제 지출' && r.date >= pmStart && r.date <= pmEnd) pmOut += r.out;
     // 전주
     if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn += r.in;
     if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += r.out;
-    // cashToWEnd 계산용 (이번 주 말 기준 예상 현금, refDate 독립):
-    // [예정 거래] 이번 주(wStart~wEnd) 전체 포함 — refDate 무관
-    //   ← date > ref 조건 미사용: refDate가 5/22이면 5/21 예정 거래가 cash에도 없고
-    //     twIn에도 없어 누락되는 버그 방지
-    // [실제 거래] cash에 미반영된 것만 (date > ref AND date <= wEnd)
-    //   ← cash는 date <= ref 실제 거래만 누적하므로, refDate 이후 실제만 추가
-    if (r.status === '입금 예정' && r.date >= wStart && r.date <= wEnd) twIn += r.in;
-    if (r.status === '지출 예정' && r.date >= wStart && r.date <= wEnd) twOut += r.out;
-    if (r.status === '실제 입금'  && r.date > ref    && r.date <= wEnd) twIn += r.in;
-    if (r.status === '실제 지출'  && r.date > ref    && r.date <= wEnd) twOut += r.out;
+    // 차주 예상 기말현금: refDate 다음날 ~ nwEnd 범위 '예정' 거래만 누적
+    // — 실제 처리된 거래는 cash에 반영됨, 예정 거래만으로 미래 현금흐름 예측
+    if (r.status === '입금 예정' && r.date > ref && r.date <= nwEnd) plannedInToNextWeekEnd  += r.in;
+    if (r.status === '지출 예정' && r.date > ref && r.date <= nwEnd) plannedOutToNextWeekEnd += r.out;
   }
 
   const wNet = wIn - wOut;
-  // cashToWEnd: 이번 주 말(wEnd) 기준 예상 현금 (refDate 이후 이번 주 예정 거래 포함)
-  const cashToWEnd = cash + twIn - twOut;
-  // nextCash: cashToWEnd 기준 → 차주 입출금 반영
-  const nextCash = cashToWEnd + nwIn - nwOut;
+  // nextCash: cash(refDate 기준 실제 누적) + 이후 예정 입금 - 이후 예정 지출 (~ nwEnd)
+  const nextCash = cash + plannedInToNextWeekEnd - plannedOutToNextWeekEnd;
 
   // arView — refDate 기준 elapsed 재계산 (arData 원본 불변)
   const baseMs = new Date(ref + 'T00:00:00').getTime();
@@ -2377,7 +2369,7 @@ function renderKPIs() {
   const nc = document.getElementById('kpi-next-cash');
   nc.textContent = fmt(k.nextCash);
   nc.className = 'kpi-value ' + (k.nextCash >= 0 ? 'blue' : 'neg');
-  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} · 잔액기준 ${fmtDate(k.wEnd)}말`;
+  document.getElementById('kpi-next-range').textContent = `기준일 이후 예정 누적 ~ ${fmtDate(k.nwEnd)}`;
 
   // 금주 입금 + 전주 대비
   const winEl = document.getElementById('kpi-w-in');
