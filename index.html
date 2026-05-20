@@ -2377,7 +2377,7 @@ function renderKPIs() {
   const nc = document.getElementById('kpi-next-cash');
   nc.textContent = fmt(k.nextCash);
   nc.className = 'kpi-value ' + (k.nextCash >= 0 ? 'blue' : 'neg');
-  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} · 이번주 말 기준`;
+  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} · 잔액기준 ${fmtDate(k.wEnd)}말`;
 
   // 금주 입금 + 전주 대비
   const winEl = document.getElementById('kpi-w-in');
