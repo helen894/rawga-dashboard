@@ -308,10 +308,10 @@
       <div class="kpi-value blue" id="kpi-total-liquid">—</div>
       <div class="kpi-sub" id="kpi-total-liquid-sub">현금 + 채권잔액</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">금주 순현금</div>
-      <div class="kpi-value" id="kpi-weekly-net" style="cursor:pointer" title="클릭 시 리포팅(주간)으로 이동">—</div>
-      <div class="kpi-sub" id="kpi-weekly-range">—</div>
+    <div class="kpi-card" style="border:1px solid var(--green);background:var(--green2)">
+      <div class="kpi-label" style="color:var(--green)">총 자산 합계</div>
+      <div class="kpi-value" id="kpi-total-asset">—</div>
+      <div class="kpi-sub" id="kpi-total-asset-sub">유동자산 + 현물자산</div>
     </div>
     <!-- 2행 -->
     <div class="kpi-card" id="kpi-sejong-card" style="cursor:pointer" title="클릭 시 세종F2 내역으로 이동">
@@ -2204,6 +2204,7 @@ function calcKPIs() {
   let wIn = 0, wOut = 0, nwIn = 0, nwOut = 0;
   let mOut = 0, pmOut = 0;
   let pwIn = 0, pwOut = 0;
+  let twIn = 0, twOut = 0; // 이번 주 나머지(refDate 다음날 ~ wEnd) 예정+실제
 
   for (const r of cfData) {
     const mid = r.mid_cat || '';
@@ -2218,10 +2219,17 @@ function calcKPIs() {
     // 전주
     if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn += r.in;
     if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += r.out;
+    // 이번 주 나머지 (refDate 이후 ~ wEnd): 예정+실제 모두 포함
+    // — 차주 예상 기말현금의 기준 현금을 wEnd 기준으로 맞추기 위함
+    if ((r.status === '입금 예정' || r.status === '실제 입금') && r.date > ref && r.date <= wEnd) twIn += r.in;
+    if ((r.status === '지출 예정' || r.status === '실제 지출') && r.date > ref && r.date <= wEnd) twOut += r.out;
   }
 
   const wNet = wIn - wOut;
-  const nextCash = cash + nwIn - nwOut;
+  // cashToWEnd: 이번 주 말(wEnd) 기준 예상 현금 (refDate 이후 이번 주 예정 거래 포함)
+  const cashToWEnd = cash + twIn - twOut;
+  // nextCash: cashToWEnd 기준 → 차주 입출금 반영
+  const nextCash = cashToWEnd + nwIn - nwOut;
 
   // arView — refDate 기준 elapsed 재계산 (arData 원본 불변)
   const baseMs = new Date(ref + 'T00:00:00').getTime();
@@ -2348,17 +2356,22 @@ function renderKPIs() {
   document.getElementById('kpi-ar-sub').textContent =
     `기준: ${refDate}` + (k.highRiskAR > 0 ? ` · 고위험 ${k.highRiskAR}건` : '');
 
-  // 금주 순현금
-  const wn = document.getElementById('kpi-weekly-net');
-  wn.textContent = fmt(k.wNet);
-  wn.className = 'kpi-value ' + (k.wNet >= 0 ? 'pos' : 'neg');
-  document.getElementById('kpi-weekly-range').textContent = `${fmtDate(k.wStart)} ~ ${fmtDate(k.wEnd)}`;
+  // 총 자산 합계 (총 유동자산 + 총 현물자산)
+  // sejongTotal, laosTotal, totalLiquid, totalPhysical은 위에서 이미 계산됨
+  const totalAsset = totalLiquid + totalPhysical;
+  const taEl = document.getElementById('kpi-total-asset');
+  if (taEl) {
+    taEl.textContent = fmt(totalAsset);
+    taEl.className = 'kpi-value ' + (totalAsset >= 0 ? 'pos' : 'neg');
+    document.getElementById('kpi-total-asset-sub').textContent =
+      `유동 ${fmt(totalLiquid)} + 현물 ${fmt(totalPhysical)}`;
+  }
 
   // 차주 예상 기말현금
   const nc = document.getElementById('kpi-next-cash');
   nc.textContent = fmt(k.nextCash);
   nc.className = 'kpi-value ' + (k.nextCash >= 0 ? 'blue' : 'neg');
-  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} (예정+실제)`;
+  document.getElementById('kpi-next-range').textContent = `${fmtDate(k.nwStart)} ~ ${fmtDate(k.nwEnd)} · 이번주 말 기준`;
 
   // 금주 입금 + 전주 대비
   const winEl = document.getElementById('kpi-w-in');
@@ -2396,12 +2409,12 @@ function renderKPIs() {
 // renderKPIs()가 실행되면 자동으로 실제 값으로 덮어써짐
 function showKPILoading() {
   const valueIds = [
-    'kpi-cash', 'kpi-ar', 'kpi-total-liquid', 'kpi-weekly-net',
+    'kpi-cash', 'kpi-ar', 'kpi-total-liquid', 'kpi-total-asset',
     'kpi-next-cash', 'kpi-sejong', 'kpi-laos', 'kpi-total-physical',
     'kpi-w-in', 'kpi-w-out',
   ];
   const subIds = [
-    'kpi-cash-sub', 'kpi-ar-sub', 'kpi-total-liquid-sub', 'kpi-weekly-range',
+    'kpi-cash-sub', 'kpi-ar-sub', 'kpi-total-liquid-sub', 'kpi-total-asset-sub',
     'kpi-next-range', 'kpi-sejong-sub', 'kpi-laos-sub', 'kpi-total-physical-sub',
     'kpi-win-sub', 'kpi-wout-sub',
   ];
@@ -5886,9 +5899,6 @@ function handleDeepLink(skipRender) {
     requestAnimationFrame(() => navigateToWeeklyReport(skipRender));
   }
 }
-
-// 금주 순현금 클릭 → 주간 보고로 이동
-document.getElementById('kpi-weekly-net').addEventListener('click', navigateToWeeklyReport);
 
 // 매출채권 카드 클릭 → AR 미회수 차트로 스크롤
 // 세종F2 카드 클릭 → 입출금 내역 탭 + 대분류 세종시 필터
