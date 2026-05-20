@@ -2219,10 +2219,16 @@ function calcKPIs() {
     // 전주
     if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn += r.in;
     if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += r.out;
-    // 이번 주 나머지 (refDate 이후 ~ wEnd): 예정+실제 모두 포함
-    // — 차주 예상 기말현금의 기준 현금을 wEnd 기준으로 맞추기 위함
-    if ((r.status === '입금 예정' || r.status === '실제 입금') && r.date > ref && r.date <= wEnd) twIn += r.in;
-    if ((r.status === '지출 예정' || r.status === '실제 지출') && r.date > ref && r.date <= wEnd) twOut += r.out;
+    // cashToWEnd 계산용 (이번 주 말 기준 예상 현금, refDate 독립):
+    // [예정 거래] 이번 주(wStart~wEnd) 전체 포함 — refDate 무관
+    //   ← date > ref 조건 미사용: refDate가 5/22이면 5/21 예정 거래가 cash에도 없고
+    //     twIn에도 없어 누락되는 버그 방지
+    // [실제 거래] cash에 미반영된 것만 (date > ref AND date <= wEnd)
+    //   ← cash는 date <= ref 실제 거래만 누적하므로, refDate 이후 실제만 추가
+    if (r.status === '입금 예정' && r.date >= wStart && r.date <= wEnd) twIn += r.in;
+    if (r.status === '지출 예정' && r.date >= wStart && r.date <= wEnd) twOut += r.out;
+    if (r.status === '실제 입금'  && r.date > ref    && r.date <= wEnd) twIn += r.in;
+    if (r.status === '실제 지출'  && r.date > ref    && r.date <= wEnd) twOut += r.out;
   }
 
   const wNet = wIn - wOut;
