@@ -706,7 +706,7 @@
       <div class="kpi-sub" id="wkrpt-in-sub"></div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">주간 지출</div>
+      <div class="kpi-label">주간 출금</div>
       <div class="kpi-value neg" id="wkrpt-out">—</div>
       <div class="kpi-sub" id="wkrpt-out-sub"></div>
     </div>
@@ -750,7 +750,7 @@
     <!-- 주간 지출 내역 -->
     <div class="chart-box">
       <div class="chart-title">
-        💸 주간 지출 내역
+        💸 주간 출금 내역
         <small id="wkrpt-out-count" style="font-weight:400;color:var(--text3)"></small>
       </div>
       <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
@@ -793,7 +793,7 @@
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처(중분류)</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">입금</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">지출</th>
+              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">출금</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
             </tr>
           </thead>
@@ -1050,7 +1050,7 @@
         <div class="kpi-sub" id="mnrpt-in-sub"></div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">월간 지출</div>
+        <div class="kpi-label">월간 출금</div>
         <div class="kpi-value neg" id="mnrpt-out">—</div>
         <div class="kpi-sub" id="mnrpt-out-sub"></div>
       </div>
@@ -1078,7 +1078,7 @@
 
       <div class="chart-box">
         <div class="chart-title">
-          <span style="color:var(--red)">💸 월간 지출 내역</span>
+          <span style="color:var(--red)">💸 월간 출금 내역</span>
           <small id="mnrpt-out-count"></small>
         </div>
         <div class="monthly-scroll">
@@ -4684,10 +4684,10 @@ function renderMonthlyReport() {
   setDiagnosis(
     'operating',
     opState,
-    `영업성 입금 ${fmtM(operatingIn)} · 영업성 지출 ${fmtM(operatingOut)} · 순현금 ${fmtM(operatingNet)} · 생산성 ${fmtPct(operatingProductivity)}`,
-    opState === 'good' ? '영업성 입금이 지출을 상회하며 현금 생산성이 안정적입니다.' :
+    `영업성 입금 ${fmtM(operatingIn)} · 영업성 출금 ${fmtM(operatingOut)} · 순현금 ${fmtM(operatingNet)} · 생산성 ${fmtPct(operatingProductivity)}`,
+    opState === 'good' ? '영업성 입금이 출금을 상회하며 현금 생산성이 안정적입니다.' :
       opState === 'warn' ? '영업성 현금흐름은 유지되나 신규 AR 증가 또는 낮은 생산성 확인이 필요합니다.' :
-      '영업성 지출이 입금을 초과해 매출 회수와 지출 통제가 필요합니다.'
+      '영업성 출금이 입금을 초과해 매출 회수와 출금 통제가 필요합니다.'
   );
   setDiagnosis(
     'finance',
@@ -4709,7 +4709,7 @@ function renderMonthlyReport() {
   const actions = [];
   if (highRisk.length) actions.push(`60일 초과/지연 AR ${highRisk.length}건 우선 회수`);
   if (financeCostRate >= 0.05) actions.push('이자비용 증가 원인과 차입 조건 확인');
-  if (operatingProductivity < 0.10) actions.push('영업성 지출 상위 항목 예산 재점검');
+  if (operatingProductivity < 0.10) actions.push('영업성 출금 상위 항목 예산 재점검');
   if (mNewAmt > mColAmt) actions.push('신규 AR 발생 대비 회수 계획 보강');
   if (!actions.length) actions.push('현재 현금흐름 유지, 주요 거래처 회수 일정만 점검');
 
@@ -4726,7 +4726,7 @@ function renderMonthlyReport() {
   }
   // 3. 월간 순현금 음수
   if (monthlyNet < 0) {
-    checks.push(`월간 순현금 ${fmtM(monthlyNet)}: 주요 지출 항목 재점검 필요`);
+    checks.push(`월간 순현금 ${fmtM(monthlyNet)}: 주요 출금 항목 재점검 필요`);
   }
   // 4. 당월 기말현금 음수
   if (mEndCash < 0) {
@@ -4734,7 +4734,7 @@ function renderMonthlyReport() {
   }
   // 5. 영업성 지출 > 영업성 입금
   if (operatingOut > operatingIn) {
-    checks.push(`영업성 지출이 입금보다 ${fmtM(operatingOut - operatingIn)} 많음: 비용 구조 점검 필요`);
+    checks.push(`영업성 출금이 입금보다 ${fmtM(operatingOut - operatingIn)} 많음: 비용 구조 점검 필요`);
   }
   // 6. 월간 신규 AR (앞 항목이 이미 5개 미만일 때만 추가)
   if (checks.length < 5 && mNewAR.length > 0) {
@@ -4826,7 +4826,7 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-in').textContent       = fmt(wIn);
   document.getElementById('wkrpt-out').textContent      = fmt(wOut);
   document.getElementById('wkrpt-in-sub').textContent   = `${fmtMD(wStart)} ~ ${fmtMD(wEnd)} 실제 입금`;
-  document.getElementById('wkrpt-out-sub').textContent  = `${fmtMD(wStart)} ~ ${fmtMD(wEnd)} 실제 지출`;
+  document.getElementById('wkrpt-out-sub').textContent  = `${fmtMD(wStart)} ~ ${fmtMD(wEnd)} 실제 출금`;
 
   const wkEndEl = document.getElementById('wkrpt-wk-end');
   wkEndEl.textContent = fmt(wkEndCash);
