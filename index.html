@@ -729,16 +729,16 @@
       <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
         <table style="width:100%;min-width:460px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col style="width:12%">
-            <col style="width:38%">
-            <col style="width:25%">
-            <col style="width:25%">
+            <col style="width:18%">
+            <col style="width:32%">
+            <col style="width:30%">
+            <col style="width:20%">
           </colgroup>
           <thead>
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">대분류</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
           </thead>
@@ -756,16 +756,16 @@
       <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
         <table style="width:100%;min-width:460px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col style="width:12%">
-            <col style="width:38%">
-            <col style="width:25%">
-            <col style="width:25%">
+            <col style="width:18%">
+            <col style="width:32%">
+            <col style="width:30%">
+            <col style="width:20%">
           </colgroup>
           <thead>
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">날짜</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래내용</th>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">중분류</th>
+              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">대분류</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">금액</th>
             </tr>
           </thead>
@@ -1069,8 +1069,8 @@
         </div>
         <div class="monthly-scroll">
           <table class="monthly-table">
-            <colgroup><col style="width:12%"><col style="width:38%"><col style="width:25%"><col style="width:25%"></colgroup>
-            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래내용</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <colgroup><col style="width:18%"><col style="width:32%"><col style="width:30%"><col style="width:20%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">중분류</th><th style="text-align:left">대분류</th><th style="text-align:right">금액</th></tr></thead>
             <tbody id="mnrpt-in-tbody"></tbody>
           </table>
         </div>
@@ -1083,8 +1083,8 @@
         </div>
         <div class="monthly-scroll">
           <table class="monthly-table">
-            <colgroup><col style="width:12%"><col style="width:38%"><col style="width:25%"><col style="width:25%"></colgroup>
-            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">거래내용</th><th style="text-align:left">중분류</th><th style="text-align:right">금액</th></tr></thead>
+            <colgroup><col style="width:18%"><col style="width:32%"><col style="width:30%"><col style="width:20%"></colgroup>
+            <thead><tr><th style="text-align:left">날짜</th><th style="text-align:left">중분류</th><th style="text-align:left">대분류</th><th style="text-align:right">금액</th></tr></thead>
             <tbody id="mnrpt-out-tbody"></tbody>
           </table>
         </div>
@@ -4612,8 +4612,8 @@ function renderMonthlyReport() {
   const rowHtml = (rows, key, color, sign) => rows.length ? rows.map(r => `
     <tr>
       <td class="date-cell">${fmtMD(r.date)}</td>
-      <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.desc)}">${safeText(r.desc || '—')}</td>
-      <td style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.mid_cat)}">${safeText(r.mid_cat || '—')}</td>
+      <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.mid_cat)}">${safeText(r.mid_cat || '—')}</td>
+      <td style="color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${safeText(r.big_cat)}">${safeText(r.big_cat || '—')}</td>
       <td class="num" style="color:${color};font-weight:600">${sign}${fmt(r[key] || 0)}</td>
     </tr>`).join('') : emptyRow;
   document.getElementById('mnrpt-in-tbody').innerHTML = rowHtml(actualInRows, 'in', 'var(--green)', '+');
@@ -4847,16 +4847,16 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-in-tbody').innerHTML = inRows.length ? inRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="${tdEll}" title="${r.desc||''}">${r.desc || '—'}</td>
-      <td style="${tdEll}font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
+      <td style="${tdEll}" title="${r.mid_cat||''}">${r.mid_cat || '—'}</td>
+      <td style="${tdEll}font-size:11px;color:var(--text2)" title="${r.big_cat||''}">${r.big_cat || '—'}</td>
       <td style="${tdBase}text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(r.in)}</td>
     </tr>`).join('') : empty;
 
   document.getElementById('wkrpt-out-tbody').innerHTML = outRows.length ? outRows.map(r => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="${tdEll}" title="${r.desc||''}">${r.desc || '—'}</td>
-      <td style="${tdEll}font-size:11px;color:var(--text2)">${r.mid_cat || '—'}</td>
+      <td style="${tdEll}" title="${r.mid_cat||''}">${r.mid_cat || '—'}</td>
+      <td style="${tdEll}font-size:11px;color:var(--text2)" title="${r.big_cat||''}">${r.big_cat || '—'}</td>
       <td style="${tdBase}text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(r.out)}</td>
     </tr>`).join('') : empty;
 
