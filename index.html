@@ -2204,10 +2204,10 @@ function calcKPIs() {
   let wIn = 0, wOut = 0;
   let mOut = 0, pmOut = 0;
   let pwIn = 0, pwOut = 0;
-  // 차주 예상 기말현금용: 날짜 무관 '입금 예정' / '지출 예정' 전체 누적
-  // — 실제 거래는 cash에만 반영, 예정 거래는 status 기준으로만 필터 (날짜 조건 없음)
-  // — 예정→실제로 전환된 거래는 status가 바뀌어 자동 제외됨
-  let plannedInTotal = 0, plannedOutTotal = 0;
+  // 차주 예상 기말현금용: '입금 예정' / '지출 예정' 중 date <= nwEnd 만 누적
+  // — 과거 미처리 예정(date <= refDate)도 포함, 먼 미래(date > nwEnd)는 제외
+  // — 실제 거래는 cash에만 반영, 예정→실제 전환 시 status 변경으로 자동 제외
+  let plannedInToNextWeekEnd = 0, plannedOutToNextWeekEnd = 0;
 
   for (const r of cfData) {
     const mid = r.mid_cat || '';
@@ -2220,14 +2220,14 @@ function calcKPIs() {
     // 전주
     if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn += r.in;
     if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += r.out;
-    // 차주 예상 기말현금: 날짜 무관, status === '입금 예정' / '지출 예정' 전체 누적
-    if (r.status === '입금 예정') plannedInTotal  += r.in;
-    if (r.status === '지출 예정') plannedOutTotal += r.out;
+    // 차주 예상 기말현금: date <= nwEnd인 예정 거래 전체 (과거 미처리 포함, 먼 미래 제외)
+    if (r.status === '입금 예정' && r.date <= nwEnd) plannedInToNextWeekEnd  += r.in;
+    if (r.status === '지출 예정' && r.date <= nwEnd) plannedOutToNextWeekEnd += r.out;
   }
 
   const wNet = wIn - wOut;
-  // nextCash: cash(refDate 기준 실제 누적) + 예정 입금 전체 - 예정 지출 전체 (날짜 무관)
-  const nextCash = cash + plannedInTotal - plannedOutTotal;
+  // nextCash: cash(refDate 실제 누적) + 예정 누적(date <= nwEnd, 과거 미처리 포함)
+  const nextCash = cash + plannedInToNextWeekEnd - plannedOutToNextWeekEnd;
 
   // arView — refDate 기준 elapsed 재계산 (arData 원본 불변)
   const baseMs = new Date(ref + 'T00:00:00').getTime();
@@ -2369,7 +2369,7 @@ function renderKPIs() {
   const nc = document.getElementById('kpi-next-cash');
   nc.textContent = fmt(k.nextCash);
   nc.className = 'kpi-value ' + (k.nextCash >= 0 ? 'blue' : 'neg');
-  document.getElementById('kpi-next-range').textContent = '미처리 예정 입출금 전체 반영';
+  document.getElementById('kpi-next-range').textContent = `미처리 예정 포함 · ~${fmtDate(k.nwEnd)}`;
 
   // 금주 입금 + 전주 대비
   const winEl = document.getElementById('kpi-w-in');
