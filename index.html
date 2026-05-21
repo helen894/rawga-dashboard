@@ -345,7 +345,7 @@
   <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
     <div class="chart-box">
       <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <span>⏰ 다가오는 예정 지출 <small id="upcoming-date-range" style="color:var(--text3);font-weight:400"></small></span>
+        <span>⏰ 다가오는 예정 출금 <small id="upcoming-date-range" style="color:var(--text3);font-weight:400"></small></span>
         <span id="upcoming-out-total" style="font-size:12px;color:var(--red);font-weight:600"></span>
       </div>
       <div id="upcoming-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
@@ -378,14 +378,14 @@
 
   <div class="chart-row" style="grid-template-columns:1fr 1fr">
     <div class="chart-box">
-      <div class="chart-title">지출 대분류 비중 · 월간 <small id="donut-date-range" style="color:var(--text3);font-weight:400"></small></div>
+      <div class="chart-title">출금 대분류 비중 · 월간 <small id="donut-date-range" style="color:var(--text3);font-weight:400"></small></div>
       <div class="legend" id="donut-legend"></div>
-      <div class="chart-wrap" style="height:200px"><canvas id="donutChart" role="img" aria-label="지출 카테고리 비중 도넛 차트">지출 카테고리 월간</canvas></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="donutChart" role="img" aria-label="출금 카테고리 비중 도넛 차트">출금 카테고리 월간</canvas></div>
     </div>
     <div class="chart-box">
-      <div class="chart-title">지출 대분류 비중 · 주간 <small id="donut-weekly-date-range" style="color:var(--text3);font-weight:400"></small></div>
+      <div class="chart-title">출금 대분류 비중 · 주간 <small id="donut-weekly-date-range" style="color:var(--text3);font-weight:400"></small></div>
       <div class="legend" id="donut-weekly-legend"></div>
-      <div class="chart-wrap" style="height:200px"><canvas id="donutWeeklyChart" role="img" aria-label="지출 카테고리 비중 주간 도넛 차트">지출 카테고리 주간</canvas></div>
+      <div class="chart-wrap" style="height:200px"><canvas id="donutWeeklyChart" role="img" aria-label="출금 카테고리 비중 주간 도넛 차트">출금 카테고리 주간</canvas></div>
     </div>
   </div>
 
@@ -2559,7 +2559,7 @@ function renderUpcomingPayments() {
     if (outTotal) outTotal.textContent = total > 0 ? `합계 -${fmt(total)}` : '';
 
     if (!upcoming.length) {
-      outEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">해당 기간 예정 지출 없음</div>';
+      outEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">해당 기간 예정 출금 없음</div>';
     } else {
       outEl.innerHTML = upcoming.map(r => {
         const diff   = dayDiff(r.date);
@@ -2811,7 +2811,7 @@ function renderWeeklyChart() {
       labels: weeks.map(w => w.slice(5)),
       datasets: [
         { label: '입금', data: inVals, backgroundColor: 'rgba(46,199,122,0.7)', borderRadius: 3 },
-        { label: '지출', data: outVals, backgroundColor: 'rgba(255,77,106,0.7)', borderRadius: 3 }
+        { label: '출금', data: outVals, backgroundColor: 'rgba(255,77,106,0.7)', borderRadius: 3 }
       ]
     },
     options: {
