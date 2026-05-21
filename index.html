@@ -4596,15 +4596,15 @@ function renderMonthlyReport() {
   };
 
   const pmEndEl = document.getElementById('mnrpt-pm-end');
-  pmEndEl.textContent = fmtM(pmEndCash);
+  pmEndEl.textContent = fmt(pmEndCash);
   pmEndEl.className = 'kpi-value' + (pmEndCash > 0 ? ' pos' : pmEndCash < 0 ? ' neg' : '');
   document.getElementById('mnrpt-pm-end-sub').textContent = `기준: ${fmtMD(pmEnd)}`;
-  document.getElementById('mnrpt-in').textContent = fmtM(mIn);
+  document.getElementById('mnrpt-in').textContent = fmt(mIn);
   document.getElementById('mnrpt-in-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mIn, pmIn, false)}`;
-  document.getElementById('mnrpt-out').textContent = fmtM(mOut);
+  document.getElementById('mnrpt-out').textContent = fmt(mOut);
   document.getElementById('mnrpt-out-sub').innerHTML = `${fmtMD(mStart)} ~ ${fmtMD(mEnd)} ${momBadge(mOut, pmOut, true)}`;
   const mEndEl = document.getElementById('mnrpt-end');
-  mEndEl.textContent = fmtM(mEndCash);
+  mEndEl.textContent = fmt(mEndCash);
   mEndEl.className = 'kpi-value' + (mEndCash > 0 ? ' pos' : mEndCash < 0 ? ' neg' : '');
   document.getElementById('mnrpt-end-sub').textContent = `기준: ${fmtMD(mEnd)}`;
 
