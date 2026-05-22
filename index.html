@@ -3669,7 +3669,7 @@ function renderARTable() {
       <td class="num" style="color:${r.remaining > 0 ? 'var(--amber)' : r.remaining < 0 ? 'var(--blue)' : 'var(--text3)'};font-weight:${r.remaining !== 0 ? '600' : '400'}">${r.remaining !== 0 ? fmt(r.remaining) : '—'}</td>
       <td class="date-cell">${r.due_date}</td>
       <td class="date-cell" style="color:${r.collect_date?'var(--green)':'var(--text3)'}">
-        ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.round((n-25569)*86400*1000)); return d.toISOString().slice(0,10); } return v; })()}
+        ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.floor(n-25569)*86400*1000); return d.toISOString().slice(0,10); } return v; })()}
       </td>
       <td><span class="badge ${r.status}">${r.status}</span></td>
       <td class="num" style="color:${e > 0 ? 'var(--amber)' : 'var(--text3)'}">${e > 0 ? e + '일' : '—'}${riskLabel ? ' <span class="ar-risk ' + risk + '">' + riskLabel + '</span>' : ''}</td>
@@ -7410,16 +7410,27 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
 function excelDateToStr(v) {
   if (!v && v !== 0) return '';
   if (typeof v === 'string') {
-    // already a date string like 2026-04-17 or 2026.04.17 or 20260417
-    const clean = v.replace(/\./g, '-').trim();
+    // 날짜 구분자 정규화: '.' '/' → '-', 앞뒤 공백 제거
+    // 예: "2026.05.22 09:10", "2026/05/22 14:30" → "2026-05-22 ..."
+    const clean = v.replace(/[./]/g, '-').trim();
     if (/^\d{4}-\d{2}-\d{2}/.test(clean)) return clean.slice(0,10);
+    // 한국어 날짜: "2026년 5월 22일" → 숫자만 추출
+    const ko = v.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
+    if (ko) return `${ko[1]}-${ko[2].padStart(2,'0')}-${ko[3].padStart(2,'0')}`;
     if (/^\d{8}$/.test(clean)) return clean.slice(0,4)+'-'+clean.slice(4,6)+'-'+clean.slice(6,8);
     return clean;
   }
-  if (v instanceof Date) return v.toISOString().slice(0,10);
+  if (v instanceof Date) {
+    // cellDates:false 옵션을 쓰므로 실제로는 도달하지 않으나, 안전하게 로컬 날짜 사용
+    const y = v.getFullYear();
+    const m = String(v.getMonth()+1).padStart(2,'0');
+    const d = String(v.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
   if (typeof v === 'number') {
-    // Excel serial date
-    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    // Excel serial date: 정수 부분만 사용해 시간 소수점 제거 (Math.round 대신 Math.floor)
+    // Math.round(46193.5) = 46194 → 2026-05-23 오류 발생, Math.floor로 수정
+    const d = new Date(Math.floor(v - 25569) * 86400 * 1000);
     return d.toISOString().slice(0,10);
   }
   return String(v);
