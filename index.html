@@ -1225,7 +1225,7 @@
 
       <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn" id="cat-s3-back">← 이전</button>
-        <button class="btn green" id="cat-apply-btn">적용 &amp; 재매핑</button>
+        <button class="btn green" id="cat-apply-btn">설정 가져오기</button>
         <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="cat-merge-chk" checked>
           기존 매핑에 병합 (체크 해제 시 전체 교체)
@@ -1594,7 +1594,8 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         데이터 다운로드
       </button>
-      <button class="btn green" id="cat-save-btn">저장 &amp; 재매핑</button>
+      <button class="btn green" id="cat-save-btn">카테고리 저장</button>
+      <button class="btn" id="cat-remap-btn" style="color:var(--amber);border-color:var(--amber)">기존 내역 재매핑</button>
       <button class="btn" id="cat-reset-btn" style="color:var(--text2)">초기값으로 복원</button>
     </div>
   </div>
@@ -6767,48 +6768,24 @@ document.getElementById('combo-delete-selected-btn').addEventListener('click', (
 });
 
 document.getElementById('cat-save-btn').addEventListener('click', () => {
-  if (blockIfOffline('카테고리 저장 & 재매핑')) return;
+  if (blockIfOffline('카테고리 저장')) return;
 
-  // C-3a: DOM → 임시 메모리 (아직 catMidToBig/catDescToMid 교체 전)
+  // C-3a: DOM → 메모리 반영 (편집 중인 행 포함 전체 수집)
   const newMidToBig  = readMidBigFromDOM();
   const newDescToMid = readDescMidFromDOM();
   Object.keys(newMidToBig).forEach(k  => { if (!k.trim()) delete newMidToBig[k];  });
   Object.keys(newDescToMid).forEach(k => { if (!k.trim()) delete newDescToMid[k]; });
   Object.keys(catDescTypeToMid).forEach(k => { if (!k.trim()) delete catDescTypeToMid[k]; });
-
-  // C-3a: 재매핑 건수 dry-run (메모리 임시 교체 후 공통 함수로 카운트)
-  const _oldMidToBig  = catMidToBig;
-  const _oldDescToMid = catDescToMid;
   catMidToBig  = newMidToBig;
   catDescToMid = newDescToMid;
-  const { dryCount, arLinkedCount, arLinkedRows } = calcRemapPreview(); // remapAllCfData()와 동일 폴백 로직
 
-  if (dryCount > 0) {
-    let confirmMsg = `저장 시 기존 입출금 내역 ${dryCount}건이 재매핑됩니다.\n계속하시겠습니까?`;
-    if (arLinkedCount > 0) {
-      confirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${arLinkedCount}건 포함:\n`;
-      confirmMsg += buildARLinkedMsg(arLinkedRows);
-      confirmMsg += '\n→ 카테고리 집계에 영향을 줍니다.';
-    }
-    if (!confirm(confirmMsg)) {
-      // 취소: 메모리 원복
-      catMidToBig  = _oldMidToBig;
-      catDescToMid = _oldDescToMid;
-      return;
-    }
-  }
-
-  // 확인 완료 → 실제 저장
+  // 설정만 저장 — cfData 재매핑은 "기존 내역 재매핑" 버튼에서 별도 실행
   saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
   });
   buildBigCatSelects();
-
-  const remapped = remapAllCfData();
-  if (remapped > 0) saveDataExplicit();
-
   renderMidBigList();
   renderDescMidList();
   renderComboList();
@@ -6816,46 +6793,68 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
   refreshComboAddMidSelect();
   refreshMidAddBigSelect();
   renderAll();
-  showToast(`✅ 저장 완료${remapped > 0 ? ` — 기존 내역 ${remapped}건 재매핑` : ''}`, 'green');
+  showToast('✅ 카테고리 설정이 저장되었습니다. 기존 내역에는 아직 반영되지 않았습니다.', 'green');
+});
+
+/* ------ 기존 내역 재매핑 ------ */
+document.getElementById('cat-remap-btn').addEventListener('click', () => {
+  if (blockIfOffline('기존 내역 재매핑')) return;
+
+  // 인라인 편집 중인 행이 있으면 차단
+  const editingCount = document.querySelectorAll(
+    '#mid-big-list .cat-editing, #desc-mid-list .cat-editing'
+  ).length;
+  if (editingCount > 0) {
+    showToast('편집 중인 카테고리가 있습니다. 먼저 카테고리 저장을 완료한 후 재매핑해 주세요.', 'amber');
+    return;
+  }
+
+  // dry-run: 현재 저장된 메모리 설정 기준으로 변경 건수 계산
+  const { dryCount, arLinkedCount, arLinkedRows } = calcRemapPreview();
+  if (dryCount === 0) {
+    showToast('재매핑할 기존 내역이 없습니다.', 'green');
+    return;
+  }
+
+  // confirm 메시지 구성
+  let confirmMsg = `저장된 카테고리 설정으로 기존 입출금 내역 ${dryCount}건을 재매핑합니다.\n계속하시겠습니까?`;
+  if (arLinkedCount > 0) {
+    // AR 연관 거래처명 중복 제거 후 최대 5개 표시
+    const partners = [...new Set(arLinkedRows.map(r => r.desc || '(내용 없음)'))];
+    const MAX_P = 5;
+    const shownP = partners.slice(0, MAX_P);
+    const restP  = partners.length - shownP.length;
+    const partnerStr = shownP.join(', ') + (restP > 0 ? ` 외 ${restP}개` : '');
+    confirmMsg += `\n\n주의: 매출채권(AR) 연관 내역 ${arLinkedCount}건 포함 — ${partnerStr}`;
+    confirmMsg += '\n카테고리 집계에 영향을 줄 수 있습니다.';
+  }
+  if (!confirm(confirmMsg)) return;
+
+  // 재매핑 실행
+  const remapped = remapAllCfData();
+  if (remapped > 0) {
+    saveDataExplicit();
+    renderAll();
+  }
+  showToast(`✅ 기존 입출금 내역 ${remapped}건이 재매핑되었습니다.`, 'green');
 });
 
 /* ------ 초기값 복원 ------ */
 document.getElementById('cat-reset-btn').addEventListener('click', () => {
   if (!confirm('모든 카테고리 설정을 초기값으로 복원하시겠습니까?\n조합 매핑도 모두 삭제됩니다.')) return;
 
-  // C-3b: 리셋 후 재매핑 건수 dry-run → 두 번째 confirm (공통 함수 사용)
-  const _oldMidToBig      = catMidToBig;
-  const _oldDescToMid     = catDescToMid;
-  const _oldDescTypeToMid = catDescTypeToMid;
+  // 기본값으로 메모리 교체
   catMidToBig      = {...DEFAULT_MID_TO_BIG};
   catDescToMid     = {...DEFAULT_DESC_TO_MID};
   catDescTypeToMid = {};
-  const { dryCount: resetDryCount, arLinkedCount: resetArLinkedCount, arLinkedRows: resetArLinkedRows } = calcRemapPreview();
-  if (resetDryCount > 0) {
-    let resetConfirmMsg = `초기화 시 기존 입출금 내역 ${resetDryCount}건이 재매핑됩니다.\n계속하시겠습니까?`;
-    if (resetArLinkedCount > 0) {
-      resetConfirmMsg += `\n\n⚠ 이 중 매출채권(AR) 연관 내역 ${resetArLinkedCount}건 포함:\n`;
-      resetConfirmMsg += buildARLinkedMsg(resetArLinkedRows);
-      resetConfirmMsg += '\n→ 카테고리 집계에 영향을 줍니다.';
-    }
-    if (!confirm(resetConfirmMsg)) {
-      // 취소: 메모리 원복
-      catMidToBig      = _oldMidToBig;
-      catDescToMid     = _oldDescToMid;
-      catDescTypeToMid = _oldDescTypeToMid;
-      return;
-    }
-  }
 
-  // 확인 완료 → 저장 진행
+  // 설정만 저장 — cfData 재매핑은 "기존 내역 재매핑" 버튼에서 별도 실행
   saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
     if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
   });
   buildBigCatSelects();
-  const remapped = remapAllCfData();
-  if (remapped > 0) saveDataExplicit();
   renderMidBigList();
   renderDescMidList();
   renderComboList();
@@ -6863,7 +6862,7 @@ document.getElementById('cat-reset-btn').addEventListener('click', () => {
   refreshComboAddMidSelect();
   refreshMidAddBigSelect();
   renderAll();
-  showToast('초기값으로 복원됐습니다.', 'green');
+  showToast('기본 카테고리 설정으로 초기화되었습니다. 기존 내역에 적용하려면 재매핑을 실행하세요.', 'green');
 });
 
 /* ------ 탭 진입 시 렌더 ------ */
@@ -7189,7 +7188,7 @@ document.getElementById('cat-s2-next').addEventListener('click', () => {
 
 document.getElementById('cat-s3-back').addEventListener('click', () => resetCatSteps(2));
 document.getElementById('cat-apply-btn').addEventListener('click', () => {
-  if (blockIfOffline('카테고리 적용 & 재매핑')) return;
+  if (blockIfOffline('카테고리 가져오기')) return;
   const merge = document.getElementById('cat-merge-chk').checked;
   const descCount = Object.keys(catParsedDesc).length;
   const midCount  = Object.keys(catParsedMid).length;
@@ -7213,6 +7212,7 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
     if (midCount)  catMidToBig  = {...catParsedMid};
   }
 
+  // 설정만 저장 — cfData 재매핑은 "기존 내역 재매핑" 버튼에서 별도 실행
   saveCatData();
 
   // 중분류 드롭다운 갱신
@@ -7222,10 +7222,6 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
   });
   buildBigCatSelects();
 
-  // cfData 재매핑
-  const remapped = remapAllCfData();
-  if (remapped > 0) saveDataExplicit();
-
   document.getElementById('cat-modal').classList.add('hidden');
   renderCategoryTab();
   renderAll();
@@ -7233,7 +7229,7 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
   const mode = merge ? '병합' : '교체';
   const conflictNote = (merge && (conflictDesc + conflictMid) > 0)
     ? ` (충돌 ${conflictDesc + conflictMid}건은 기존 유지)` : '';
-  showToast(`✅ 카테고리 ${mode} 완료 — 거래내용 ${descCount}건, 중분류 ${midCount}건${conflictNote}${remapped > 0 ? ` / 내역 ${remapped}건 재매핑` : ''}`, 'green');
+  showToast(`✅ 카테고리 ${mode} 완료 — 거래내용 ${descCount}건, 중분류 ${midCount}건${conflictNote}. 기존 내역에 적용하려면 "기존 내역 재매핑"을 실행하세요.`, 'green');
 });
 
 // 양식 다운로드 (빈 샘플 파일)
