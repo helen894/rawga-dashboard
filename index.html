@@ -4779,6 +4779,25 @@ function getWeekNumByThursday(thuDateStr) {
   return Math.round((thu.getTime() - firstThu.getTime()) / (7 * 86400000)) + 1;
 }
 
+function groupWeeklyRowsByMid(rows, amtField) {
+  const map = {};
+  rows.forEach(r => {
+    const key = (r.mid_cat || '').trim() || '(미분류)';
+    if (!map[key]) map[key] = { big_cat: r.big_cat || '', amount: 0, bigCats: new Set() };
+    map[key].amount += r[amtField] || 0;
+    const bc = (r.big_cat || '').trim();
+    if (bc) map[key].bigCats.add(bc);
+  });
+  return Object.entries(map)
+    .map(([mid_cat, g]) => ({
+      mid_cat,
+      big_cat: g.bigCats.size > 1 ? [...g.bigCats].join(' / ') : (g.big_cat || '—'),
+      amount: g.amount,
+      conflict: g.bigCats.size > 1,
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 function renderWeeklyReport() {
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
@@ -4840,25 +4859,29 @@ function renderWeeklyReport() {
   const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
   const empty = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>`;
 
-  document.getElementById('wkrpt-in-count').textContent  = inRows.length  ? `${inRows.length}건` : '';
-  document.getElementById('wkrpt-out-count').textContent = outRows.length ? `${outRows.length}건` : '';
+  const groupedIn  = groupWeeklyRowsByMid(inRows,  'in');
+  const groupedOut = groupWeeklyRowsByMid(outRows, 'out');
+  const wkLabel = `${fmtMD(wStart)}~${fmtMD(wEnd)}`;
+
+  document.getElementById('wkrpt-in-count').textContent  = groupedIn.length  ? `${groupedIn.length}건` : '';
+  document.getElementById('wkrpt-out-count').textContent = groupedOut.length ? `${groupedOut.length}건` : '';
 
   const tdBase  = 'padding:5px 6px;white-space:nowrap;overflow:hidden;';
   const tdEll   = tdBase + 'text-overflow:ellipsis;';
-  document.getElementById('wkrpt-in-tbody').innerHTML = inRows.length ? inRows.map(r => `
+  document.getElementById('wkrpt-in-tbody').innerHTML = groupedIn.length ? groupedIn.map(g => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="${tdEll}" title="${r.mid_cat||''}">${r.mid_cat || '—'}</td>
-      <td style="${tdEll}font-size:11px;color:var(--text2)" title="${r.big_cat||''}">${r.big_cat || '—'}</td>
-      <td style="${tdBase}text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(r.in)}</td>
+      <td style="${tdBase}color:var(--text2)">${wkLabel}</td>
+      <td style="${tdEll}" title="${g.mid_cat}">${g.mid_cat}</td>
+      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${g.big_cat}">${g.big_cat}</td>
+      <td style="${tdBase}text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(g.amount)}</td>
     </tr>`).join('') : empty;
 
-  document.getElementById('wkrpt-out-tbody').innerHTML = outRows.length ? outRows.map(r => `
+  document.getElementById('wkrpt-out-tbody').innerHTML = groupedOut.length ? groupedOut.map(g => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="${tdBase}color:var(--text2)">${r.date.slice(5).replace('-','/')}</td>
-      <td style="${tdEll}" title="${r.mid_cat||''}">${r.mid_cat || '—'}</td>
-      <td style="${tdEll}font-size:11px;color:var(--text2)" title="${r.big_cat||''}">${r.big_cat || '—'}</td>
-      <td style="${tdBase}text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(r.out)}</td>
+      <td style="${tdBase}color:var(--text2)">${wkLabel}</td>
+      <td style="${tdEll}" title="${g.mid_cat}">${g.mid_cat}</td>
+      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${g.big_cat}">${g.big_cat}</td>
+      <td style="${tdBase}text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(g.amount)}</td>
     </tr>`).join('') : empty;
 
   // ── 거래처별 주간 집계 ────────────────────────────────
@@ -5028,6 +5051,9 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   // ── 입금/지출 내역 (KPI와 동일 기준: 실제 거래만) ──
   const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
   const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
+  const groupedIn  = groupWeeklyRowsByMid(inRows,  'in');
+  const groupedOut = groupWeeklyRowsByMid(outRows, 'out');
+  const wkLabel = `${fmtMD(wStart)}~${fmtMD(wEnd)}`;
 
   // ── 대분류별 집계 (big_cat 기준, 입금+지출 합계 큰 순) ──
   const bigMap = {};
@@ -5088,17 +5114,17 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const MAX_ROWS = 10;
   const empty4 = `<tr><td colspan="4" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">내역 없음</td></tr>`;
 
-  // 전체 행 생성 (슬라이스 없음) — 표시 건수 제어는 스크롤 래퍼에서 처리
-  const inHtml = inRows.length ? inRows.map(r =>
-    `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
-         <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
-         <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(r.in)}</td></tr>`).join('') : empty4;
-  const outHtml = outRows.length ? outRows.map(r =>
-    `<tr><td style="${TDS}color:${C.t2}">${fmtMD(r.date)}</td>
-         <td style="${TDS}max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc||'—'}</td>
-         <td style="${TDS}color:${C.t2}">${r.mid_cat||'—'}</td>
-         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(r.out)}</td></tr>`).join('') : empty4;
+  // 전체 행 생성 (중분류별 합산) — 표시 건수 제어는 스크롤 래퍼에서 처리
+  const inHtml = groupedIn.length ? groupedIn.map(g =>
+    `<tr><td style="${TDS}color:${C.t2}">${wkLabel}</td>
+         <td style="${TDS}">${g.mid_cat}</td>
+         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${g.big_cat}</td>
+         <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(g.amount)}</td></tr>`).join('') : empty4;
+  const outHtml = groupedOut.length ? groupedOut.map(g =>
+    `<tr><td style="${TDS}color:${C.t2}">${wkLabel}</td>
+         <td style="${TDS}">${g.mid_cat}</td>
+         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${g.big_cat}</td>
+         <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(g.amount)}</td></tr>`).join('') : empty4;
   const bigCatHtml = bigCatRows.length ? bigCatRows.map(x =>
     `<tr><td style="${TDS}font-weight:500">${x.cat}</td>
          <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
@@ -5186,13 +5212,13 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 입금 내역 -->
 <tr><td style="background:${C.card};padding:18px 18px 0">
-  <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역${cntBadge(inRows.length, inRows.length > MAX_ROWS)}</div>
-  ${scrollTbl([['날짜','left'],['거래내용','left'],['중분류','left'],['금액','right']], inHtml, inRows.length)}
+  <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역${cntBadge(groupedIn.length, groupedIn.length > MAX_ROWS)}</div>
+  ${scrollTbl([['날짜','left'],['중분류','left'],['대분류','left'],['금액','right']], inHtml, groupedIn.length)}
 </td></tr>
 <!-- 지출 내역 -->
 <tr><td style="background:${C.card};padding:18px 18px 0">
-  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역${cntBadge(outRows.length, outRows.length > MAX_ROWS)}</div>
-  ${scrollTbl([['날짜','left'],['거래내용','left'],['중분류','left'],['금액','right']], outHtml, outRows.length)}
+  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">💸 주간 지출 내역${cntBadge(groupedOut.length, groupedOut.length > MAX_ROWS)}</div>
+  ${scrollTbl([['날짜','left'],['중분류','left'],['대분류','left'],['금액','right']], outHtml, groupedOut.length)}
 </td></tr>
 <!-- 대분류 -->
 <tr><td style="background:${C.card};padding:0 18px 18px">
