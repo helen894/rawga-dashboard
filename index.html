@@ -83,11 +83,15 @@
   .corp-mini-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 8px; min-width: 0; }
   .corp-card-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; white-space: nowrap; }
   .corp-card-value { font-size: 15px; font-weight: 700; color: var(--text); font-family: var(--mono); word-break: break-all; }
-  .corp-mini-card.corp-separator { position: relative; }
-  .corp-mini-card.corp-separator::after { content: ""; position: absolute; top: 10px; right: -5px; bottom: 10px; border-right: 1px dashed var(--border2); pointer-events: none; z-index: 1; }
+  .corp-mini-card.corp-person-card { background: #2D7059; border-color: #2D7059; }
+  .corp-mini-card.corp-person-card .corp-card-label,
+  .corp-mini-card.corp-person-card .corp-card-value { color: #fff; }
+  .corp-mini-card.corp-code-card { background: #9DB9AE; border-color: #9DB9AE; }
+  .corp-mini-card.corp-code-card .corp-card-label,
+  .corp-mini-card.corp-code-card .corp-card-value { color: #1a1d2e; }
   @media (max-width: 900px) { .corp-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px) { .corp-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .corp-mini-card.corp-separator::after { display: none; } }
+  @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -375,16 +379,16 @@
   <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
     <div class="chart-title" style="margin-bottom:12px">💳 법인카드</div>
     <div class="corp-card-grid">
-      <div class="corp-mini-card corp-separator"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
-      <div class="corp-mini-card corp-separator"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-card-m01">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-card-m02">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-card-m03">0</div></div>
-      <div class="corp-mini-card corp-separator"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
-      <div class="corp-mini-card corp-separator"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-card-bx">0</div></div>
-      <div class="corp-mini-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-card-m01">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-card-m02">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-card-m03">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-card-bx">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
     </div>
   </div>
 
