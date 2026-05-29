@@ -78,6 +78,15 @@
   .chart-title small { font-size: 11px; color: var(--text2); font-weight: 400; }
   .chart-wrap { position: relative; }
 
+  /* 법인카드 미니 카드 그리드 */
+  .corp-card-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .corp-mini-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 8px; min-width: 0; }
+  .corp-card-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; white-space: nowrap; }
+  .corp-card-value { font-size: 15px; font-weight: 700; color: var(--text); font-family: var(--mono); word-break: break-all; }
+  @media (max-width: 900px) { .corp-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 680px) { .corp-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .filter-bar select, .filter-bar input[type=text] { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 12px; font-family: var(--font); padding: 6px 10px; border-radius: 6px; }
@@ -360,10 +369,21 @@
     </div>
   </div>
 
-  <!-- 예정 대비 실적 -->
-  <div class="chart-box" style="margin-bottom:20px">
-    <div class="chart-title" style="margin-bottom:12px">📊 당월 예정 대비 실적 <small id="budget-date-range" style="color:var(--text3);font-weight:400"></small></div>
-    <div id="budget-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px"></div>
+  <!-- 법인카드 -->
+  <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
+    <div class="chart-title" style="margin-bottom:12px">💳 법인카드</div>
+    <div class="corp-card-grid">
+      <div class="corp-mini-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-card-bx">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-card-m01">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-card-m02">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-card-m03">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
+      <div class="corp-mini-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
+    </div>
   </div>
 
   <div class="chart-row">
@@ -2440,7 +2460,7 @@ function renderCharts() {
   renderARDonutChart();
   renderMonthlyRevenueChart();
   renderUpcomingPayments();
-  renderBudgetVsActual();
+  // renderBudgetVsActual() — 당월 예정 대비 실적 카드 제거로 호출 중단 (함수 정의는 유지)
 }
 
 function setText(id, text) {
@@ -2458,9 +2478,6 @@ function updateDashboardDateLabels() {
   const upRange = `${fmtD(refDate)} ~ ${fmtD(limit15)}`;
   setText('upcoming-date-range',    upRange);
   setText('upcoming-in-date-range', upRange);
-
-  // 당월 예정 대비 실적 — 당월
-  setText('budget-date-range', fmtYM(refDate));
 
   // 지출 대분류 비중 월간 — 보고기준일 속한 달
   setText('donut-date-range', fmtYM(refDate));
