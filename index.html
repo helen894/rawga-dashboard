@@ -297,6 +297,7 @@
 <div class="tabs">
   <div class="tab active" data-tab="dashboard">대시보드</div>
   <div class="tab" data-tab="reporting">리포팅</div>
+  <div class="tab" data-tab="corp-card">법인카드</div>
   <div class="tab" data-tab="ar">매출채권(AR)</div>
   <div class="tab" data-tab="cashflow">입출금 내역</div>
   <div class="tab" data-tab="recurring">반복 거래</div>
@@ -1181,6 +1182,28 @@
   </div><!-- /rpt-panel-monthly -->
 
 </div><!-- /panel-reporting -->
+
+<!-- ======== CORP CARD TAB ======== -->
+<div class="panel" id="panel-corp-card">
+  <div style="margin-bottom:20px">
+    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px">💳 법인카드</div>
+  </div>
+  <div class="chart-box" style="margin-bottom:20px">
+    <div class="chart-title" style="margin-bottom:12px">카드별 사용 현황</div>
+    <div class="corp-card-grid">
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-tab-ha">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-tab-kim">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-tab-m01">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-tab-m02">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-tab-m03">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-tab-park">0</div></div>
+      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-tab-moon">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-tab-il">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-tab-bx">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-tab-so">0</div></div>
+    </div>
+  </div>
+</div><!-- /panel-corp-card -->
 
 <!-- ======== CATEGORY UPLOAD MODAL ======== -->
 <div class="modal-backdrop hidden" id="cat-modal">
@@ -6042,6 +6065,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     panel.classList.add('active');
     if (tab.dataset.tab === 'dashboard')      { renderKPIs(); renderCharts(); }
     if (tab.dataset.tab === 'reporting')      renderActiveReportingSubTab();
+    if (tab.dataset.tab === 'corp-card')      renderCorporateCardTab();
     if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
     if (tab.dataset.tab === 'recurring')      renderRecurringTab();
 
@@ -6070,6 +6094,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     }
   });
 });
+
+// 법인카드 탭 렌더 — 현재는 기본값 0 표시 유지만 수행 (금액 집계 없음)
+function renderCorporateCardTab() {
+  // 추후 금액 집계 로직 추가 예정 — 지금은 DOM 초기값(0) 그대로 유지
+}
 
 // AR 탭으로 이동 + 거래처 필터 적용
 function switchToARTab(partner) {
