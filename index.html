@@ -92,6 +92,17 @@
   @media (max-width: 900px) { .corp-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px) { .corp-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* 법인카드 탭 사용현황 표 */
+  .corp-table-wrap { overflow: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+  .corp-usage-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
+  .corp-usage-table th, .corp-usage-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; }
+  .corp-usage-table th:last-child, .corp-usage-table td:last-child { border-right: none; }
+  .corp-usage-table tbody tr:last-child td, .corp-usage-table tbody tr:last-child th { border-bottom: none; }
+  .corp-usage-table thead th { position: sticky; top: 0; z-index: 2; background: var(--bg3); text-align: center; font-weight: 600; color: var(--text2); font-size: 11px; }
+  .corp-usage-table .corp-account-col { position: sticky; left: 0; z-index: 3; background: var(--card); text-align: left; font-weight: 600; color: var(--text); min-width: 72px; }
+  .corp-usage-table thead .corp-account-col { z-index: 4; background: var(--bg3); color: var(--text2); text-align: left; }
+  .corp-usage-table td { text-align: right; font-family: var(--mono); color: var(--text); min-width: 68px; }
+  .corp-usage-table tbody tr:hover td, .corp-usage-table tbody tr:hover .corp-account-col { background: var(--bg3); }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1185,23 +1196,25 @@
 
 <!-- ======== CORP CARD TAB ======== -->
 <div class="panel" id="panel-corp-card">
-  <div style="margin-bottom:20px">
-    <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px">💳 법인카드</div>
-  </div>
-  <div class="chart-box" style="margin-bottom:20px">
-    <div class="chart-title" style="margin-bottom:12px">카드별 사용 현황</div>
-    <div class="corp-card-grid">
-      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-tab-ha">0</div></div>
-      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-tab-kim">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-tab-m01">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-tab-m02">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-tab-m03">0</div></div>
-      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-tab-park">0</div></div>
-      <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-tab-moon">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-tab-il">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-tab-bx">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-tab-so">0</div></div>
-    </div>
+  <div class="corp-table-wrap">
+    <table class="corp-usage-table" id="corp-usage-table">
+      <thead>
+        <tr>
+          <th class="corp-account-col">계정과목</th>
+          <th>하경수</th><th>김현민</th><th>M01</th><th>M02</th><th>M03</th>
+          <th>박우현</th><th>문성삼</th><th>IL</th><th>BX</th><th>SO</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th class="corp-account-col">교통비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">식대</th>    <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">소모품비</th><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">접대비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">출장비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">통신비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><th class="corp-account-col">기타</th>    <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+      </tbody>
+    </table>
   </div>
 </div><!-- /panel-corp-card -->
 
