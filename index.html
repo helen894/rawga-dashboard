@@ -103,6 +103,12 @@
   .corp-usage-table thead .corp-account-col { z-index: 4; background: var(--bg3); color: var(--text2); text-align: left; }
   .corp-usage-table td { text-align: right; font-family: var(--mono); color: var(--text); min-width: 68px; }
   .corp-usage-table tbody tr:hover td, .corp-usage-table tbody tr:hover .corp-account-col { background: var(--bg3); }
+  .corp-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .corp-cell-hd { display: flex; align-items: center; gap: 3px; justify-content: center; }
+  .corp-account-cell { display: flex; align-items: center; gap: 3px; }
+  .corp-ibtn { background: none; border: none; cursor: pointer; padding: 0 2px; font-size: 10px; line-height: 1; color: var(--text3); font-family: var(--font); }
+  .corp-ibtn:hover { color: var(--blue); }
+  .corp-ibtn.del:hover { color: var(--red); }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1196,26 +1202,12 @@
 
 <!-- ======== CORP CARD TAB ======== -->
 <div class="panel" id="panel-corp-card">
-  <div class="corp-table-wrap">
-    <table class="corp-usage-table" id="corp-usage-table">
-      <thead>
-        <tr>
-          <th class="corp-account-col">계정과목</th>
-          <th>하경수</th><th>김현민</th><th>M01</th><th>M02</th><th>M03</th>
-          <th>박우현</th><th>문성삼</th><th>IL</th><th>BX</th><th>SO</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><th class="corp-account-col">교통비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">식대</th>    <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">소모품비</th><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">접대비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">출장비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">통신비</th>  <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><th class="corp-account-col">기타</th>    <td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-      </tbody>
-    </table>
+  <div class="corp-toolbar">
+    <button class="btn sm" id="corp-add-col-btn">+ 카드명칭</button>
+    <button class="btn sm" id="corp-add-acc-btn">+ 계정과목</button>
+    <button class="btn sm" id="corp-reset-btn" style="color:var(--text2);border-color:var(--border2)">기본값 복원</button>
   </div>
+  <div class="corp-table-wrap" id="corp-table-container"></div>
 </div><!-- /panel-corp-card -->
 
 <!-- ======== CATEGORY UPLOAD MODAL ======== -->
@@ -1782,6 +1774,18 @@
 <script>
 let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // Supabase 로드 후 덮어씀
 let isInitCashHidden = localStorage.getItem('init_cash_hidden') === 'true'; // 숨김 상태 (localStorage 유지)
+
+/* ===== 법인카드 탭 — 열/행 설정 ===== */
+const DEFAULT_CORP_CARD_COLUMNS  = ['하경수','김현민','박우현','문성삼','M01','M02','M03','IL','BX','SO'];
+const DEFAULT_CORP_CARD_ACCOUNTS = ['교통비','식대','소모품비','접대비','출장비','통신비','기타'];
+function loadCorpCardColumns() {
+  try { const v = JSON.parse(localStorage.getItem('corp_card_columns'));  return Array.isArray(v) && v.length > 0 ? v : [...DEFAULT_CORP_CARD_COLUMNS];  } catch { return [...DEFAULT_CORP_CARD_COLUMNS];  }
+}
+function loadCorpCardAccounts() {
+  try { const v = JSON.parse(localStorage.getItem('corp_card_accounts')); return Array.isArray(v) && v.length > 0 ? v : [...DEFAULT_CORP_CARD_ACCOUNTS]; } catch { return [...DEFAULT_CORP_CARD_ACCOUNTS]; }
+}
+let corpCardColumns  = loadCorpCardColumns();
+let corpCardAccounts = loadCorpCardAccounts();
 const DESC_TO_MID = {"Npay정산":"매출","스마트스토어정":"매출","카카오페이정산":"매출","Toss정산0330":"매출","한국정보통신(주)":"매출","오늘의집정산":"매출","Toss정산0331":"매출","Toss정산0401":"매출","Toss정산0402":"매출","Toss정산0403":"매출","쿠팡(주)":"매출","(주)씨제이이엔엠":"매출","엔에이치엔페이":"매출","(유)동이식품_매출":"매출","분당（１４４）　　　":"세금과공과금","성남시지방소":"세금과공과금","쿠팡페이주식회":"매출","씨엔에이바이오":"매입대금","태성수산 영어":"매입대금","기업주식회사　월드씨푸드":"매입대금","하나(주)모락스":"운반비","(주)디앤비푸드_매출":"매출","(주)제이에스푸":"매입대금","우리대주회계법인":"지급수수료","신한동백로지스주식회사":"운반비","하나(사)한국건강기능식":"지급수수료","기업(주)옥수":"매입대금","AMAZON":"매출","tosspaymen":"매출","(주)다날":"매출","(주)씨제이이엔":"매출","신한미디어브릿지그룹(주":"지급수수료","기업RC주식회사　로가":"연구개발비","신한(주)지앤원":"매입대금","신한유한회사　위써트인증":"지급수수료","신한카드":"법인카드 대금","롯데카드(주)":"법인카드 대금","Toss정산0406":"매출","급여":"급여","4대보험":"보험료","원천세":"세금과공과금","이자-32-00039 다음납입예정일-20260329":"이자비용","이자-32-00035 다음납입예정일-20260328":"이자비용","이자-32-00042 다음납입예정일-20260329":"이자비용","신솔민":"광고선전비","임형규":"광고선전비","우미연":"광고선전비","신병철":"광고선전비","방군석":"광고선전비","(유)바다향":"매출","신동섭":"매입대금","(주)로가제이에":"대여금 지급","아난티 오시리":"매출","jht코스메틱":"매출","황건숙":"광고선전비","홍지민":"광고선전비","박민아":"광고선전비","유나윤":"광고선전비","김선영":"광고선전비","이상훈(페퍼스":"광고선전비","휴온스엔":"매출","(주)프라임카고":"운반비","(유)동이식품_매출":"매출","주)로릭코리아":"운반비","김대영(이성국":"지급수수료","중진공대출":"이자비용","tosspaymen":"매출","하경수_회수":"대여금 수취","주식회사에이치이공일":"대여금 수취","(주)로가제이에_회수":"대여금 수취","신한(주)지앤원":"매입대금","농협(주)우앤파트너스":"지급수수료","주식회사로가":"계좌간이체","신한주식회사　로가":"계좌간이체","주식회사 호마":"매입대금","주식회사 코코":"매입대금","(주)루리인터내":"매입대금","이아인":"광고선전비","박미영":"광고선전비","김세라":"광고선전비","황귀순":"광고선전비","이태호":"광고선전비","안나근":"광고선전비","장혜진":"광고선전비","이솔":"광고선전비","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","RAWGA USA":"대여금 지급","Toss정산0309":"매출","중진공대출원리":"이자비용","SMS140***24316":"지급수수료","이성국제특허법_반환":"기타 입금","주식회사무신사":"매출","SSG상품대":"매출","안성환":"광고선전비","모은지":"광고선전비","고재경":"광고선전비","허영식":"광고선전비","조영현":"광고선전비","주식회사　로가":"계좌간이체","주식회사 로가":"계좌간이체","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","(주)씨제이이엔":"매출","허진관":"광고선전비","이상희":"광고선전비","방군석":"광고선전비","서지은":"광고선전비","이윤서":"광고선전비","허진숙":"광고선전비","우미연":"광고선전비","문현주":"광고선전비","(주)에이치이공":"대여금 수취","성남시등록면":"세금과공과금","장부식_수취":"대여금 수취","미쓰이소꼬코리":"운반비","(주)로가":"소모품비","(유)바다향":"매출","이준영":"광고선전비","방군석":"광고선전비","유도연":"광고선전비","김한나":"광고선전비","김미아":"광고선전비","주식회사　로가_투자":"투자금","주식회사로가_투자":"투자금"};
 const MID_TO_BIG = {"세금과공과금":"세금과공과금","매입대금":"재고/상품매입","운반비":"판매관리비","지급수수료":"판매관리비","연구개발비":"연구개발비","법인카드 대금":"자금이동/제외","급여":"판매관리비","보험료":"보험료","이자비용":"금융비용","광고선전비":"판매관리비","대여금 지급":"자금이동/제외","소모품비":"판매관리비","통신비":"판매관리비","대여금 상환":"자금이동/제외","기타 지출":"기타 지출","판매수수료":"판매관리비","보증금":"보증금","설비 대금":"세종시","임차료":"판매관리비","여비교통비":"판매관리비","매출":"기타","대여금 수취":"기타","투자금":"자금이동/제외","이자수익":"기타","기타 입금":"기타","인오가닉":"인오가닉","계좌간이체":"자금이동/제외"};
 const MID_CATS = Object.keys(MID_TO_BIG);
@@ -6108,10 +6112,88 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// 법인카드 탭 렌더 — 현재는 기본값 0 표시 유지만 수행 (금액 집계 없음)
-function renderCorporateCardTab() {
-  // 추후 금액 집계 로직 추가 예정 — 지금은 DOM 초기값(0) 그대로 유지
+/* ===== 법인카드 탭 — 저장/렌더/CRUD ===== */
+function saveCorpCardSettings() {
+  localStorage.setItem('corp_card_columns',  JSON.stringify(corpCardColumns));
+  localStorage.setItem('corp_card_accounts', JSON.stringify(corpCardAccounts));
 }
+
+function renderCorpCardTab() {
+  const container = document.getElementById('corp-table-container');
+  if (!container) return;
+  // 헤더 열 (카드명칭 + 수정/삭제 버튼)
+  const colThs = corpCardColumns.map((col, i) =>
+    `<th><div class="corp-cell-hd"><span>${col}</span>` +
+    `<button class="corp-ibtn" title="수정" onclick="editCorpCardColumn(${i})">✏</button>` +
+    `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardColumn(${i})">×</button></div></th>`
+  ).join('');
+  // 본문 행 (계정과목 + 빈 셀)
+  const rows = corpCardAccounts.map((acc, i) => {
+    const cells = corpCardColumns.map(() => '<td>0</td>').join('');
+    return `<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span>` +
+      `<button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button>` +
+      `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}</tr>`;
+  }).join('');
+  container.innerHTML =
+    `<table class="corp-usage-table"><thead><tr>` +
+    `<th class="corp-account-col">계정과목</th>${colThs}</tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+}
+
+// 탭 클릭 진입점 (기존 호출 유지)
+function renderCorporateCardTab() { renderCorpCardTab(); }
+
+function addCorpCardColumn() {
+  const name = (prompt('추가할 카드명칭을 입력하세요:') || '').trim();
+  if (!name) return;
+  if (corpCardColumns.includes(name)) { alert(`'${name}' 카드명칭이 이미 존재합니다.`); return; }
+  corpCardColumns.push(name);
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+function editCorpCardColumn(i) {
+  const name = (prompt('카드명칭을 수정하세요:', corpCardColumns[i]) || '').trim();
+  if (!name) return;
+  if (name !== corpCardColumns[i] && corpCardColumns.includes(name)) { alert(`'${name}' 카드명칭이 이미 존재합니다.`); return; }
+  corpCardColumns[i] = name;
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+function deleteCorpCardColumn(i) {
+  if (corpCardColumns.length <= 1) { alert('최소 1개 카드명칭은 유지해야 합니다.'); return; }
+  if (!confirm(`'${corpCardColumns[i]}' 카드명칭을 삭제하시겠습니까?`)) return;
+  corpCardColumns.splice(i, 1);
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+
+function addCorpCardAccount() {
+  const name = (prompt('추가할 계정과목을 입력하세요:') || '').trim();
+  if (!name) return;
+  if (corpCardAccounts.includes(name)) { alert(`'${name}' 계정과목이 이미 존재합니다.`); return; }
+  corpCardAccounts.push(name);
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+function editCorpCardAccount(i) {
+  const name = (prompt('계정과목을 수정하세요:', corpCardAccounts[i]) || '').trim();
+  if (!name) return;
+  if (name !== corpCardAccounts[i] && corpCardAccounts.includes(name)) { alert(`'${name}' 계정과목이 이미 존재합니다.`); return; }
+  corpCardAccounts[i] = name;
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+function deleteCorpCardAccount(i) {
+  if (corpCardAccounts.length <= 1) { alert('최소 1개 계정과목은 유지해야 합니다.'); return; }
+  if (!confirm(`'${corpCardAccounts[i]}' 계정과목을 삭제하시겠습니까?`)) return;
+  corpCardAccounts.splice(i, 1);
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+function resetCorpCardSettings() {
+  if (!confirm('법인카드 표의 카드명칭과 계정과목을 기본값으로 복원하시겠습니까?')) return;
+  corpCardColumns  = [...DEFAULT_CORP_CARD_COLUMNS];
+  corpCardAccounts = [...DEFAULT_CORP_CARD_ACCOUNTS];
+  saveCorpCardSettings(); renderCorpCardTab();
+}
+
+document.getElementById('corp-add-col-btn').addEventListener('click', addCorpCardColumn);
+document.getElementById('corp-add-acc-btn').addEventListener('click', addCorpCardAccount);
+document.getElementById('corp-reset-btn').addEventListener('click', resetCorpCardSettings);
 
 // AR 탭으로 이동 + 거래처 필터 적용
 function switchToARTab(partner) {
@@ -7425,6 +7507,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   document.getElementById('cf-date').value = today;
   document.getElementById('ar-start').value = today;
   updateInitCashDisplay();
+  renderCorpCardTab(); // 법인카드 탭 초기 렌더 (탭이 비활성이어도 DOM 준비)
 
   renderAll(); // localStorage 기반 초기 렌더 (Supabase 로드 전)
   // localStorage가 없는 환경(GitHub Pages 첫 방문, 오리진 다른 브라우저 등)에서는
