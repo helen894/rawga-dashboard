@@ -2812,30 +2812,44 @@ function renderWeeklyChart() {
   });
 }
 
+/* AR 거래처별 미회수 차트 색상 상수 */
+const AR_BAR_COLORS = {
+  danger:  'rgba(255, 77, 106, 0.75)',  // 빨강: 지연/미정 + 위험
+  warning: 'rgba(245, 166,  35, 0.75)', // 주황: 지연/미정 + 보통
+  normal:  'rgba( 46, 199, 122, 0.75)', // 초록: 정상 + 보통
+  neutral: 'rgba(155, 160, 176, 0.50)', // 회색: 완료 등 기타
+};
+const AR_BAR_BORDER_COLORS = {
+  danger:  '#ff4d6a',
+  warning: '#f5a623',
+  normal:  '#2ec77a',
+  neutral: '#9aa0b0',
+};
+
+/* 거래처 그룹 대표 색상 키 결정 (위험 > 주황 > 초록 > 회색) */
+function getARPartnerRiskColorKey(rows) {
+  const risks = rows.map(r => calcARStatusAndRisk(r, refDate));
+  if (risks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '위험'))  return 'danger';
+  if (risks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '보통'))  return 'warning';
+  if (risks.some(r => r.status === '정상' && r.riskLevel === '보통'))                          return 'normal';
+  return 'neutral';
+}
+
 function renderARBarChart() {
   const ctx = document.getElementById('arBarChart').getContext('2d');
   if (arBarInst) arBarInst.destroy();
 
-  // 거래처별 미회수 + 위험등급 집계
-  // 색상 우선순위: 지연/미정+위험(빨강) > 지연/미정+보통(주황) > 정상+보통(초록) > 중립(회색)
+  // 거래처별 미회수 + AR rows 수집
   const partnerMap = {};
   let totalRemaining = 0;
   for (const r of arData) {
     if (r.remaining !== 0) {
-      if (!partnerMap[r.partner]) {
-        partnerMap[r.partner] = { remaining: 0, hasDanger: false, hasWarning: false, hasNormal: false,
-                                  delayCount: 0, delayAmt: 0 };
-      }
+      if (!partnerMap[r.partner]) partnerMap[r.partner] = { remaining: 0, rows: [], delayCount: 0, delayAmt: 0 };
       const p = partnerMap[r.partner];
       p.remaining += r.remaining;
+      p.rows.push(r);
       const risk = calcARStatusAndRisk(r, refDate);
-      if ((risk.status === '지연' || risk.status === '미정') && risk.riskLevel === '위험') {
-        p.hasDanger = true; p.delayCount++; p.delayAmt += r.remaining;
-      } else if ((risk.status === '지연' || risk.status === '미정') && risk.riskLevel === '보통') {
-        p.hasWarning = true; p.delayCount++; p.delayAmt += r.remaining;
-      } else if (risk.status === '정상') {
-        p.hasNormal = true;
-      }
+      if (risk.status === '지연' || risk.status === '미정') { p.delayCount++; p.delayAmt += r.remaining; }
       totalRemaining += r.remaining;
     }
   }
@@ -2848,19 +2862,26 @@ function renderARBarChart() {
   const wrap = document.getElementById('ar-bar-wrap');
   if (wrap) wrap.style.height = chartHeight + 'px';
 
-  // 색상 결정: 위험 > 보통 지연/미정 > 정상 > 중립
-  const bgColors = all.map(([, v]) => {
-    if (v.hasDanger)  return 'rgba(255,77,106,0.75)';   // 빨강: 지연/미정+위험
-    if (v.hasWarning) return 'rgba(245,166,35,0.75)';   // 주황: 지연/미정+보통
-    if (v.hasNormal)  return 'rgba(46,199,122,0.75)';   // 초록: 정상+보통
-    return 'rgba(155,160,176,0.5)';                      // 회색: 완료 등 중립
-  });
+  // 각 거래처의 대표 색상 키 계산
+  const colorKeys = all.map(([, v]) => getARPartnerRiskColorKey(v.rows));
+  const bgColors     = colorKeys.map(k => AR_BAR_COLORS[k]);
+  const borderColors = colorKeys.map(k => AR_BAR_BORDER_COLORS[k]);
+
+  // 위험수준 라벨 (툴팁용)
+  const riskLabel = { danger: '위험', warning: '보통/지연', normal: '정상', neutral: '—' };
 
   arBarInst = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: all.map(t => t[0]),
-      datasets: [{ label: '미회수액', data: all.map(t => t[1].remaining), backgroundColor: bgColors, borderRadius: 4 }]
+      datasets: [{
+        label: '미회수액',
+        data: all.map(t => t[1].remaining),
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
     },
     options: {
       indexAxis: 'y',
@@ -2876,16 +2897,9 @@ function renderARBarChart() {
           callbacks: {
             label: (c) => {
               const [, v] = all[c.dataIndex];
-              const lines = [`미회수: ₩${fmt(c.raw)}`];
-              if (v.hasDanger) {
-                lines.push(`🔴 지연·미정(위험): ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
-              } else if (v.hasWarning) {
-                lines.push(`🟠 지연·미정(보통): ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
-              } else if (v.hasNormal) {
-                lines.push('🟢 정상 회수 예정');
-              } else {
-                lines.push('— 완료');
-              }
+              const key = colorKeys[c.dataIndex];
+              const lines = [`미회수: ₩${fmt(c.raw)}`, `위험수준: ${riskLabel[key]}`];
+              if (v.delayCount > 0) lines.push(`지연·미정: ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
               return lines;
             }
           },
