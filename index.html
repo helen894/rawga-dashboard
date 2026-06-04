@@ -163,6 +163,9 @@
   .ar-risk.high { background: rgba(255,77,106,0.15); color: var(--red); }
   .ar-risk.med { background: rgba(245,166,35,0.15); color: var(--amber); }
   .ar-risk.low { background: rgba(46,199,122,0.15); color: var(--green); }
+  .ar-risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+  .ar-risk-badge.danger { background: rgba(255,77,106,0.15); color: var(--red); }
+  .ar-risk-badge.normal { background: rgba(245,166,35,0.12); color: var(--amber); }
 
   /* LEGEND */
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); }
@@ -659,7 +662,6 @@
       <option value="">전체</option>
       <option value="지연">지연</option>
       <option value="정상">정상</option>
-      <option value="부분회수">부분회수</option>
       <option value="완료">완료</option>
       <option value="미정">미정</option>
     </select>
@@ -2298,17 +2300,11 @@ function calcKPIs() {
   // nextCash: cash(refDate 실제 누적) + 예정 누적(date <= nwEnd, 과거 미처리 포함)
   const nextCash = cash + plannedInToNextWeekEnd - plannedOutToNextWeekEnd;
 
-  // arView — refDate 기준 elapsed 재계산 (arData 원본 불변)
-  const baseMs = new Date(ref + 'T00:00:00').getTime();
-  const arView = arData.map(a => ({
-    ...a,
-    elapsed: ((a.remaining || 0) > 0 && a.start)
-      ? Math.max(0, Math.floor((baseMs - new Date((a.start) + 'T00:00:00').getTime()) / 86400000))
-      : 0,
-  }));
+  // arView — refDate 기준 상태/위험등급 재계산 (arData 원본 불변)
+  const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, ref) }));
   const totalAR    = arView.reduce((s, r) => s + (r.remaining || 0), 0);
-  const delayedAR  = arView.filter(r => r.status === '지연' && r.remaining > 0).length;
-  const highRiskAR = arView.filter(r => (r.remaining || 0) > 0 && ((r.elapsed || 0) >= 60 || r.status === '지연')).length;
+  const delayedAR  = arView.filter(r => r.status === '지연').length;
+  const highRiskAR = arView.filter(r => r.riskLevel === '위험').length;
 
   // 런웨이: 최근 3개월 평균 지출 기준
   const months3 = [];
@@ -2902,7 +2898,7 @@ function renderARBarChart() {
     if (r.remaining !== 0) {
       if (!partnerMap[r.partner]) partnerMap[r.partner] = { remaining: 0, delayed: 0, delayedAmt: 0 };
       partnerMap[r.partner].remaining += r.remaining;
-      if (r.status === '지연') {
+      if (calcARStatusAndRisk(r, refDate).status === '지연') {
         partnerMap[r.partner].delayed++;
         partnerMap[r.partner].delayedAmt += r.remaining;
       }
@@ -2971,12 +2967,12 @@ function renderARDonutChart() {
   const ctx = document.getElementById('arDonutChart').getContext('2d');
   if (arDonutInst) arDonutInst.destroy();
 
-  const counts = { 완료: 0, 정상: 0, 부분회수: 0, 지연: 0, 미정: 0 };
-  for (const r of arData) counts[r.status] = (counts[r.status]||0) + 1;
+  const counts = { 완료: 0, 정상: 0, 지연: 0, 미정: 0 };
+  for (const r of arData) { const s = calcARStatusAndRisk(r, refDate).status; counts[s] = (counts[s]||0) + 1; }
   // 건수 0인 항목 제외
   const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
   const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
-  const colors = { 완료: '#2ec77a', 정상: '#075138', 부분회수: '#f5a623', 지연: '#ff4d6a', 미정: '#9b6dff' };
+  const colors = { 완료: '#2ec77a', 정상: '#075138', 지연: '#ff4d6a', 미정: '#9b6dff' };
   const colArr = labels.map(l => colors[l] || '#aaaaaa');
 
   const legend = document.getElementById('ar-legend');
@@ -3678,7 +3674,7 @@ function getFilteredAR() {
   const partner = document.getElementById('ar-filter-partner').value;
   const q = document.getElementById('ar-search').value.toLowerCase();
   const filtered = arData.filter(r => {
-    if (status && r.status !== status) return false;
+    if (status && calcARStatusAndRisk(r, refDate).status !== status) return false;
     if (partner && r.partner !== partner) return false;
     if (q && !r.partner.toLowerCase().includes(q) && !(r.note||'').toLowerCase().includes(q)) return false;
     return true;
@@ -3716,14 +3712,12 @@ function renderARTable() {
 
   const tbody = document.getElementById('ar-tbody');
   tbody.innerHTML = slice.map(r => {
-    // refDate 기준 실시간 경과일 계산 (arData.elapsed 저장값 불사용)
-    const e = calcARElapsed(r);
-    // 위험 분류 기준 — 전 탭 공통: remaining > 0 && (elapsed >= 60 || status === '지연') → 고위험
-    // 180일 초과는 고위험 내 "장기" 보조 라벨로 표시 (집계 기준은 동일)
-    const isHigh = (r.remaining||0) > 0 && (e >= 60 || r.status === '지연');
-    const isLong = isHigh && e > 180;   // 장기지연 (180일+): 고위험 부분집합
-    const risk      = isHigh ? 'high' : 'low';
-    const riskLabel = isLong ? '고위험·장기' : isHigh ? '고위험' : '';
+    // refDate 기준 실시간 상태/위험등급 계산 (arData 저장값 불사용)
+    const arRisk    = calcARStatusAndRisk(r, refDate);
+    const dispStatus = arRisk.status;
+    const elapsedHtml = dispStatus === '완료'
+      ? '—'
+      : `${arRisk.basisDays}일 <span class="ar-risk-badge ${arRisk.riskLevel === '위험' ? 'danger' : 'normal'}">${arRisk.riskLevel}</span>`;
     return `<tr>
       <td style="text-align:center">
         <input type="checkbox" class="ar-row-check" data-id="${r._id}" style="cursor:pointer">
@@ -3737,8 +3731,8 @@ function renderARTable() {
       <td class="date-cell" style="color:${r.collect_date?'var(--green)':'var(--text3)'}">
         ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.floor(n-25569)*86400*1000); return d.toISOString().slice(0,10); } return v; })()}
       </td>
-      <td><span class="badge ${r.status}">${r.status}</span></td>
-      <td class="num" style="color:${e > 0 ? 'var(--amber)' : 'var(--text3)'}">${e > 0 ? e + '일' : '—'}${riskLabel ? ' <span class="ar-risk ' + risk + '">' + riskLabel + '</span>' : ''}</td>
+      <td><span class="badge ${dispStatus}">${dispStatus}</span></td>
+      <td class="num">${elapsedHtml}</td>
       <td style="font-size:11px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn sm ar-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
@@ -3874,13 +3868,11 @@ document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
     : expected - collected;
 
   if (!partner) return alert('거래처를 입력하세요.');
-  let status = '완료';
-  if (remaining > 0) {
-    if (!due || due >= refDate) status = due ? '정상' : '미정';
-    else status = '지연';
-  }
+  const { status } = calcARStatusAndRisk({ remaining, due_date: due, start }, refDate);
   const elapsed = remaining > 0 && start
-    ? Math.max(0, Math.floor((new Date(refDate) - new Date(start)) / 86400000)) : 0;
+    ? Math.max(0, Math.floor(
+        (new Date(refDate + 'T00:00:00').getTime() - new Date(start + 'T00:00:00').getTime()) / 86400000
+      )) : 0;
 
   arData[idx] = { ...arData[idx], partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note };
 
@@ -4051,12 +4043,11 @@ document.getElementById('ar-add-btn').addEventListener('click', () => {
   if (!partner) return alert('거래처를 입력하세요.');
 
   const remaining = expected - collected;
-  let status = '완료';
-  if (remaining > 0) {
-    if (!due || due >= refDate) status = due ? '정상' : '미정';
-    else status = '지연';
-  }
-  const elapsed = remaining > 0 && start ? Math.max(0, Math.floor((new Date(refDate) - new Date(start)) / 86400000)) : 0;
+  const { status } = calcARStatusAndRisk({ remaining, due_date: due, start }, refDate);
+  const elapsed = remaining > 0 && start
+    ? Math.max(0, Math.floor(
+        (new Date(refDate + 'T00:00:00').getTime() - new Date(start + 'T00:00:00').getTime()) / 86400000
+      )) : 0;
 
   // saveDataExplicit() 전에 _id 부여 — id 없는 상태로 Supabase 저장되지 않도록
   const _newArId = 'ar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -4096,16 +4087,32 @@ function normalizePartnerName(name) {
   return (name || '').trim();
 }
 
-/* ===== AR 경과일 실시간 계산 (refDate 기준) =====
- * AR 탭 표시·정렬·위험분류 모두 이 함수로 계산 — arData.elapsed 저장값 불사용.
- * remaining <= 0 이면 0 반환 (완료 건은 경과일 표시 불필요).
+/* ===== AR 상태/위험등급 헬퍼 =====
+ * 상태: 완료 / 정상 / 지연 / 미정 (부분회수 제거)
+ * 위험등급: 위험(30일 초과) / 보통(30일 이하) — 완료는 ''
+ * basisDays: 지연=due_date 초과일수, 미정=start 기준 경과일, 정상=0, 완료=0
+ * arData 원본 불변 — 렌더링/집계 시 실시간 계산
  */
-function calcARElapsed(r) {
-  if (!r.start || (r.remaining || 0) <= 0) return 0;
+function daysBetween(startDate, endDate) {
+  if (!startDate || !endDate) return 0;
   return Math.max(0, Math.floor(
-    (new Date(refDate + 'T00:00:00').getTime() - new Date(r.start + 'T00:00:00').getTime()) / 86400000
+    (new Date(endDate   + 'T00:00:00').getTime() -
+     new Date(startDate + 'T00:00:00').getTime()) / 86400000
   ));
 }
+function calcARStatusAndRisk(ar, baseDate) {
+  const remaining = Number(ar.remaining || 0);
+  const due   = ar.due_date || '';
+  const start = ar.start    || '';
+  if (remaining <= 0) return { status: '완료',  riskLevel: '',    basisDays: 0, elapsed: 0 };
+  if (!due)           { const d = start ? daysBetween(start, baseDate) : 0;
+                        return { status: '미정',  riskLevel: d > 30 ? '위험' : '보통', basisDays: d, elapsed: d }; }
+  if (baseDate > due) { const d = daysBetween(due, baseDate);
+                        return { status: '지연',  riskLevel: d > 30 ? '위험' : '보통', basisDays: d, elapsed: d }; }
+  return               { status: '정상',  riskLevel: '보통', basisDays: 0, elapsed: 0 };
+}
+// 하위 호환 alias (정렬·집계 등 기존 호출부 대응)
+function calcARElapsed(r) { return calcARStatusAndRisk(r, refDate).basisDays; }
 
 /* ===== AR 삭제 보호 체크 =====
  * collected > 0 이거나 CF 차감 이력에 참조된 AR은 삭제 전 원복 필요.
@@ -4171,15 +4178,14 @@ function deductARByIncome(cfRow) {
     const cut    = Math.min(leftover, before);
     const after  = Math.max(0, before - cut);
 
-    const newStatus = after <= 0 ? '완료' : '부분회수';
     // date 필드 추가: 원복 시 다른 CF 기여분 날짜 재계산에 활용
     log.push({ ar_id: ar._id, partner: ar.partner, start: ar.start,
-               before, cut, after, status_before: ar.status, status_after: newStatus,
+               before, cut, after, status_before: ar.status, status_after: after <= 0 ? '완료' : '정산중',
                date: cfRow.date });
 
     ar.collected    = (ar.collected || 0) + cut;
     ar.remaining    = after;
-    ar.status       = newStatus;
+    ar.status       = calcARStatusAndRisk(ar, refDate).status; // 새 정책 기반 계산
     // 전액·부분 차감 모두 실제 입금일(거래일) 기록
     // 여러 CF가 같은 AR을 차감하는 경우 가장 최신 거래일을 유지
     if (!ar.collect_date || cfRow.date > ar.collect_date) ar.collect_date = cfRow.date;
@@ -4236,17 +4242,8 @@ function revertARDeduction(cfRow) {
     ar.remaining = (ar.remaining || 0) + entry.cut;
     ar.collected = Math.max(0, (ar.collected || 0) - entry.cut);
 
-    // 상태 재계산: remaining/collected/due_date 기반으로 결정
-    if (ar.remaining <= 0) {
-      ar.status = '완료';
-    } else if ((ar.collected || 0) > 0) {
-      // 다른 CF에 의한 부분 회수가 남아있는 경우 — due_date 초과 여부도 체크
-      ar.status = ar.due_date && ar.due_date < refDate ? '지연' : '부분회수';
-    } else {
-      // 회수액이 전혀 없으면 차감 전 원래 상태로 복원, 단 due_date가 지났으면 지연으로 조정
-      const restored = entry.status_before || '미정';
-      ar.status = (restored !== '완료' && ar.due_date && ar.due_date < refDate) ? '지연' : restored;
-    }
+    // 상태 재계산: 새 정책(완료/정상/지연/미정) 기준, 헬퍼 사용
+    ar.status = calcARStatusAndRisk(ar, refDate).status;
 
     // 실제 입금일 재계산:
     // 이 CF(cfRow) 이외 다른 CF의 ar_deduct_log 중 이 AR을 차감한 이력의 최신 거래일을 찾아 반영.
@@ -4713,23 +4710,18 @@ function renderMonthlyReport() {
   // "이전 달 조회 시 elapsed가 달 중간 날짜 기준으로 짧게 계산되는" 문제를 방지
   // 예) refDate=2026-04-15 → 4월 리포트 elapsed는 4/30 기준 (4/15가 아님)
   // ※ arData 원본 불변 — arView 복사본에서만 재계산
+  // monthlyArBaseDate: 해당 월 말일 기준 — 이전 달 조회 시 달 중간 날짜 기준으로
+  // 짧게 계산되는 문제 방지 (arData 원본 불변)
   const monthlyArBaseDate = mEnd;
-  const arView = arData.map(a => ({
-    ...a,
-    elapsed: (a.remaining || 0) > 0 && a.start
-      ? Math.max(0, Math.floor(
-          (new Date(monthlyArBaseDate + 'T00:00:00') - new Date(a.start + 'T00:00:00')) / 86400000
-        ))
-      : 0,
-  }));
+  const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, monthlyArBaseDate) }));
   const mNewAR = arView.filter(a => a.start >= mStart && a.start <= mEnd);
   const mNewAmt = mNewAR.reduce((s, a) => s + (a.expected || 0), 0);
   const mColCF = cfData.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= mStart && r.ar_applied_date <= mEnd);
   const mColAmt = mColCF.reduce((s, r) => s + (r.in || 0), 0);
   const remAll = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
-  const highRisk = remAll.filter(a => (a.elapsed || 0) >= 60 || a.status === '지연')
-    .sort((a, b) => ((b.elapsed || 0) - (a.elapsed || 0)) || ((b.remaining || 0) - (a.remaining || 0)));
+  const highRisk = remAll.filter(a => a.riskLevel === '위험')
+    .sort((a, b) => ((b.basisDays || 0) - (a.basisDays || 0)) || ((b.remaining || 0) - (a.remaining || 0)));
 
   const statusLabel = { good: '양호', warn: '주의', danger: '위험' };
   const setDiagnosis = (prefix, state, metrics, judgment) => {
@@ -4815,7 +4807,7 @@ function renderMonthlyReport() {
   document.getElementById('mnrpt-actions').innerHTML = actions.map(x => `<li>${safeText(x)}</li>`).join('');
   document.getElementById('mnrpt-next-checks').innerHTML = checksToRender.map(x => `<li>${safeText(x)}</li>`).join('');
 
-  const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.elapsed || 0}일`).join(' · ');
+  const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.basisDays || 0}일`).join(' · ');
   document.getElementById('mnrpt-ar-diagnosis').innerHTML =
     `회수 우선: ${safeText(arPriority || '고위험 AR 없음')}<br>` +
     `월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColCF.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>` +
@@ -4984,13 +4976,8 @@ function renderWeeklyReport() {
   // ── 매출채권 요약 ─────────────────────────────────────
   // elapsed 실시간 재계산: arData 원본 불변, 렌더링 전용 복사본에 경과일만 덮어씀
   // 기준일: reportBaseDate (이메일 발송 기준과 동일)
-  const baseMs = new Date(reportBaseDate + 'T00:00:00').getTime();
-  const arView = arData.map(a => {
-    const elapsedCalc = (a.remaining || 0) > 0 && a.start
-      ? Math.max(0, Math.floor((baseMs - new Date(a.start + 'T00:00:00').getTime()) / 86400000))
-      : 0;
-    return { ...a, elapsed: elapsedCalc };
-  });
+  // arView — reportBaseDate 기준 상태/위험등급 재계산 (arData 원본 불변)
+  const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, reportBaseDate) }));
 
   // 주간 신규 발생: start가 이번 주에 해당하는 AR
   const wNewAR   = arView.filter(a => a.start >= wStart && a.start <= wEnd);
@@ -5004,9 +4991,9 @@ function renderWeeklyReport() {
   const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
 
-  // 고위험: 재계산된 경과일 60일+ 또는 상태 '지연', remaining > 0
-  const highRisk = arView.filter(a => (a.remaining || 0) > 0 && ((a.elapsed || 0) >= 60 || a.status === '지연'))
-    .sort((a, b) => (b.elapsed || 0) - (a.elapsed || 0));
+  // 고위험: 위험등급 '위험' (due_date 초과 30일+ 또는 미정 30일+)
+  const highRisk = arView.filter(a => a.riskLevel === '위험')
+    .sort((a, b) => (b.basisDays || 0) - (a.basisDays || 0));
   const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
 
   document.getElementById('wkrpt-ar-new').textContent           = fmt(wNewAmt);
@@ -5021,8 +5008,8 @@ function renderWeeklyReport() {
   // ── 고위험 AR 목록 ────────────────────────────────────
   const statusColor = s => {
     if (s === '지연')   return 'var(--red)';
-    if (s === '부분회수') return 'var(--amber)';
     if (s === '완료')   return 'var(--green)';
+    if (s === '미정')   return 'var(--purple)';
     return 'var(--text2)';
   };
   const hrTbody = document.getElementById('wkrpt-highrisk-tbody');
@@ -5032,20 +5019,20 @@ function renderWeeklyReport() {
       <td style="${tdBase}color:var(--text2)">${a.start || '—'}</td>
       <td style="${tdBase}text-align:right;font-family:var(--mono)">${fmt(a.expected || 0)}</td>
       <td style="${tdBase}text-align:right;color:var(--amber);font-family:var(--mono)">${fmt(a.remaining || 0)}</td>
-      <td style="${tdBase}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?'var(--red)':'var(--amber)'}">${a.elapsed || 0}일</td>
+      <td style="${tdBase}text-align:center;font-weight:600;color:${(a.basisDays||0)>30?'var(--red)':'var(--amber)'}">${a.basisDays || 0}일</td>
       <td style="${tdBase}text-align:center;font-size:11px;font-weight:600;color:${statusColor(a.status)}">${a.status || '—'}</td>
     </tr>`).join('') :
     `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">고위험 매출채권이 없습니다. 👍</td></tr>`;
 
   // ── 고위험 요약 패널 ────────────────────────────────────
   const hrAvgEl = highRisk.length
-    ? Math.round(highRisk.reduce((s, a) => s + (a.elapsed || 0), 0) / highRisk.length) : 0;
-  const hrR60  = highRisk.filter(a => (a.elapsed||0) >= 60  && (a.elapsed||0) < 90);
-  const hrR90  = highRisk.filter(a => (a.elapsed||0) >= 90  && (a.elapsed||0) < 180);
-  const hrR180 = highRisk.filter(a => (a.elapsed||0) >= 180);
+    ? Math.round(highRisk.reduce((s, a) => s + (a.basisDays || 0), 0) / highRisk.length) : 0;
+  const hrR60  = highRisk.filter(a => (a.basisDays||0) >= 60  && (a.basisDays||0) < 90);
+  const hrR90  = highRisk.filter(a => (a.basisDays||0) >= 90  && (a.basisDays||0) < 180);
+  const hrR180 = highRisk.filter(a => (a.basisDays||0) >= 180);
   const hrStMap = {};
   highRisk.forEach(a => { const s = a.status || '미정'; hrStMap[s] = (hrStMap[s] || 0) + 1; });
-  const hrStColor = { '지연':'var(--red)', '부분회수':'var(--amber)', '완료':'var(--green)' };
+  const hrStColor = { '지연':'var(--red)', '미정':'var(--purple)', '완료':'var(--green)' };
 
   document.getElementById('wkrpt-hr-cnt').textContent  = highRisk.length ? `${highRisk.length}건` : '없음';
   document.getElementById('wkrpt-hr-amt').textContent  = highRisk.length ? fmt(highRiskAmt) : '—';
@@ -5128,22 +5115,16 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     .filter(x => x.in > 0 || x.out > 0)
     .sort((a, b) => (b.in + b.out) - (a.in + a.out));
 
-  // ── AR 집계 (elapsed 실시간 재계산) ──
-  const baseMsB  = new Date(targetDate + 'T00:00:00').getTime();
-  const arView   = arArr.map(a => ({
-    ...a,
-    elapsed: (a.remaining||0) > 0 && a.start
-      ? Math.max(0, Math.floor((baseMsB - new Date(a.start + 'T00:00:00').getTime()) / 86400000))
-      : 0,
-  }));
+  // ── AR 집계 (상태/위험등급 실시간 재계산: targetDate 기준) ──
+  const arView   = arArr.map(a => ({ ...a, ...calcARStatusAndRisk(a, targetDate) }));
   const wNewAR   = arView.filter(a => a.start >= wStart && a.start <= wEnd);
   const wNewAmt  = wNewAR.reduce((s, a) => s + (a.expected || 0), 0);
   const wColCF   = cfArr.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= wStart && r.ar_applied_date <= wEnd);
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
   const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
-  const highRisk = arView.filter(a => (a.remaining||0) > 0 && ((a.elapsed||0) >= 60 || a.status === '지연'))
-                         .sort((a, b) => (b.elapsed||0) - (a.elapsed||0));
+  const highRisk = arView.filter(a => a.riskLevel === '위험')
+                         .sort((a, b) => (b.basisDays||0) - (a.basisDays||0));
   const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
 
   // ── 월간 대시보드 요약 KPI (calcKPIs와 동일 계산 기준) ──
@@ -5200,8 +5181,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
          <td style="${TDS}color:${C.t2}">${a.start||'—'}</td>
          <td style="${TDS}text-align:right">${fmt(a.expected||0)}</td>
          <td style="${TDS}text-align:right;color:${C.amber}">${fmt(a.remaining||0)}</td>
-         <td style="${TDS}text-align:center;font-weight:600;color:${(a.elapsed||0)>=90?C.red:C.amber}">${a.elapsed||0}일</td>
-         <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:C.amber}">${a.status||'—'}</td></tr>`).join('')
+         <td style="${TDS}text-align:center;font-weight:600;color:${(a.basisDays||0)>30?C.red:C.amber}">${a.basisDays||0}일</td>
+         <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:a.status==='미정'?C.amber:C.t2}">${a.status||'—'}</td></tr>`).join('')
     : `<tr><td colspan="6" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">고위험 매출채권이 없습니다 👍</td></tr>`;
 
   // ── 스크롤 테이블 래퍼 (Dry-run 미리보기 전용 — 브라우저 new window 렌더링) ──
