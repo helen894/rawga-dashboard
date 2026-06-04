@@ -2228,7 +2228,7 @@ function calcKPIs() {
   const delayedDangerCount   = delayedOrUnknownAR.filter(r => r.riskLevel === '위험').length;
   const delayedNrRate        = delayedTotalCount ? Math.round(delayedNormalCount / delayedTotalCount * 100) : 0;
   const delayedDrRate        = delayedTotalCount ? Math.round(delayedDangerCount / delayedTotalCount * 100) : 0;
-  const delayedARSub         = `총 ${delayedTotalCount}건 · 보통 ${delayedNormalCount}건(${delayedNrRate}%) · 위험 ${delayedDangerCount}건(${delayedDrRate}%)`;
+  const delayedARSub         = `지연 총 ${delayedTotalCount}건(보통 ${delayedNormalCount}건(${delayedNrRate}%) · 위험 ${delayedDangerCount}건(${delayedDrRate}%))`;
   const delayedAR  = delayedTotalCount; // 하위 호환 (기존 필드)
   const highRiskAR = arView.filter(r => r.riskLevel === '위험').length;
 
@@ -4933,9 +4933,7 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-ar-remaining-cnt').textContent = `${remAll.length}건`;
   document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(delayedAmt);
   document.getElementById('wkrpt-ar-highrisk-cnt').textContent  =
-    delayedTotal
-      ? `총 ${delayedTotal}건 · 보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%)`
-      : '0건';
+    `지연 총 ${delayedTotal}건(보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%))`;
 
 }
 
@@ -5021,9 +5019,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const dlyDanger  = dlyAR.filter(a => a.riskLevel === '위험').length;
   const dlyNrRate  = dlyTotal ? Math.round(dlyNormal / dlyTotal * 100) : 0;
   const dlyDrRate  = dlyTotal ? Math.round(dlyDanger / dlyTotal * 100) : 0;
-  const dlySub     = dlyTotal
-    ? `총 ${dlyTotal}건 · 보통 ${dlyNormal}건(${dlyNrRate}%) · 위험 ${dlyDanger}건(${dlyDrRate}%)`
-    : '0건';
+  const dlySub     = `지연 총 ${dlyTotal}건(보통 ${dlyNormal}건(${dlyNrRate}%) · 위험 ${dlyDanger}건(${dlyDrRate}%))`;
   // 고위험 AR (이메일 KPI용 유지)
   const highRisk = arView.filter(a => a.riskLevel === '위험')
                          .sort((a, b) => (b.basisDays||0) - (a.basisDays||0));
