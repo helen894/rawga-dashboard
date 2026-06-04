@@ -5034,6 +5034,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     .reduce((s, r) => s + (r.out || 0), 0);
   const laosCount   = cfArr.filter(r => r.big_cat === '라오스').length;
   const totalPhysical   = sejongTotal + laosTotal;  // 총 현물자산 = 세종F2 + 라오스
+  const totalAsset      = totalLiquid + totalPhysical; // 총 자산 합계 = 유동 + 현물
   const refYear  = parseInt(dashboardKpiDate.slice(0, 4));
   const refMonth = parseInt(dashboardKpiDate.slice(5, 7));
 
@@ -5042,8 +5043,9 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const TDS = `padding:6px 8px;font-size:12px;border-bottom:1px solid ${B};`;
   const THS = `padding:7px 8px;font-size:11px;font-weight:600;color:${C.t2};background:${C.bg3};text-align:`;
 
+  // kpi 카드 — 균일 높이(96px, box-sizing:border-box) + vertical-align:top
   const kpi = (label, val, color, sub) =>
-    `<td width="25%" style="padding:0 5px"><div style="background:${C.card};border:1px solid ${B};border-radius:8px;padding:14px 10px;text-align:center">
+    `<td width="25%" style="padding:0 5px 8px;vertical-align:top"><div style="background:${C.card};border:1px solid ${B};border-radius:8px;padding:14px 10px;text-align:center;height:96px;box-sizing:border-box;overflow:hidden">
       <div style="font-size:10px;color:${C.t2};text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">${label}</div>
       <div style="font-size:18px;font-weight:700;color:${color};font-family:monospace">${val}</div>
       <div style="font-size:10px;color:${C.t3};margin-top:4px">${sub}</div>
@@ -5118,7 +5120,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
     ${kpi('현재 현금잔액', fmt(cash), cash>=0?C.green:C.red, `기준: ${dashboardKpiDate}`)}
     ${kpi('매출채권 잔액', fmt(totalAR), C.amber, `기준: ${dashboardKpiDate}${highRiskARCount>0?' · 고위험 '+highRiskARCount+'건':''}`)}
     ${kpi('총 유동자산', fmt(totalLiquid), totalLiquid>=0?C.blue:C.red, `현금 ${fmt(cash)} + 채권 ${fmt(totalAR)}`)}
-    ${kpi('금주 순현금', fmt(wNet), wNet>=0?C.green:C.red, `${fmtMD(wStart)}~${fmtMD(wEnd)}`)}
+    ${kpi('총 자산 합계', fmt(totalAsset), totalAsset>=0?C.green:C.red, `유동 ${fmt(totalLiquid)} + 현물 ${fmt(totalPhysical)}`)}
   </tr></table>
   <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px"><tr>
     ${kpi('세종F2', fmt(sejongTotal), C.red, `세종시 ${sejongCount}건 (예정 포함)`)}
