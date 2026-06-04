@@ -167,6 +167,15 @@
   .ar-risk-badge.danger { background: rgba(255,77,106,0.15); color: var(--red); }
   .ar-risk-badge.normal { background: rgba(245,166,35,0.12); color: var(--amber); }
 
+  /* 주간 입출금 및 매출채권 요약 */
+  .weekly-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  .weekly-summary-panel { border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); padding: 12px; min-width: 0; }
+  .summary-panel-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .summary-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--border); }
+  .summary-line:last-child { border-bottom: none; }
+  .summary-val { font-family: var(--mono); font-weight: 600; color: var(--text); white-space: nowrap; }
+  @media (max-width: 900px) { .weekly-summary-grid { grid-template-columns: 1fr; } }
+
   /* LEGEND */
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); }
   .legend-item { display: flex; align-items: center; gap: 5px; }
@@ -873,6 +882,25 @@
           <div id="wkrpt-ar-highrisk" style="font-size:18px;font-weight:700;color:var(--red);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-highrisk-cnt" style="font-size:11px;color:var(--red);margin-top:3px">0건</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== 주간 입출금 및 매출채권 요약 ======== -->
+  <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-top:16px">
+    <div class="chart-title">📊 주간 입출금 및 매출채권 요약</div>
+    <div class="weekly-summary-grid">
+      <div class="weekly-summary-panel">
+        <div class="summary-panel-title">입출금 요약</div>
+        <div id="wkrpt-cf-summary"></div>
+      </div>
+      <div class="weekly-summary-panel">
+        <div class="summary-panel-title">매출채권 요약</div>
+        <div id="wkrpt-ar-summary-detail"></div>
+      </div>
+      <div class="weekly-summary-panel">
+        <div class="summary-panel-title">확인 포인트</div>
+        <ul id="wkrpt-check-points" style="margin:0;padding-left:14px;list-style:disc"></ul>
       </div>
     </div>
   </div>
@@ -4987,6 +5015,42 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(delayedAmt);
   document.getElementById('wkrpt-ar-highrisk-cnt').textContent  =
     `지연 총 ${delayedTotal}건(보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%))`;
+
+  // ── 주간 입출금 및 매출채권 요약 ─────────────────────────
+  const topIn  = groupedIn.length  ? groupedIn[0]  : null;
+  const topOut = groupedOut.length ? groupedOut[0] : null;
+
+  const sLine = (label, val, color = 'var(--text)') =>
+    `<div class="summary-line"><span>${label}</span><span class="summary-val" style="color:${color}">${val}</span></div>`;
+
+  document.getElementById('wkrpt-cf-summary').innerHTML = [
+    sLine('주간 입금',   '+' + fmt(wIn),  'var(--green)'),
+    sLine('주간 출금',   '-' + fmt(wOut), 'var(--red)'),
+    sLine('주간 순현금', (wNet >= 0 ? '+' : '') + fmt(wNet), wNet >= 0 ? 'var(--green)' : 'var(--red)'),
+    sLine('입금 중분류', groupedIn.length + '개'),
+    sLine('출금 중분류', groupedOut.length + '개'),
+    topIn  ? sLine('최대 입금 중분류', topIn.mid_cat  + '  +' + fmt(topIn.amount),  'var(--green)') : '',
+    topOut ? sLine('최대 출금 중분류', topOut.mid_cat + '  -' + fmt(topOut.amount), 'var(--red)')   : '',
+  ].filter(Boolean).join('');
+
+  document.getElementById('wkrpt-ar-summary-detail').innerHTML = [
+    sLine('주간 신규 AR',  fmt(wNewAmt)    + ' / ' + wNewAR.length + '건'),
+    sLine('주간 회수 AR',  fmt(wColAmt)    + ' / ' + wColCF.length + '건', 'var(--green)'),
+    sLine('전체 AR 잔액',  fmt(remTotal),                                  'var(--amber)'),
+    sLine('지연/미정 AR',  fmt(delayedAmt) + ' / ' + delayedTotal  + '건', 'var(--red)'),
+    sLine('  보통',        delayedNormal + '건(' + delayedNrRate + '%)'),
+    sLine('  위험',        delayedDanger + '건(' + delayedDrRate + '%)', delayedDrRate > 0 ? 'var(--red)' : 'var(--text3)'),
+  ].join('');
+
+  const checkPoints = [];
+  if (wNet < 0)                                  checkPoints.push('주간 순현금이 음수입니다. 출금 상위 중분류 확인이 필요합니다.');
+  if (delayedDrRate >= 50)                       checkPoints.push('지연/미정 AR 중 위험 등급 비중이 높습니다.');
+  if (wColAmt < wNewAmt)                         checkPoints.push('주간 회수 AR이 신규 AR보다 낮습니다.');
+  if (topOut && topIn && topOut.amount > topIn.amount) checkPoints.push('최대 출금 중분류 금액이 최대 입금 중분류보다 큽니다.');
+  if (!checkPoints.length)                       checkPoints.push('주간 입출금과 매출채권 흐름을 정기 확인하세요.');
+
+  document.getElementById('wkrpt-check-points').innerHTML =
+    checkPoints.map(t => `<li style="font-size:12px;color:var(--text2);padding:3px 0;line-height:1.5">${t}</li>`).join('');
 
 }
 
