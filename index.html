@@ -2816,21 +2816,30 @@ function renderARBarChart() {
   const ctx = document.getElementById('arBarChart').getContext('2d');
   if (arBarInst) arBarInst.destroy();
 
-  // 거래처별 미회수 + 지연 여부 집계
+  // 거래처별 미회수 + 위험등급 집계
+  // 색상 우선순위: 지연/미정+위험(빨강) > 지연/미정+보통(주황) > 정상+보통(초록) > 중립(회색)
   const partnerMap = {};
   let totalRemaining = 0;
   for (const r of arData) {
     if (r.remaining !== 0) {
-      if (!partnerMap[r.partner]) partnerMap[r.partner] = { remaining: 0, delayed: 0, delayedAmt: 0 };
-      partnerMap[r.partner].remaining += r.remaining;
-      if (calcARStatusAndRisk(r, refDate).status === '지연') {
-        partnerMap[r.partner].delayed++;
-        partnerMap[r.partner].delayedAmt += r.remaining;
+      if (!partnerMap[r.partner]) {
+        partnerMap[r.partner] = { remaining: 0, hasDanger: false, hasWarning: false, hasNormal: false,
+                                  delayCount: 0, delayAmt: 0 };
+      }
+      const p = partnerMap[r.partner];
+      p.remaining += r.remaining;
+      const risk = calcARStatusAndRisk(r, refDate);
+      if ((risk.status === '지연' || risk.status === '미정') && risk.riskLevel === '위험') {
+        p.hasDanger = true; p.delayCount++; p.delayAmt += r.remaining;
+      } else if ((risk.status === '지연' || risk.status === '미정') && risk.riskLevel === '보통') {
+        p.hasWarning = true; p.delayCount++; p.delayAmt += r.remaining;
+      } else if (risk.status === '정상') {
+        p.hasNormal = true;
       }
       totalRemaining += r.remaining;
     }
   }
-  const all = Object.entries(partnerMap).sort((a,b) => b[1].remaining - a[1].remaining);
+  const all = Object.entries(partnerMap).sort((a, b) => b[1].remaining - a[1].remaining);
 
   const totalEl = document.getElementById('ar-bar-total');
   if (totalEl) totalEl.textContent = `총 ${fmt(totalRemaining)}원`;
@@ -2839,8 +2848,13 @@ function renderARBarChart() {
   const wrap = document.getElementById('ar-bar-wrap');
   if (wrap) wrap.style.height = chartHeight + 'px';
 
-  // 지연 거래처는 빨간색, 정상은 노란색
-  const bgColors = all.map(([, v]) => v.delayed > 0 ? 'rgba(255,77,106,0.7)' : 'rgba(245,166,35,0.7)');
+  // 색상 결정: 위험 > 보통 지연/미정 > 정상 > 중립
+  const bgColors = all.map(([, v]) => {
+    if (v.hasDanger)  return 'rgba(255,77,106,0.75)';   // 빨강: 지연/미정+위험
+    if (v.hasWarning) return 'rgba(245,166,35,0.75)';   // 주황: 지연/미정+보통
+    if (v.hasNormal)  return 'rgba(46,199,122,0.75)';   // 초록: 정상+보통
+    return 'rgba(155,160,176,0.5)';                      // 회색: 완료 등 중립
+  });
 
   arBarInst = new Chart(ctx, {
     type: 'bar',
@@ -2861,13 +2875,16 @@ function renderARBarChart() {
         tooltip: {
           callbacks: {
             label: (c) => {
-              const partner = all[c.dataIndex];
-              const v = partner[1];
+              const [, v] = all[c.dataIndex];
               const lines = [`미회수: ₩${fmt(c.raw)}`];
-              if (v.delayed > 0) {
-                lines.push(`⚠ 지연 회수: ₩${fmt(v.delayedAmt)} (${v.delayed}건)`);
+              if (v.hasDanger) {
+                lines.push(`🔴 지연·미정(위험): ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
+              } else if (v.hasWarning) {
+                lines.push(`🟠 지연·미정(보통): ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
+              } else if (v.hasNormal) {
+                lines.push('🟢 정상 회수 예정');
               } else {
-                lines.push('✅ 지연 없음');
+                lines.push('— 완료');
               }
               return lines;
             }
@@ -2884,7 +2901,6 @@ function renderARBarChart() {
     }
   });
 
-  // 클릭 가능한 커서 표시
   ctx.canvas.style.cursor = 'pointer';
 }
 
