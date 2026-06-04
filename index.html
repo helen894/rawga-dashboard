@@ -2221,7 +2221,15 @@ function calcKPIs() {
   const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, ref) }));
   // 전체 remaining 합산 (음수 포함) — renderWeeklyReport remTotal과 기준 통일
   const totalAR    = arView.reduce((s, r) => s + Number(r.remaining || 0), 0);
-  const delayedAR  = arView.filter(r => r.status === '지연').length;
+  // 지연+미정 AR 요약 (대시보드 매출채권 잔액 하단 표시 — 리포팅 주간 지연 카드와 동일 기준)
+  const delayedOrUnknownAR   = arView.filter(r => (r.remaining || 0) > 0 && (r.status === '지연' || r.status === '미정'));
+  const delayedTotalCount    = delayedOrUnknownAR.length;
+  const delayedNormalCount   = delayedOrUnknownAR.filter(r => r.riskLevel === '보통').length;
+  const delayedDangerCount   = delayedOrUnknownAR.filter(r => r.riskLevel === '위험').length;
+  const delayedNrRate        = delayedTotalCount ? Math.round(delayedNormalCount / delayedTotalCount * 100) : 0;
+  const delayedDrRate        = delayedTotalCount ? Math.round(delayedDangerCount / delayedTotalCount * 100) : 0;
+  const delayedARSub         = `총 ${delayedTotalCount}건 · 보통 ${delayedNormalCount}건(${delayedNrRate}%) · 위험 ${delayedDangerCount}건(${delayedDrRate}%)`;
+  const delayedAR  = delayedTotalCount; // 하위 호환 (기존 필드)
   const highRiskAR = arView.filter(r => r.riskLevel === '위험').length;
 
   // 런웨이: 최근 3개월 평균 지출 기준
@@ -2265,7 +2273,7 @@ function calcKPIs() {
   }
   const nextMonthCash = cash + nmIn - nmOut;
 
-  return { cash, wIn, wOut, wNet, nextCash, totalAR, delayedAR, highRiskAR,
+  return { cash, wIn, wOut, wNet, nextCash, totalAR, delayedAR, highRiskAR, delayedARSub,
            wStart, wEnd, nwStart, nwEnd, pwStart, pwEnd,
            runway, avgMonthlyOut, mOut, mIn, mNet, pmOut, momOutGrowth,
            pwIn, pwOut, wowInGrowth, wowOutGrowth,
@@ -2333,9 +2341,8 @@ function renderKPIs() {
   }
 
   // 매출채권
-  document.getElementById('kpi-ar').textContent = fmt(k.totalAR);
-  document.getElementById('kpi-ar-sub').textContent =
-    `기준: ${refDate}` + (k.highRiskAR > 0 ? ` · 고위험 ${k.highRiskAR}건` : '');
+  document.getElementById('kpi-ar').textContent     = fmt(k.totalAR);
+  document.getElementById('kpi-ar-sub').textContent = k.delayedARSub;
 
   // 총 자산 합계 (총 유동자산 + 총 현물자산)
   // sejongTotal, laosTotal, totalLiquid, totalPhysical은 위에서 이미 계산됨
@@ -5043,9 +5050,9 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const TDS = `padding:6px 8px;font-size:12px;border-bottom:1px solid ${B};`;
   const THS = `padding:7px 8px;font-size:11px;font-weight:600;color:${C.t2};background:${C.bg3};text-align:`;
 
-  // kpi 카드 — 균일 높이(96px, box-sizing:border-box) + vertical-align:top
+  // kpi 카드 — 균일 높이(110px, box-sizing:border-box) + vertical-align:top
   const kpi = (label, val, color, sub) =>
-    `<td width="25%" style="padding:0 5px 8px;vertical-align:top"><div style="background:${C.card};border:1px solid ${B};border-radius:8px;padding:14px 10px;text-align:center;height:96px;box-sizing:border-box;overflow:hidden">
+    `<td width="25%" style="padding:0 5px 8px;vertical-align:top"><div style="background:${C.card};border:1px solid ${B};border-radius:8px;padding:14px 10px;text-align:center;height:110px;box-sizing:border-box;overflow:hidden">
       <div style="font-size:10px;color:${C.t2};text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">${label}</div>
       <div style="font-size:18px;font-weight:700;color:${color};font-family:monospace">${val}</div>
       <div style="font-size:10px;color:${C.t3};margin-top:4px">${sub}</div>
@@ -5118,7 +5125,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   <div style="font-size:11px;color:${C.t3};margin-bottom:12px">기준월: ${refYear}년 ${refMonth}월 &nbsp;·&nbsp; 기준일: ${dashboardKpiDate}</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     ${kpi('현재 현금잔액', fmt(cash), cash>=0?C.green:C.red, `기준: ${dashboardKpiDate}`)}
-    ${kpi('매출채권 잔액', fmt(totalAR), C.amber, `기준: ${dashboardKpiDate}${highRiskARCount>0?' · 고위험 '+highRiskARCount+'건':''}`)}
+    ${kpi('매출채권 잔액', fmt(totalAR), C.amber, dlySub)}
     ${kpi('총 유동자산', fmt(totalLiquid), totalLiquid>=0?C.blue:C.red, `현금 ${fmt(cash)} + 채권 ${fmt(totalAR)}`)}
     ${kpi('총 자산 합계', fmt(totalAsset), totalAsset>=0?C.green:C.red, `유동 ${fmt(totalLiquid)} + 현물 ${fmt(totalPhysical)}`)}
   </tr></table>
