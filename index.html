@@ -2812,34 +2812,43 @@ function renderWeeklyChart() {
   });
 }
 
-/* AR 거래처별 미회수 차트 색상 상수 */
+/* AR 거래처별 미회수 차트 색상 상수 (neutral 제거 — 완료/기타는 차트 제외) */
 const AR_BAR_COLORS = {
   danger:  'rgba(255, 77, 106, 0.75)',  // 빨강: 지연/미정 + 위험
   warning: 'rgba(245, 166,  35, 0.75)', // 주황: 지연/미정 + 보통
   normal:  'rgba( 46, 199, 122, 0.75)', // 초록: 정상 + 보통
-  neutral: 'rgba(155, 160, 176, 0.50)', // 회색: 완료 등 기타
 };
 const AR_BAR_BORDER_COLORS = {
   danger:  '#ff4d6a',
   warning: '#f5a623',
   normal:  '#2ec77a',
-  neutral: '#9aa0b0',
 };
 
-/* 거래처 그룹 대표 색상 키 결정 (위험 > 주황 > 초록 > 회색) */
+/* 차트 대상 AR: remaining > 0이고 정상/지연/미정 상태인 것만 */
+function isActiveARForChart(ar) {
+  if (Number(ar.remaining || 0) <= 0) return false;
+  const s = calcARStatusAndRisk(ar, refDate).status;
+  return s === '정상' || s === '지연' || s === '미정';
+}
+
+/* 거래처 그룹 대표 색상 키 결정
+ * — active AR만 대상 (완료/음수 제외)
+ * — 그룹 내 active AR이 전혀 없으면 null (차트 미표시)
+ * 우선순위: danger > warning > normal > null */
 function getARPartnerRiskColorKey(rows) {
-  const risks = rows.map(r => calcARStatusAndRisk(r, refDate));
-  if (risks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '위험'))  return 'danger';
-  if (risks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '보통'))  return 'warning';
-  if (risks.some(r => r.status === '정상' && r.riskLevel === '보통'))                          return 'normal';
-  return 'neutral';
+  const activeRisks = rows.filter(isActiveARForChart).map(ar => calcARStatusAndRisk(ar, refDate));
+  if (!activeRisks.length) return null;
+  if (activeRisks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '위험'))  return 'danger';
+  if (activeRisks.some(r => (r.status === '지연' || r.status === '미정') && r.riskLevel === '보통'))  return 'warning';
+  if (activeRisks.some(r => r.status === '정상'))                                                    return 'normal';
+  return null;
 }
 
 function renderARBarChart() {
   const ctx = document.getElementById('arBarChart').getContext('2d');
   if (arBarInst) arBarInst.destroy();
 
-  // 거래처별 미회수 + AR rows 수집
+  // 거래처별 집계: 기존 remaining!==0 기준 유지 (금액), rows 배열 보존 (색상 판정용)
   const partnerMap = {};
   let totalRemaining = 0;
   for (const r of arData) {
@@ -2848,35 +2857,50 @@ function renderARBarChart() {
       const p = partnerMap[r.partner];
       p.remaining += r.remaining;
       p.rows.push(r);
-      const risk = calcARStatusAndRisk(r, refDate);
-      if (risk.status === '지연' || risk.status === '미정') { p.delayCount++; p.delayAmt += r.remaining; }
+      if (isActiveARForChart(r)) {
+        const risk = calcARStatusAndRisk(r, refDate);
+        if (risk.status === '지연' || risk.status === '미정') { p.delayCount++; p.delayAmt += r.remaining; }
+      }
       totalRemaining += r.remaining;
     }
   }
-  const all = Object.entries(partnerMap).sort((a, b) => b[1].remaining - a[1].remaining);
+
+  // 색상 키 계산 후 null(완료만 있는 거래처) 제외
+  let partnerRows = Object.entries(partnerMap)
+    .map(([partner, v]) => ({ partner, ...v, riskColorKey: getARPartnerRiskColorKey(v.rows) }))
+    .filter(row => row.riskColorKey !== null)
+    .sort((a, b) => b.remaining - a.remaining);
+
+  // ── 디버그: 거래처별 색상 판정 결과 ──────────────────────
+  console.table(partnerRows.map(row => ({
+    partner: row.partner,
+    remaining: row.remaining,
+    riskColorKey: row.riskColorKey,
+    statusSummary: row.rows.map(ar => {
+      const risk = calcARStatusAndRisk(ar, refDate);
+      return `${risk.status}/${risk.riskLevel}/${ar.remaining}`;
+    }).join(', ')
+  })));
+  // ─────────────────────────────────────────────────────────
 
   const totalEl = document.getElementById('ar-bar-total');
   if (totalEl) totalEl.textContent = `총 ${fmt(totalRemaining)}원`;
 
-  const chartHeight = Math.max(160, all.length * 36);
+  const chartHeight = Math.max(160, partnerRows.length * 36);
   const wrap = document.getElementById('ar-bar-wrap');
   if (wrap) wrap.style.height = chartHeight + 'px';
 
-  // 각 거래처의 대표 색상 키 계산
-  const colorKeys = all.map(([, v]) => getARPartnerRiskColorKey(v.rows));
-  const bgColors     = colorKeys.map(k => AR_BAR_COLORS[k]);
-  const borderColors = colorKeys.map(k => AR_BAR_BORDER_COLORS[k]);
-
-  // 위험수준 라벨 (툴팁용)
-  const riskLabel = { danger: '위험', warning: '보통/지연', normal: '정상', neutral: '—' };
+  const bgColors     = partnerRows.map(row => AR_BAR_COLORS[row.riskColorKey]);
+  const borderColors = partnerRows.map(row => AR_BAR_BORDER_COLORS[row.riskColorKey]);
+  const riskLabel    = { danger: '위험', warning: '보통/지연', normal: '정상' };
 
   arBarInst = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: all.map(t => t[0]),
+      labels: partnerRows.map(row => row.partner),
       datasets: [{
         label: '미회수액',
-        data: all.map(t => t[1].remaining),
+        data: partnerRows.map(row => row.remaining),
         backgroundColor: bgColors,
         borderColor: borderColors,
         borderWidth: 1,
@@ -2888,7 +2912,7 @@ function renderARBarChart() {
       responsive: true, maintainAspectRatio: false,
       onClick: (e, elements) => {
         if (!elements.length) return;
-        const partner = all[elements[0].index][0];
+        const partner = partnerRows[elements[0].index].partner;
         switchToARTab(partner);
       },
       plugins: {
@@ -2896,10 +2920,9 @@ function renderARBarChart() {
         tooltip: {
           callbacks: {
             label: (c) => {
-              const [, v] = all[c.dataIndex];
-              const key = colorKeys[c.dataIndex];
-              const lines = [`미회수: ₩${fmt(c.raw)}`, `위험수준: ${riskLabel[key]}`];
-              if (v.delayCount > 0) lines.push(`지연·미정: ₩${fmt(v.delayAmt)} (${v.delayCount}건)`);
+              const row = partnerRows[c.dataIndex];
+              const lines = [`미회수: ₩${fmt(c.raw)}`, `위험수준: ${riskLabel[row.riskColorKey]}`];
+              if (row.delayCount > 0) lines.push(`지연·미정: ₩${fmt(row.delayAmt)} (${row.delayCount}건)`);
               return lines;
             }
           },
