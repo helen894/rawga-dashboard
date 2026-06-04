@@ -869,93 +869,10 @@
           <div id="wkrpt-ar-remaining-cnt" style="font-size:11px;color:var(--amber);margin-top:3px">0건</div>
         </div>
         <div style="background:var(--red2);border-radius:8px;padding:12px 14px">
-          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">고위험 (60일↑/지연)</div>
+          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">위험 AR</div>
           <div id="wkrpt-ar-highrisk" style="font-size:18px;font-weight:700;color:var(--red);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-highrisk-cnt" style="font-size:11px;color:var(--red);margin-top:3px">0건</div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 고위험 AR 목록 -->
-  <div class="chart-box">
-    <div class="chart-title">
-      ⚠️ 고위험 매출채권
-      <small id="wkrpt-highrisk-label" style="font-weight:400;color:var(--text3)">경과일 60일 이상 또는 지연 상태</small>
-    </div>
-    <!-- 2단: 테이블(좌) + 위험 요약 패널(우) -->
-    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
-
-      <!-- 좌: AR 테이블 -->
-      <div style="flex:1;min-width:300px;max-height:320px;overflow-y:auto;overflow-x:auto">
-        <table style="width:100%;min-width:380px;border-collapse:collapse;font-size:12px;table-layout:fixed">
-          <colgroup>
-            <col style="width:26%">
-            <col style="width:15%">
-            <col style="width:20%">
-            <col style="width:20%">
-            <col style="width:10%">
-            <col style="width:9%">
-          </colgroup>
-          <thead>
-            <tr>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처</th>
-              <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">시작일</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">예상회수액</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
-              <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">경과일</th>
-              <th style="text-align:center;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">상태</th>
-            </tr>
-          </thead>
-          <tbody id="wkrpt-highrisk-tbody"></tbody>
-        </table>
-      </div>
-
-      <!-- 우: 위험 요약 패널 -->
-      <div style="width:196px;flex-shrink:0;display:flex;flex-direction:column;gap:8px">
-
-        <!-- 핵심 지표 -->
-        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">고위험 현황</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:11px;color:var(--text2)">건수</span>
-            <span id="wkrpt-hr-cnt" style="font-size:11px;font-weight:600;color:var(--text)">—</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:11px;color:var(--text2)">총 미회수액</span>
-            <span id="wkrpt-hr-amt" style="font-size:11px;font-weight:600;color:var(--amber);font-family:var(--mono)">—</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:11px;color:var(--text2)">평균 경과일</span>
-            <span id="wkrpt-hr-avg" style="font-size:11px;font-weight:600;color:var(--red)">—</span>
-          </div>
-        </div>
-
-        <!-- 경과일 구간 -->
-        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">경과일 구간</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:11px;color:var(--amber)">60–89일</span>
-            <span id="wkrpt-hr-r60" style="font-size:11px;font-weight:500;color:var(--text)">—</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span style="font-size:11px;color:var(--red)">90–179일</span>
-            <span id="wkrpt-hr-r90" style="font-size:11px;font-weight:500;color:var(--text)">—</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:11px;font-weight:600;color:var(--red)">180일↑</span>
-            <span id="wkrpt-hr-r180" style="font-size:11px;font-weight:600;color:var(--red)">—</span>
-          </div>
-        </div>
-
-        <!-- 상태별 분포 -->
-        <div style="background:var(--bg3);border-radius:8px;padding:10px 12px">
-          <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">상태별</div>
-          <div id="wkrpt-hr-status" style="display:flex;flex-direction:column;gap:4px">
-            <div style="font-size:11px;color:var(--text3)">—</div>
-          </div>
-        </div>
-
       </div>
     </div>
   </div>
@@ -5005,48 +4922,6 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(highRiskAmt);
   document.getElementById('wkrpt-ar-highrisk-cnt').textContent  = `${highRisk.length}건`;
 
-  // ── 고위험 AR 목록 ────────────────────────────────────
-  const statusColor = s => {
-    if (s === '지연')   return 'var(--red)';
-    if (s === '완료')   return 'var(--green)';
-    if (s === '미정')   return 'var(--purple)';
-    return 'var(--text2)';
-  };
-  const hrTbody = document.getElementById('wkrpt-highrisk-tbody');
-  hrTbody.innerHTML = highRisk.length ? highRisk.map(a => `
-    <tr style="border-bottom:1px solid var(--border)">
-      <td style="${tdEll}font-weight:500" title="${a.partner||''}">${a.partner || '—'}</td>
-      <td style="${tdBase}color:var(--text2)">${a.start || '—'}</td>
-      <td style="${tdBase}text-align:right;font-family:var(--mono)">${fmt(a.expected || 0)}</td>
-      <td style="${tdBase}text-align:right;color:var(--amber);font-family:var(--mono)">${fmt(a.remaining || 0)}</td>
-      <td style="${tdBase}text-align:center;font-weight:600;color:${(a.basisDays||0)>30?'var(--red)':'var(--amber)'}">${a.basisDays || 0}일</td>
-      <td style="${tdBase}text-align:center;font-size:11px;font-weight:600;color:${statusColor(a.status)}">${a.status || '—'}</td>
-    </tr>`).join('') :
-    `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">고위험 매출채권이 없습니다. 👍</td></tr>`;
-
-  // ── 고위험 요약 패널 ────────────────────────────────────
-  const hrAvgEl = highRisk.length
-    ? Math.round(highRisk.reduce((s, a) => s + (a.basisDays || 0), 0) / highRisk.length) : 0;
-  const hrR60  = highRisk.filter(a => (a.basisDays||0) >= 60  && (a.basisDays||0) < 90);
-  const hrR90  = highRisk.filter(a => (a.basisDays||0) >= 90  && (a.basisDays||0) < 180);
-  const hrR180 = highRisk.filter(a => (a.basisDays||0) >= 180);
-  const hrStMap = {};
-  highRisk.forEach(a => { const s = a.status || '미정'; hrStMap[s] = (hrStMap[s] || 0) + 1; });
-  const hrStColor = { '지연':'var(--red)', '미정':'var(--purple)', '완료':'var(--green)' };
-
-  document.getElementById('wkrpt-hr-cnt').textContent  = highRisk.length ? `${highRisk.length}건` : '없음';
-  document.getElementById('wkrpt-hr-amt').textContent  = highRisk.length ? fmt(highRiskAmt) : '—';
-  document.getElementById('wkrpt-hr-avg').textContent  = highRisk.length ? `${hrAvgEl}일` : '—';
-  document.getElementById('wkrpt-hr-r60').textContent  = hrR60.length  ? `${hrR60.length}건`  : '없음';
-  document.getElementById('wkrpt-hr-r90').textContent  = hrR90.length  ? `${hrR90.length}건`  : '없음';
-  document.getElementById('wkrpt-hr-r180').textContent = hrR180.length ? `${hrR180.length}건` : '없음';
-  document.getElementById('wkrpt-hr-status').innerHTML = Object.keys(hrStMap).length
-    ? Object.entries(hrStMap).sort((a, b) => b[1] - a[1]).map(([s, c]) =>
-        `<div style="display:flex;justify-content:space-between;align-items:center">` +
-        `<span style="font-size:11px;color:${hrStColor[s] || 'var(--text2)'}">${s}</span>` +
-        `<span style="font-size:11px;font-weight:500;color:var(--text)">${c}건</span></div>`
-      ).join('')
-    : `<div style="font-size:11px;color:var(--text3)">—</div>`;
 }
 
 /* =================================================================
@@ -5176,14 +5051,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
          <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
          <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td></tr>`).join('')
     : `<tr><td colspan="3" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
-  const hrHtml = highRisk.length ? highRisk.map(a =>
-    `<tr><td style="${TDS}font-weight:500">${a.partner||'—'}</td>
-         <td style="${TDS}color:${C.t2}">${a.start||'—'}</td>
-         <td style="${TDS}text-align:right">${fmt(a.expected||0)}</td>
-         <td style="${TDS}text-align:right;color:${C.amber}">${fmt(a.remaining||0)}</td>
-         <td style="${TDS}text-align:center;font-weight:600;color:${(a.basisDays||0)>30?C.red:C.amber}">${a.basisDays||0}일</td>
-         <td style="${TDS}text-align:center;font-size:11px;font-weight:600;color:${a.status==='지연'?C.red:a.status==='완료'?C.green:a.status==='미정'?C.amber:C.t2}">${a.status||'—'}</td></tr>`).join('')
-    : `<tr><td colspan="6" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">고위험 매출채권이 없습니다 👍</td></tr>`;
+  // hrHtml 제거 — ⚠️ 고위험 매출채권 상세 섹션 화면/dry-run에서 제거됨
 
   // ── 스크롤 테이블 래퍼 (Dry-run 미리보기 전용 — 브라우저 new window 렌더링) ──
   // • MAX_ROWS 초과: overflow:auto 컨테이너 + position:sticky 헤더 (약 10행 높이 후 스크롤)
@@ -5280,10 +5148,6 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
         <div style="font-size:10px;color:${co};margin-top:3px">${s}</div></div></td>`).join('')}
   </tr></table></td></tr>
-<!-- 고위험 AR -->
-<tr><td style="background:${C.card};padding:0 18px 18px">
-  <div style="font-size:13px;font-weight:600;color:${C.red};margin-bottom:8px">⚠️ 고위험 매출채권${cntBadge(highRisk.length, highRisk.length > MAX_ROWS)}</div>
-  ${scrollTbl([['거래처','left'],['시작일','left'],['예상회수액','right'],['미회수잔액','right'],['경과일','center'],['상태','center']], hrHtml, highRisk.length)}</td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
   <div style="font-size:11px;color:${C.t3}">RAWGA 자금 대시보드 · 자동 발송 리포트 · ${sentAt}</div>
