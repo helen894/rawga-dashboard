@@ -869,7 +869,7 @@
           <div id="wkrpt-ar-remaining-cnt" style="font-size:11px;color:var(--amber);margin-top:3px">0건</div>
         </div>
         <div style="background:var(--red2);border-radius:8px;padding:12px 14px">
-          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">위험 AR</div>
+          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">지연채권</div>
           <div id="wkrpt-ar-highrisk" style="font-size:18px;font-weight:700;color:var(--red);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-highrisk-cnt" style="font-size:11px;color:var(--red);margin-top:3px">0건</div>
         </div>
@@ -2219,7 +2219,8 @@ function calcKPIs() {
 
   // arView — refDate 기준 상태/위험등급 재계산 (arData 원본 불변)
   const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, ref) }));
-  const totalAR    = arView.reduce((s, r) => s + (r.remaining || 0), 0);
+  // remaining > 0 필터: 음수 remaining(초과 회수) 제외 — renderWeeklyReport와 기준 통일
+  const totalAR    = arView.filter(r => (r.remaining || 0) > 0).reduce((s, r) => s + (r.remaining || 0), 0);
   const delayedAR  = arView.filter(r => r.status === '지연').length;
   const highRiskAR = arView.filter(r => r.riskLevel === '위험').length;
 
@@ -4908,10 +4909,14 @@ function renderWeeklyReport() {
   const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
 
-  // 고위험: 위험등급 '위험' (due_date 초과 30일+ 또는 미정 30일+)
-  const highRisk = arView.filter(a => a.riskLevel === '위험')
-    .sort((a, b) => (b.basisDays || 0) - (a.basisDays || 0));
-  const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
+  // 지연채권: status === '지연' 기준 (미정 위험등급 포함 안 함)
+  const delayedAR      = arView.filter(a => (a.remaining || 0) > 0 && a.status === '지연');
+  const delayedAmt     = delayedAR.reduce((s, a) => s + (a.remaining || 0), 0);
+  const delayedTotal   = delayedAR.length;
+  const delayedNormal  = delayedAR.filter(a => a.riskLevel === '보통').length;
+  const delayedDanger  = delayedAR.filter(a => a.riskLevel === '위험').length;
+  const delayedNrRate  = delayedTotal ? Math.round(delayedNormal / delayedTotal * 100) : 0;
+  const delayedDrRate  = delayedTotal ? Math.round(delayedDanger / delayedTotal * 100) : 0;
 
   document.getElementById('wkrpt-ar-new').textContent           = fmt(wNewAmt);
   document.getElementById('wkrpt-ar-new-cnt').textContent       = `${wNewAR.length}건`;
@@ -4919,8 +4924,11 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-ar-collected-cnt').textContent = `${wColCF.length}건`;
   document.getElementById('wkrpt-ar-remaining').textContent     = fmt(remTotal);
   document.getElementById('wkrpt-ar-remaining-cnt').textContent = `${remAll.length}건`;
-  document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(highRiskAmt);
-  document.getElementById('wkrpt-ar-highrisk-cnt').textContent  = `${highRisk.length}건`;
+  document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(delayedAmt);
+  document.getElementById('wkrpt-ar-highrisk-cnt').textContent  =
+    delayedTotal
+      ? `총 ${delayedTotal}건 · 보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%)`
+      : '0건';
 
 }
 
@@ -4998,13 +5006,24 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
   const remAll   = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
+  // 지연채권: status === '지연' 기준
+  const dlyAR      = arView.filter(a => (a.remaining || 0) > 0 && a.status === '지연');
+  const dlyAmt     = dlyAR.reduce((s, a) => s + (a.remaining || 0), 0);
+  const dlyTotal   = dlyAR.length;
+  const dlyNormal  = dlyAR.filter(a => a.riskLevel === '보통').length;
+  const dlyDanger  = dlyAR.filter(a => a.riskLevel === '위험').length;
+  const dlyNrRate  = dlyTotal ? Math.round(dlyNormal / dlyTotal * 100) : 0;
+  const dlyDrRate  = dlyTotal ? Math.round(dlyDanger / dlyTotal * 100) : 0;
+  const dlySub     = dlyTotal
+    ? `총 ${dlyTotal}건 · 보통 ${dlyNormal}건(${dlyNrRate}%) · 위험 ${dlyDanger}건(${dlyDrRate}%)`
+    : '0건';
+  // 고위험 AR (이메일 KPI용 유지)
   const highRisk = arView.filter(a => a.riskLevel === '위험')
                          .sort((a, b) => (b.basisDays||0) - (a.basisDays||0));
-  const highRiskAmt = highRisk.reduce((s, a) => s + (a.remaining || 0), 0);
 
   // ── 월간 대시보드 요약 KPI (calcKPIs와 동일 계산 기준) ──
   const totalAR         = remTotal;          // 매출채권 잔액 = 전체 미회수 합계
-  const highRiskARCount = highRisk.length;   // 고위험 AR 건수 (elapsed≥60 or 지연)
+  const highRiskARCount = highRisk.length;   // 위험등급 '위험' AR 건수
   const totalLiquid     = cash + totalAR;    // 총 유동자산 = 현금 + 채권
   const sejongTotal = cfArr
     .filter(r => r.big_cat === '세종시' && (r.status === '실제 지출' || r.status === '지출 예정'))
@@ -5142,7 +5161,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
 <tr><td style="background:${C.card};padding:0 18px 18px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
-    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['고위험 AR',fmt(highRiskAmt),C.red,`${highRisk.length}건`]]
+    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['지연채권',fmt(dlyAmt),C.red,dlySub]]
       .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center">
         <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
