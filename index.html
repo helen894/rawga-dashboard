@@ -854,12 +854,12 @@
       <div class="chart-title">📋 매출채권 요약</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div style="background:var(--bg3);border-radius:8px;padding:12px 14px">
-          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">주간 신규 발생</div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">주간 신규</div>
           <div id="wkrpt-ar-new" style="font-size:18px;font-weight:700;color:var(--text);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-new-cnt" style="font-size:11px;color:var(--text3);margin-top:3px">0건</div>
         </div>
         <div style="background:var(--green2);border-radius:8px;padding:12px 14px">
-          <div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">주간 회수 (AR 반영)</div>
+          <div style="font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">주간 회수</div>
           <div id="wkrpt-ar-collected" style="font-size:18px;font-weight:700;color:var(--green);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-collected-cnt" style="font-size:11px;color:var(--green);margin-top:3px">0건</div>
         </div>
@@ -869,7 +869,7 @@
           <div id="wkrpt-ar-remaining-cnt" style="font-size:11px;color:var(--amber);margin-top:3px">0건</div>
         </div>
         <div style="background:var(--red2);border-radius:8px;padding:12px 14px">
-          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">지연채권</div>
+          <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">지연</div>
           <div id="wkrpt-ar-highrisk" style="font-size:18px;font-weight:700;color:var(--red);font-family:var(--mono)">—</div>
           <div id="wkrpt-ar-highrisk-cnt" style="font-size:11px;color:var(--red);margin-top:3px">0건</div>
         </div>
@@ -2219,8 +2219,8 @@ function calcKPIs() {
 
   // arView — refDate 기준 상태/위험등급 재계산 (arData 원본 불변)
   const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, ref) }));
-  // remaining > 0 필터: 음수 remaining(초과 회수) 제외 — renderWeeklyReport와 기준 통일
-  const totalAR    = arView.filter(r => (r.remaining || 0) > 0).reduce((s, r) => s + (r.remaining || 0), 0);
+  // 전체 remaining 합산 (음수 포함) — renderWeeklyReport remTotal과 기준 통일
+  const totalAR    = arView.reduce((s, r) => s + Number(r.remaining || 0), 0);
   const delayedAR  = arView.filter(r => r.status === '지연').length;
   const highRiskAR = arView.filter(r => r.riskLevel === '위험').length;
 
@@ -4905,12 +4905,12 @@ function renderWeeklyReport() {
   const wColCF   = cfData.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= wStart && r.ar_applied_date <= wEnd);
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
 
-  // 전체 미회수 잔액 (현재 스냅샷)
-  const remAll   = arView.filter(a => (a.remaining || 0) > 0);
-  const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
+  // 전체 미회수 잔액: 전체 remaining 합산 (음수 포함) — calcKPIs totalAR과 기준 통일
+  const remAll   = arView.filter(a => (a.remaining || 0) > 0); // 건수 표시용 (양수만)
+  const remTotal = arView.reduce((s, a) => s + Number(a.remaining || 0), 0); // 금액: 전체 합산
 
-  // 지연채권: status === '지연' 기준 (미정 위험등급 포함 안 함)
-  const delayedAR      = arView.filter(a => (a.remaining || 0) > 0 && a.status === '지연');
+  // 지연: status === '지연' 또는 '미정'인 미회수 AR (remaining > 0)
+  const delayedAR      = arView.filter(a => (a.remaining || 0) > 0 && (a.status === '지연' || a.status === '미정'));
   const delayedAmt     = delayedAR.reduce((s, a) => s + (a.remaining || 0), 0);
   const delayedTotal   = delayedAR.length;
   const delayedNormal  = delayedAR.filter(a => a.riskLevel === '보통').length;
@@ -5004,10 +5004,10 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
   const wNewAmt  = wNewAR.reduce((s, a) => s + (a.expected || 0), 0);
   const wColCF   = cfArr.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= wStart && r.ar_applied_date <= wEnd);
   const wColAmt  = wColCF.reduce((s, r) => s + (r.in || 0), 0);
-  const remAll   = arView.filter(a => (a.remaining || 0) > 0);
-  const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
-  // 지연채권: status === '지연' 기준
-  const dlyAR      = arView.filter(a => (a.remaining || 0) > 0 && a.status === '지연');
+  const remAll   = arView.filter(a => (a.remaining || 0) > 0); // 건수 표시용
+  const remTotal = arView.reduce((s, a) => s + Number(a.remaining || 0), 0); // 금액: 전체 합산
+  // 지연: status === '지연' 또는 '미정'인 미회수 AR
+  const dlyAR      = arView.filter(a => (a.remaining || 0) > 0 && (a.status === '지연' || a.status === '미정'));
   const dlyAmt     = dlyAR.reduce((s, a) => s + (a.remaining || 0), 0);
   const dlyTotal   = dlyAR.length;
   const dlyNormal  = dlyAR.filter(a => a.riskLevel === '보통').length;
@@ -5161,7 +5161,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
 <tr><td style="background:${C.card};padding:0 18px 18px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
-    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['지연채권',fmt(dlyAmt),C.red,dlySub]]
+    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['지연',fmt(dlyAmt),C.red,dlySub]]
       .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center">
         <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
