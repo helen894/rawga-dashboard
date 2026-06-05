@@ -167,14 +167,12 @@
   .ar-risk-badge.danger { background: rgba(255,77,106,0.15); color: var(--red); }
   .ar-risk-badge.normal { background: rgba(245,166,35,0.12); color: var(--amber); }
 
-  /* 주간 입출금 및 매출채권 요약 */
-  .weekly-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
-  .weekly-summary-panel { border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); padding: 12px; min-width: 0; }
-  .summary-panel-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
-  .summary-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--border); }
-  .summary-line:last-child { border-bottom: none; }
-  .summary-val { font-family: var(--mono); font-weight: 600; color: var(--text); white-space: nowrap; }
-  @media (max-width: 900px) { .weekly-summary-grid { grid-template-columns: 1fr; } }
+  /* 주간 요약 (textarea 에디터) */
+  .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
+  .weekly-summary-updated { font-size: 11px; color: var(--text3); }
+  .weekly-summary-textarea { width: 100%; min-height: 140px; resize: vertical; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 13px; font-family: var(--font); padding: 10px 12px; border-radius: 8px; line-height: 1.6; box-sizing: border-box; }
+  .weekly-summary-textarea:focus { outline: none; border-color: var(--blue); }
+  .weekly-summary-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 
   /* LEGEND */
   .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); }
@@ -886,22 +884,16 @@
     </div>
   </div>
 
-  <!-- ======== 주간 입출금 및 매출채권 요약 ======== -->
+  <!-- ======== 주간 요약 ======== -->
   <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-top:16px">
-    <div class="chart-title">📊 주간 입출금 및 매출채권 요약</div>
-    <div class="weekly-summary-grid">
-      <div class="weekly-summary-panel">
-        <div class="summary-panel-title">입출금 요약</div>
-        <div id="wkrpt-cf-summary"></div>
-      </div>
-      <div class="weekly-summary-panel">
-        <div class="summary-panel-title">매출채권 요약</div>
-        <div id="wkrpt-ar-summary-detail"></div>
-      </div>
-      <div class="weekly-summary-panel">
-        <div class="summary-panel-title">확인 포인트</div>
-        <ul id="wkrpt-check-points" style="margin:0;padding-left:14px;list-style:disc"></ul>
-      </div>
+    <div class="weekly-summary-head">
+      <div class="chart-title" style="margin-bottom:0">주간 요약</div>
+      <span class="weekly-summary-updated" id="wkrpt-summary-updated">마지막 수정일: —</span>
+    </div>
+    <textarea id="wkrpt-summary-textarea" class="weekly-summary-textarea" placeholder="주간 요약을 입력하거나 자동생성 버튼을 눌러 주세요."></textarea>
+    <div class="weekly-summary-actions">
+      <button class="btn sm" id="wkrpt-summary-generate-btn">요약 자동생성</button>
+      <button class="btn sm green" id="wkrpt-summary-save-btn">저장</button>
     </div>
   </div>
 
@@ -5017,42 +5009,77 @@ function renderWeeklyReport() {
     `지연 총 ${delayedTotal}건(보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%))`;
 
   // ── 주간 입출금 및 매출채권 요약 ─────────────────────────
-  const topIn  = groupedIn.length  ? groupedIn[0]  : null;
-  const topOut = groupedOut.length ? groupedOut[0] : null;
-
-  const sLine = (label, val, color = 'var(--text)') =>
-    `<div class="summary-line"><span>${label}</span><span class="summary-val" style="color:${color}">${val}</span></div>`;
-
-  document.getElementById('wkrpt-cf-summary').innerHTML = [
-    sLine('주간 입금',   '+' + fmt(wIn),  'var(--green)'),
-    sLine('주간 출금',   '-' + fmt(wOut), 'var(--red)'),
-    sLine('주간 순현금', (wNet >= 0 ? '+' : '') + fmt(wNet), wNet >= 0 ? 'var(--green)' : 'var(--red)'),
-    sLine('입금 중분류', groupedIn.length + '개'),
-    sLine('출금 중분류', groupedOut.length + '개'),
-    topIn  ? sLine('최대 입금 중분류', topIn.mid_cat  + '  +' + fmt(topIn.amount),  'var(--green)') : '',
-    topOut ? sLine('최대 출금 중분류', topOut.mid_cat + '  -' + fmt(topOut.amount), 'var(--red)')   : '',
-  ].filter(Boolean).join('');
-
-  document.getElementById('wkrpt-ar-summary-detail').innerHTML = [
-    sLine('주간 신규 AR',  fmt(wNewAmt)    + ' / ' + wNewAR.length + '건'),
-    sLine('주간 회수 AR',  fmt(wColAmt)    + ' / ' + wColCF.length + '건', 'var(--green)'),
-    sLine('전체 AR 잔액',  fmt(remTotal),                                  'var(--amber)'),
-    sLine('지연/미정 AR',  fmt(delayedAmt) + ' / ' + delayedTotal  + '건', 'var(--red)'),
-    sLine('  보통',        delayedNormal + '건(' + delayedNrRate + '%)'),
-    sLine('  위험',        delayedDanger + '건(' + delayedDrRate + '%)', delayedDrRate > 0 ? 'var(--red)' : 'var(--text3)'),
-  ].join('');
-
-  const checkPoints = [];
-  if (wNet < 0)                                  checkPoints.push('주간 순현금이 음수입니다. 출금 상위 중분류 확인이 필요합니다.');
-  if (delayedDrRate >= 50)                       checkPoints.push('지연/미정 AR 중 위험 등급 비중이 높습니다.');
-  if (wColAmt < wNewAmt)                         checkPoints.push('주간 회수 AR이 신규 AR보다 낮습니다.');
-  if (topOut && topIn && topOut.amount > topIn.amount) checkPoints.push('최대 출금 중분류 금액이 최대 입금 중분류보다 큽니다.');
-  if (!checkPoints.length)                       checkPoints.push('주간 입출금과 매출채권 흐름을 정기 확인하세요.');
-
-  document.getElementById('wkrpt-check-points').innerHTML =
-    checkPoints.map(t => `<li style="font-size:12px;color:var(--text2);padding:3px 0;line-height:1.5">${t}</li>`).join('');
+  // ── 주간 요약 에디터 ──────────────────────────────────
+  renderWeeklySummaryEditor({
+    wStart, wEnd, wIn, wOut, wNet,
+    wNewARCount: wNewAR.length, wColCount: wColCF.length,
+    delayedTotal, delayedNormal, delayedDanger, delayedNrRate, delayedDrRate,
+  });
 
 }
+
+/* ===== 주간 요약 — localStorage 저장/로드/렌더 ===== */
+let _wkSummaryCtx = {}; // renderWeeklyReport()가 매 렌더마다 업데이트
+
+function getWeeklySummaryKey(wStart) { return `weekly_summary_${wStart}`; }
+
+function loadWeeklySummary(wStart) {
+  try { const r = localStorage.getItem(getWeeklySummaryKey(wStart)); return r ? JSON.parse(r) : null; }
+  catch { return null; }
+}
+function saveWeeklySummary(wStart, text) {
+  const record = { text, updatedAt: new Date().toISOString() };
+  localStorage.setItem(getWeeklySummaryKey(wStart), JSON.stringify(record));
+  return record;
+}
+function formatWeeklySummaryUpdatedAt(iso) {
+  if (!iso) return '마지막 수정일: —';
+  try {
+    const d = new Date(iso);
+    const s = d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit',
+                                          day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `마지막 수정일: ${s}`;
+  } catch { return '마지막 수정일: —'; }
+}
+function buildDefaultWeeklySummaryText(ctx) {
+  return [
+    `이번 주(${ctx.wStart} ~ ${ctx.wEnd})는 입금 ${fmt(ctx.wIn)}원, 출금 ${fmt(ctx.wOut)}원으로 순현금은 ${ctx.wNet >= 0 ? '+' : ''}${fmt(ctx.wNet)}원입니다.`,
+    `매출채권은 신규 ${ctx.wNewARCount}건, 회수 ${ctx.wColCount}건이며, 지연/미정 채권은 총 ${ctx.delayedTotal}건입니다.`,
+    ctx.delayedDrRate >= 50
+      ? `위험 등급 채권 비중이 ${ctx.delayedDrRate}%로 높아 회수 일정 점검이 필요합니다.`
+      : `위험 등급 채권 비중은 ${ctx.delayedDrRate}%입니다.`,
+  ].join('\n');
+}
+function renderWeeklySummaryEditor(ctx) {
+  _wkSummaryCtx = ctx;
+  const ta    = document.getElementById('wkrpt-summary-textarea');
+  const upEl  = document.getElementById('wkrpt-summary-updated');
+  if (!ta || !upEl) return;
+  const saved   = loadWeeklySummary(ctx.wStart);
+  ta.value      = saved ? saved.text : buildDefaultWeeklySummaryText(ctx);
+  upEl.textContent = formatWeeklySummaryUpdatedAt(saved ? saved.updatedAt : null);
+}
+
+document.getElementById('wkrpt-summary-save-btn').addEventListener('click', () => {
+  const ctx = _wkSummaryCtx;
+  const ta  = document.getElementById('wkrpt-summary-textarea');
+  const upEl = document.getElementById('wkrpt-summary-updated');
+  if (!ta || !ctx.wStart) return;
+  const text = ta.value.trim();
+  if (!text) { showToast('요약 내용을 입력해 주세요.', 'amber'); return; }
+  const record = saveWeeklySummary(ctx.wStart, text);
+  upEl.textContent = formatWeeklySummaryUpdatedAt(record.updatedAt);
+  showToast('주간 요약이 저장되었습니다.', 'green');
+});
+
+document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', () => {
+  const ctx = _wkSummaryCtx;
+  const ta  = document.getElementById('wkrpt-summary-textarea');
+  if (!ta || !ctx.wStart) return;
+  const saved = loadWeeklySummary(ctx.wStart);
+  if (saved && ta.value.trim() && !confirm('현재 작성 중인 요약을 자동 생성 내용으로 덮어쓰시겠습니까?')) return;
+  ta.value = buildDefaultWeeklySummaryText(ctx);
+});
 
 /* =================================================================
    buildWeeklyReportHTML — DOM 비의존 순수 함수 (이메일/미리보기용)
