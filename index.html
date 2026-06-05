@@ -2162,6 +2162,55 @@ let refDate = todayKST();
 let reportBaseDate = refDate;
 function getRefDate() { return new Date(refDate + 'T00:00:00'); }
 
+/* ===== 진단 함수 — 브라우저 콘솔에서 debugCfActualRows(wStart, wEnd) 호출 =====
+ * 예: debugCfActualRows('2026-06-02', '2026-06-08')
+ * KPI/리포팅에 반영 안 되는 거래를 찾기 위한 디버그 도구
+ * ======================================================================= */
+window.debugCfActualRows = function(wStart, wEnd) {
+  const rows = cfData.map((r, i) => ({
+    i,
+    date:          r.date,
+    dateJson:      JSON.stringify(r.date),
+    dateOK:        typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date),
+    status:        r.status,
+    statusJson:    JSON.stringify(r.status),
+    statusLen:     String(r.status ?? '').length,
+    statusTrimOK:  String(r.status ?? '').trim() === r.status,
+    type:          r.type,
+    in:            r.in,
+    out:           r.out,
+    inType:        typeof r.in,
+    outType:       typeof r.out,
+    inNum:         Number(r.in || 0),
+    outNum:        Number(r.out || 0),
+    inWeek:        wStart && wEnd ? r.date >= wStart && r.date <= wEnd : '—',
+    isActualIn:    r.status === '실제 입금',
+    isActualOut:   r.status === '실제 지출',
+    isActualInTrim:  String(r.status ?? '').trim() === '실제 입금',
+    isActualOutTrim: String(r.status ?? '').trim() === '실제 지출',
+  }));
+
+  const inRange = wStart && wEnd ? rows.filter(r => r.inWeek) : rows;
+  const suspects = inRange.filter(r =>
+    (String(r.status).includes('실제') && !r.isActualIn && !r.isActualOut) ||
+    !r.dateOK || !r.statusTrimOK
+  );
+
+  console.group('📊 debugCfActualRows — 주간 범위 내 거래');
+  console.log(`전체 cfData: ${rows.length}건 | 범위 내: ${inRange.length}건 | 의심 항목: ${suspects.length}건`);
+  if (suspects.length) {
+    console.warn('⚠️ 의심 항목 (공백/형식 이상):');
+    console.table(suspects);
+  } else {
+    console.log('✅ 범위 내 status/date 이상 없음');
+  }
+  console.log('범위 내 실제 입금 rows:');
+  console.table(inRange.filter(r => r.isActualIn));
+  console.log('범위 내 실제 지출 rows:');
+  console.table(inRange.filter(r => r.isActualOut));
+  console.groupEnd();
+};
+
 // 날짜 유틸 — N일 이동
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -2219,18 +2268,20 @@ function calcKPIs() {
 
   for (const r of cfData) {
     const mid = r.mid_cat || '';
-    if (r.status === '실제 입금' && r.date <= ref) cash += r.in;
-    if (r.status === '실제 지출' && r.date <= ref) cash -= r.out;
-    if (r.status === '실제 입금' && r.date >= wStart && r.date <= wEnd) wIn += r.in;
-    if (r.status === '실제 지출' && r.date >= wStart && r.date <= wEnd) wOut += r.out;
-    if (r.status === '실제 지출' && r.date >= mStart && r.date <= mEnd) mOut += r.out;
-    if (r.status === '실제 지출' && r.date >= pmStart && r.date <= pmEnd) pmOut += r.out;
+    const rIn  = Number(r.in  || 0); // string/undefined 방어 — string concat 방지
+    const rOut = Number(r.out || 0); // string/undefined 방어 — string concat 방지
+    if (r.status === '실제 입금' && r.date <= ref) cash += rIn;
+    if (r.status === '실제 지출' && r.date <= ref) cash -= rOut;
+    if (r.status === '실제 입금' && r.date >= wStart && r.date <= wEnd) wIn  += rIn;
+    if (r.status === '실제 지출' && r.date >= wStart && r.date <= wEnd) wOut += rOut;
+    if (r.status === '실제 지출' && r.date >= mStart && r.date <= mEnd) mOut += rOut;
+    if (r.status === '실제 지출' && r.date >= pmStart && r.date <= pmEnd) pmOut += rOut;
     // 전주
-    if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn += r.in;
-    if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += r.out;
+    if (r.status === '실제 입금' && r.date >= pwStart && r.date <= pwEnd) pwIn  += rIn;
+    if (r.status === '실제 지출' && r.date >= pwStart && r.date <= pwEnd) pwOut += rOut;
     // 차주 예상 기말현금: date <= nwEnd인 예정 거래 전체 (과거 미처리 포함, 먼 미래 제외)
-    if (r.status === '입금 예정' && r.date <= nwEnd) plannedInToNextWeekEnd  += r.in;
-    if (r.status === '지출 예정' && r.date <= nwEnd) plannedOutToNextWeekEnd += r.out;
+    if (r.status === '입금 예정' && r.date <= nwEnd) plannedInToNextWeekEnd  += rIn;
+    if (r.status === '지출 예정' && r.date <= nwEnd) plannedOutToNextWeekEnd += rOut;
   }
 
   const wNet = wIn - wOut;
