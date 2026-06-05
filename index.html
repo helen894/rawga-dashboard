@@ -887,7 +887,7 @@
   <!-- ======== 주간 요약 ======== -->
   <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-top:16px">
     <div class="weekly-summary-head">
-      <div class="chart-title" style="margin-bottom:0">주간 요약</div>
+      <div class="chart-title" style="margin-bottom:0">📝 주간 요약</div>
       <span class="weekly-summary-updated" id="wkrpt-summary-updated">마지막 수정일: —</span>
     </div>
     <textarea id="wkrpt-summary-textarea" class="weekly-summary-textarea" placeholder="주간 요약을 입력하거나 자동생성 버튼을 눌러 주세요."></textarea>
@@ -5030,6 +5030,12 @@ function loadWeeklySummary(wStart) {
 function saveWeeklySummary(wStart, text) {
   const record = { text, updatedAt: new Date().toISOString() };
   localStorage.setItem(getWeeklySummaryKey(wStart), JSON.stringify(record));
+  // Supabase 비동기 저장 — 실패해도 localStorage 저장은 유지
+  if (_supa) {
+    _supa.from('cat_data')
+      .upsert({ key: getWeeklySummaryKey(wStart), data: { summary: text, updated_at: record.updatedAt } }, { onConflict: 'key' })
+      .catch(e => console.warn('주간 요약 Supabase 저장 실패:', e));
+  }
   return record;
 }
 function formatWeeklySummaryUpdatedAt(iso) {
@@ -5055,9 +5061,26 @@ function renderWeeklySummaryEditor(ctx) {
   const ta    = document.getElementById('wkrpt-summary-textarea');
   const upEl  = document.getElementById('wkrpt-summary-updated');
   if (!ta || !upEl) return;
-  const saved   = loadWeeklySummary(ctx.wStart);
-  ta.value      = saved ? saved.text : buildDefaultWeeklySummaryText(ctx);
+  // ① 로컬스토리지 즉시 표시
+  const saved = loadWeeklySummary(ctx.wStart);
+  ta.value         = saved ? saved.text : buildDefaultWeeklySummaryText(ctx);
   upEl.textContent = formatWeeklySummaryUpdatedAt(saved ? saved.updatedAt : null);
+  // ② Supabase에서 비동기 조회 — 더 최신 값이 있으면 UI 갱신
+  if (_supa) {
+    _supa.from('cat_data').select('data').eq('key', getWeeklySummaryKey(ctx.wStart)).maybeSingle()
+      .then(({ data }) => {
+        if (_wkSummaryCtx.wStart !== ctx.wStart) return; // 주차 변경 시 무시
+        const sbSummary = data?.data?.summary;
+        const sbUpdated = data?.data?.updated_at;
+        if (!sbSummary) return;
+        // Supabase 값이 있으면 로컬스토리지 캐시 갱신 후 UI 업데이트
+        const sbRecord = { text: sbSummary, updatedAt: sbUpdated || new Date().toISOString() };
+        localStorage.setItem(getWeeklySummaryKey(ctx.wStart), JSON.stringify(sbRecord));
+        ta.value         = sbSummary;
+        upEl.textContent = formatWeeklySummaryUpdatedAt(sbRecord.updatedAt);
+      })
+      .catch(() => {}); // Supabase 실패는 무시
+  }
 }
 
 document.getElementById('wkrpt-summary-save-btn').addEventListener('click', () => {
@@ -5085,7 +5108,7 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
    buildWeeklyReportHTML — DOM 비의존 순수 함수 (이메일/미리보기용)
    기존 renderWeeklyReport() 계산 로직과 동일, HTML string 반환
    ================================================================= */
-function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
+function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
     green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
@@ -5096,6 +5119,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
 
   // ── 주간 범위 & 주차 계산 ──
   const { wStart, wEnd, pwStart, pwEnd, nwStart, nwEnd } = getWeekRange(targetDate);
+  // 주간 요약 텍스트: 외부 전달값 우선, 없으면 localStorage fallback
+  const effectiveSummary = summaryText !== null ? summaryText : (loadWeeklySummary(wStart)?.text || '');
   const thuStr  = addDays(wStart, 3);
   const thuDate = new Date(thuStr + 'T00:00:00');
   const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
@@ -5324,6 +5349,11 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash) {
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
         <div style="font-size:10px;color:${co};margin-top:3px">${s}</div></div></td>`).join('')}
   </tr></table></td></tr>
+<!-- 📝 주간 요약 -->
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
+  <div style="font-size:13px;color:${C.t2};line-height:1.7">${effectiveSummary ? effectiveSummary.replace(/\n/g,'<br>') : '등록된 주간 요약이 없습니다.'}</div>
+</td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
   <div style="font-size:11px;color:${C.t3}">RAWGA 자금 대시보드 · 자동 발송 리포트 · ${sentAt}</div>
@@ -5530,7 +5560,8 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
       /* Edge Function dry-run */
       const res = await callEdgeFunction('auto', true, null, refDate);
       /* 로컬 HTML 미리보기 */
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH);
+      const _previewSummary = loadWeeklySummary(getWeekRange(refDate).wStart)?.text || '';
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummary);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(previewHtml);
