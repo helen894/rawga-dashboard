@@ -6348,10 +6348,10 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,arBalanceSub],['지연',fmt(dlyAmt),C.red,dlySub]]
-      .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center">
+      .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px;vertical-align:top"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center;min-height:120px;box-sizing:border-box">
         <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
-        <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
-        <div style="font-size:10px;color:${co};margin-top:3px">${s}</div></div></td>`).join('')}
+        <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace;margin-bottom:3px">${v}</div>
+        <div style="font-size:10px;color:${co};line-height:1.45;word-break:keep-all;overflow-wrap:anywhere">${s}</div></div></td>`).join('')}
   </tr></table></td></tr>
 <!-- 📝 주간 요약 -->
 <tr><td style="background:${C.card};padding:18px 18px 12px">
