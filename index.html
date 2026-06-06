@@ -679,10 +679,11 @@
     <button class="btn" id="ar-filter-btn">조회</button>
   </div>
 
-  <!-- AR 일괄 삭제 액션 바 -->
-  <div id="ar-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.25);border-radius:8px">
+  <!-- AR 일괄 작업 액션 바 -->
+  <div id="ar-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.22);border-radius:8px">
     <span id="ar-selected-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
     <div style="flex:1"></div>
+    <button class="btn sm" id="ar-bulk-edit-btn" style="color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)">선택 수정 (0건)</button>
     <button class="btn sm" id="ar-download-selected-btn" style="color:var(--green);border-color:var(--green)">선택 다운로드</button>
     <button class="btn sm red" id="ar-delete-selected-btn">선택 삭제</button>
     <button class="btn sm" id="ar-bulk-cancel-btn" style="color:var(--text2)">취소</button>
@@ -1498,6 +1499,109 @@
   </div>
 </div>
 
+<!-- ======== AR 선택 수정 모달 ======== -->
+<div class="modal-backdrop hidden" id="ar-bulk-edit-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <span class="modal-title">✏️ 매출채권 선택 수정</span>
+      <button class="modal-close" onclick="closeARBulkEditModal()">×</button>
+    </div>
+
+    <div style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.7">
+      선택한 매출채권 <strong id="ar-bulk-edit-count" style="color:var(--text)">0</strong>건을 수정합니다.<br>
+      <span style="font-size:12px">변경할 항목만 선택하세요. 선택하지 않은 항목은 기존 값을 유지합니다.<br>
+      <strong style="color:var(--blue,#6366f1)">상태와 위험등급은 저장 후 자동 재계산됩니다.</strong></span>
+    </div>
+
+    <!-- 완료 AR 안내 -->
+    <div id="ar-bulk-done-warning" style="display:none;padding:10px 14px;margin-bottom:12px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:8px;font-size:12px;color:var(--text2)">
+      ℹ <strong id="ar-bulk-done-count" style="color:var(--text)">0</strong>건의 완료(remaining≤0) AR이 포함됩니다.<br>
+      거래처·시작일·회수 예정일·비고 변경은 허용되며, 회수금액·미회수액은 유지됩니다.
+    </div>
+
+    <!-- CF 회수 연결 AR 안내 -->
+    <div id="ar-bulk-cf-warning" style="display:none;padding:10px 14px;margin-bottom:16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;font-size:12px;color:var(--text2)">
+      ⚠ <strong id="ar-bulk-cf-count" style="color:var(--text)">0</strong>건의 CF 회수 연결 AR이 포함됩니다.<br>
+      연결된 차감 이력·회수금액·미회수액은 변경되지 않습니다.
+    </div>
+
+    <!-- 거래처 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">거래처</div>
+      <div style="display:flex;gap:16px;margin-bottom:8px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-partner-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-partner-mode" value="set"> 입력값으로 변경
+        </label>
+      </div>
+      <input type="text" id="ar-bulk-partner-value" placeholder="거래처명 입력..."
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;display:none">
+    </div>
+
+    <!-- 시작일 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">시작일</div>
+      <div style="display:flex;gap:16px;margin-bottom:8px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-start-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-start-mode" value="set"> 입력값으로 변경
+        </label>
+      </div>
+      <input type="date" id="ar-bulk-start-value"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;display:none">
+    </div>
+
+    <!-- 회수 예정일 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">회수 예정일</div>
+      <div style="display:flex;gap:16px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-due-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-due-mode" value="set"> 입력값으로 변경
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-due-mode" value="empty"> 빈 값으로 변경 <span style="font-size:11px;color:var(--text3)">(→ 상태: 미정)</span>
+        </label>
+      </div>
+      <input type="date" id="ar-bulk-due-value"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;display:none">
+    </div>
+
+    <!-- 비고 -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">비고</div>
+      <div style="display:flex;gap:16px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-note-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-note-mode" value="set"> 입력값으로 변경
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="ar-bulk-note-mode" value="empty"> 빈 값으로 변경
+        </label>
+      </div>
+      <input type="text" id="ar-bulk-note-value" placeholder="비고 입력..."
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;display:none">
+    </div>
+
+    <!-- 미리보기 결과 -->
+    <div id="ar-bulk-preview" style="display:none;margin-bottom:16px;padding:12px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;color:var(--text2)"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn green" id="ar-bulk-apply-btn">선택 항목 수정</button>
+      <button class="btn" id="ar-bulk-preview-btn">변경사항 미리보기</button>
+      <button class="btn" onclick="closeARBulkEditModal()">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======== AR UPLOAD MODAL ======== -->
 <div class="modal-backdrop hidden" id="ar-modal">
   <div class="modal">
@@ -2145,6 +2249,9 @@ function subscribeRealtime() {
         arData = Array.isArray(newData) ? newData : JSON.parse(newData);
         // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
         localStorage.setItem('ar_data', JSON.stringify(arData));
+        // Realtime 갱신 후 존재하지 않는 ID는 선택 목록에서 제거
+        const validARIdSet = new Set(arData.map(r => r._id).filter(Boolean));
+        for (const id of arSelectedIds) { if (!validARIdSet.has(id)) arSelectedIds.delete(id); }
         renderAll();
         showToast('🔄 매출채권 데이터가 업데이트됐습니다.', 'green');
       } finally { _isSyncing = false; }
@@ -4146,6 +4253,7 @@ document.getElementById('cf-delete-all-btn').addEventListener('click', () => {
 /* ===== AR TABLE ===== */
 let arPage = 1, arPerPage = 30, arFiltered = [];
 let arSortCol = 'remaining', arSortAsc = false;
+let arSelectedIds = new Set(); // 선택된 AR ID 집합 — 페이지 이동·필터 변경 후에도 유지
 
 function buildARPartnerSelect() {
   const partners = [...new Set(arData.map(r => r.partner))].sort();
@@ -4206,7 +4314,7 @@ function renderARTable() {
       : `${arRisk.basisDays}일 <span class="ar-risk-badge ${arRisk.riskLevel === '위험' ? 'danger' : 'normal'}">${arRisk.riskLevel}</span>`;
     return `<tr>
       <td style="text-align:center">
-        <input type="checkbox" class="ar-row-check" data-id="${r._id}" style="cursor:pointer">
+        <input type="checkbox" class="ar-row-check" data-id="${r._id}" ${arSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
       </td>
       <td style="font-weight:500">${r.partner}</td>
       <td class="date-cell">${r.start}</td>
@@ -4253,6 +4361,9 @@ function renderARTable() {
     const icon = col === arSortCol ? (arSortAsc ? ' ▲' : ' ▼') : ' ↕';
     th.textContent = th.textContent.replace(/ [▲▼↕]$/, '') + icon;
   });
+
+  // 선택 상태 복원 및 헤더·바 동기화 (페이지 변경 후에도 arSelectedIds 기준으로 유지)
+  updateARBulkBar();
 }
 
 function deleteAR(id) {
@@ -4373,80 +4484,97 @@ document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
   showToast(`✅ "${partner}" 수정됐습니다.`, 'green');
 });
 
-/* ---- AR 체크박스 헬퍼 ---- */
+/* ---- AR 체크박스 헬퍼 (arSelectedIds 기반 — 페이지 이동 후에도 선택 유지) ---- */
 function getARCheckedIds() {
-  return [...document.querySelectorAll('.ar-row-check:checked')].map(c => c.dataset.id);
+  return [...arSelectedIds]; // arSelectedIds(Set)를 배열로 반환
 }
 function updateARBulkBar() {
-  const ids = getARCheckedIds();
-  const bar = document.getElementById('ar-bulk-bar');
+  const count   = arSelectedIds.size;
+  const bar     = document.getElementById('ar-bulk-bar');
   const countEl = document.getElementById('ar-selected-count');
-  if (ids.length > 0) {
+  const editBtn = document.getElementById('ar-bulk-edit-btn');
+  if (count > 0) {
     bar.style.display = 'flex';
-    countEl.textContent = `${ids.length}건 선택됨`;
+    countEl.textContent = `${count}건 선택됨`;
+    if (editBtn) { editBtn.textContent = `선택 수정 (${count}건)`; editBtn.disabled = false; editBtn.style.opacity = ''; }
   } else {
     bar.style.display = 'none';
+    if (editBtn) { editBtn.textContent = '선택 수정 (0건)'; editBtn.disabled = true; editBtn.style.opacity = '0.45'; }
   }
-  const allChecks = document.querySelectorAll('.ar-row-check');
+  // 헤더 체크박스: 현재 페이지에 보이는 행 기준으로 동기화
+  const curPageChecks = [...document.querySelectorAll('.ar-row-check')];
+  const curPageIds    = curPageChecks.map(c => c.dataset.id);
+  const selectedOnPage = curPageIds.filter(id => arSelectedIds.has(id));
   const checkAll = document.getElementById('ar-check-all');
   if (checkAll) {
-    checkAll.indeterminate = ids.length > 0 && ids.length < allChecks.length;
-    checkAll.checked = allChecks.length > 0 && ids.length === allChecks.length;
+    checkAll.indeterminate = selectedOnPage.length > 0 && selectedOnPage.length < curPageIds.length;
+    checkAll.checked       = curPageIds.length > 0 && selectedOnPage.length === curPageIds.length;
   }
 }
 
+/* ---- 전체 선택 체크박스 — arSelectedIds 동기화 ---- */
 document.getElementById('ar-check-all').addEventListener('change', e => {
-  document.querySelectorAll('.ar-row-check').forEach(c => c.checked = e.target.checked);
+  document.querySelectorAll('.ar-row-check').forEach(c => {
+    c.checked = e.target.checked;
+    if (e.target.checked) arSelectedIds.add(c.dataset.id);
+    else                  arSelectedIds.delete(c.dataset.id);
+  });
   updateARBulkBar();
 });
+
+/* ---- 개별 체크박스 (이벤트 위임) — arSelectedIds 동기화 ---- */
 document.getElementById('ar-tbody').addEventListener('change', e => {
-  if (e.target.classList.contains('ar-row-check')) updateARBulkBar();
+  if (e.target.classList.contains('ar-row-check')) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) arSelectedIds.add(id);
+    else                  arSelectedIds.delete(id);
+    updateARBulkBar();
+  }
 });
 
-/* ---- AR 선택 삭제 ---- */
+/* ---- AR 선택 삭제 — 보호 AR이 하나라도 있으면 전체 차단 ---- */
 document.getElementById('ar-delete-selected-btn').addEventListener('click', () => {
   if (blockIfOffline('매출채권 선택 삭제')) return;
   const ids = getARCheckedIds();
   if (!ids.length) return;
 
-  const idSet = new Set(ids);
-  const selected  = arData.filter(r => idSet.has(r._id));
+  const idSet      = new Set(ids);
+  const selected   = arData.filter(r => idSet.has(r._id));
   const protected_ = selected.filter(r => checkARDeleteable(r).blocked);
-  const deletable  = selected.filter(r => !checkARDeleteable(r).blocked);
 
-  if (protected_.length && !deletable.length) {
-    alert(`⚠ 선택한 ${protected_.length}건 모두 삭제 불가\n(회수액 있거나 차감 이력이 연결된 AR)\n\n먼저 연결된 입출금 내역을 수정/삭제하여 차감분을 원복하세요.`);
+  if (protected_.length) {
+    const names = protected_.slice(0, 5).map(r => `  • ${r.partner} (${r.start || '날짜없음'})`).join('\n');
+    const more  = protected_.length > 5 ? `\n  ... 외 ${protected_.length - 5}건` : '';
+    alert(
+      `⚠ 선택 ${ids.length}건 중 ${protected_.length}건이 보호 상태입니다.\n\n` +
+      `보호 AR (CF 회수 연결 또는 회수액 있음):\n${names}${more}\n\n` +
+      `일부만 삭제하지 않습니다. 먼저 연결된 입출금 내역의 차감분을 원복한 후 다시 시도하세요.`
+    );
     return;
   }
-  const confirmMsg = protected_.length
-    ? `선택 ${ids.length}건 중 ${deletable.length}건만 삭제됩니다.\n(보호 ${protected_.length}건 제외 — 회수액 있거나 차감 이력 연결)\n\n계속하시겠습니까?`
-    : `선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
-  if (!confirm(confirmMsg)) return;
 
-  const deletableIds = new Set(deletable.map(r => r._id));
-  arData = arData.filter(r => !deletableIds.has(r._id));
+  if (!confirm(`선택한 ${ids.length}건을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+  arData = arData.filter(r => !idSet.has(r._id));
+  arSelectedIds.clear(); // 삭제 완료 후 선택 상태 초기화
   saveDataExplicit();
   buildARPartnerSelect();
   renderAll();
-  document.getElementById('ar-bulk-bar').style.display = 'none';
-  document.getElementById('ar-check-all').checked = false;
-  let msg = `🗑 ${deletable.length}건 삭제됐습니다.`;
-  if (protected_.length) msg += ` | ⚠ ${protected_.length}건 보호됨 (삭제 불가)`;
-  showToast(msg, 'red');
+  showToast(`🗑 ${ids.length}건 삭제됐습니다.`, 'red');
 });
 
 /* ---- AR 선택 취소 ---- */
 document.getElementById('ar-bulk-cancel-btn').addEventListener('click', () => {
+  arSelectedIds.clear();
   document.querySelectorAll('.ar-row-check').forEach(c => c.checked = false);
-  document.getElementById('ar-check-all').checked = false;
-  document.getElementById('ar-bulk-bar').style.display = 'none';
+  const checkAll = document.getElementById('ar-check-all');
+  if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+  updateARBulkBar();
 });
 
 /* ---- AR 선택 다운로드 ---- */
 document.getElementById('ar-download-selected-btn').addEventListener('click', () => {
-  const ids = new Set(
-    [...document.querySelectorAll('.ar-row-check:checked')].map(c => c.dataset.id)
-  );
+  const ids = new Set([...arSelectedIds]); // arSelectedIds 기반 — 페이지 이동 후에도 유지
   if (!ids.size) return showToast('선택된 항목이 없습니다.', 'red');
   const data = arData.filter(r => ids.has(r._id));
   const header = ['거래처','시작일','예상회수액','회수액','잔액','회수예정일','실제 입금일','경과일','상태','비고'];
@@ -4617,6 +4745,277 @@ function checkARDeleteable(ar) {
   }
   return { blocked: false, reason: '' };
 }
+
+/* =========================================================
+ * AR 선택 수정 (Bulk Edit)
+ * - arSelectedIds(Set) 기반; CF 선택 상태와 완전 독립
+ * - 허용 필드: partner, start, due_date, note
+ * - 금지 필드: expected, collected, remaining, status, riskLevel,
+ *             basisDays, elapsed, collect_date, ar_applied,
+ *             ar_applied_date, ar_deduct_log
+ * - 저장 후 calcARStatusAndRisk() 자동 재계산
+ * ========================================================= */
+
+function openARBulkEditModal() {
+  const count = arSelectedIds.size;
+  if (!count) return;
+  document.getElementById('ar-bulk-edit-count').textContent = count;
+
+  const selectedRows = arData.filter(r => arSelectedIds.has(r._id));
+
+  // 완료 AR (remaining <= 0)
+  const doneRows = selectedRows.filter(r => (r.remaining || 0) <= 0);
+  const doneWarn = document.getElementById('ar-bulk-done-warning');
+  const doneCnt  = document.getElementById('ar-bulk-done-count');
+  doneWarn.style.display = doneRows.length ? '' : 'none';
+  if (doneCnt) doneCnt.textContent = doneRows.length;
+
+  // CF 회수 연결 AR (collected > 0 또는 ar_deduct_log 참조)
+  const cfLinkedRows = selectedRows.filter(r => checkARDeleteable(r).blocked);
+  const cfWarn  = document.getElementById('ar-bulk-cf-warning');
+  const cfCnt   = document.getElementById('ar-bulk-cf-count');
+  cfWarn.style.display = cfLinkedRows.length ? '' : 'none';
+  if (cfCnt) cfCnt.textContent = cfLinkedRows.length;
+
+  // 폼 초기화
+  ['partner', 'start', 'due', 'note'].forEach(key => {
+    const radios = document.querySelectorAll(`input[name="ar-bulk-${key}-mode"]`);
+    radios.forEach(r => { r.checked = r.value === 'keep'; });
+    const inp = document.getElementById(`ar-bulk-${key}-value`);
+    if (inp) { inp.value = ''; inp.style.display = 'none'; }
+  });
+  document.getElementById('ar-bulk-preview').style.display = 'none';
+
+  document.getElementById('ar-bulk-edit-modal').classList.remove('hidden');
+}
+
+function closeARBulkEditModal() {
+  document.getElementById('ar-bulk-edit-modal').classList.add('hidden');
+  // 선택 상태는 유지 (CF 선택 수정과 동일 정책)
+}
+
+function getARBulkParams() {
+  const getMode = key => (document.querySelector(`input[name="ar-bulk-${key}-mode"]:checked`) || {}).value || 'keep';
+  return {
+    partnerMode : getMode('partner'),
+    partnerValue: (document.getElementById('ar-bulk-partner-value')?.value || '').trim(),
+    startMode   : getMode('start'),
+    startValue  : document.getElementById('ar-bulk-start-value')?.value || '',
+    dueMode     : getMode('due'),
+    dueValue    : document.getElementById('ar-bulk-due-value')?.value || '',
+    noteMode    : getMode('note'),
+    noteValue   : (document.getElementById('ar-bulk-note-value')?.value || ''),
+  };
+}
+
+/* 날짜 정규화 — YYYY-MM-DD 검증 */
+function normalizeARDate(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + 'T00:00:00');
+    if (!isNaN(d.getTime())) return s;
+  }
+  return null; // 잘못된 날짜
+}
+
+/* 변경 통계 계산 (미리보기·확인용) — 원본 arData 불변 */
+function calcARBulkStats(selectedRows, params) {
+  let partnerCnt = 0, startCnt = 0, dueCnt = 0, noteCnt = 0;
+  let noChangeCnt = 0, doneCnt = 0, cfLinkedCnt = 0;
+  let statusChangeCnt = 0, riskChangeCnt = 0;
+
+  for (const r of selectedRows) {
+    const copy = { ...r };
+    let changed = false;
+
+    if (params.partnerMode === 'set'   && params.partnerValue !== (copy.partner || '')) { copy.partner = params.partnerValue; partnerCnt++; changed = true; }
+    if (params.startMode === 'set'     && params.startValue   !== (copy.start   || '')) { copy.start   = params.startValue;   startCnt++;   changed = true; }
+    if (params.dueMode === 'set'       && params.dueValue     !== (copy.due_date|| '')) { copy.due_date = params.dueValue;     dueCnt++;     changed = true; }
+    if (params.dueMode === 'empty'     && (copy.due_date || '') !== '')                 { copy.due_date = '';                  dueCnt++;     changed = true; }
+    if (params.noteMode === 'set'      && params.noteValue    !== (copy.note    || '')) { copy.note     = params.noteValue;    noteCnt++;    changed = true; }
+    if (params.noteMode === 'empty'    && (copy.note || '') !== '')                     { copy.note     = '';                  noteCnt++;    changed = true; }
+
+    if (!changed) { noChangeCnt++; continue; }
+
+    // 자동 재계산 예측 (원본 arData 불변)
+    const newRisk = calcARStatusAndRisk(copy, refDate);
+    const oldRisk = calcARStatusAndRisk(r, refDate);
+    if (newRisk.status    !== oldRisk.status)    statusChangeCnt++;
+    if (newRisk.riskLevel !== oldRisk.riskLevel) riskChangeCnt++;
+
+    if ((r.remaining || 0) <= 0)     doneCnt++;
+    if (checkARDeleteable(r).blocked) cfLinkedCnt++;
+  }
+
+  return { partnerCnt, startCnt, dueCnt, noteCnt, noChangeCnt, doneCnt, cfLinkedCnt, statusChangeCnt, riskChangeCnt,
+           actualCnt: selectedRows.length - noChangeCnt };
+}
+
+/* 유효성 검증 — 오류: 저장 차단 / 경고: 확인 후 진행 */
+function validateARBulkParams(selectedRows, params) {
+  const errors   = [];
+  const warnings = [];
+
+  // 거래처 빈 값 방지
+  if (params.partnerMode === 'set' && !params.partnerValue) {
+    errors.push('거래처를 빈 값으로 변경할 수 없습니다. 거래처명을 입력하거나 "변경 안 함"을 선택하세요.');
+  }
+
+  // 날짜 형식 검증
+  if (params.startMode === 'set') {
+    if (!params.startValue) { errors.push('시작일을 입력하세요.'); }
+    else if (normalizeARDate(params.startValue) === null) { errors.push(`시작일 형식이 잘못됐습니다: "${params.startValue}"`); }
+  }
+  if (params.dueMode === 'set') {
+    if (!params.dueValue) { errors.push('회수 예정일을 입력하세요.'); }
+    else if (normalizeARDate(params.dueValue) === null) { errors.push(`회수 예정일 형식이 잘못됐습니다: "${params.dueValue}"`); }
+  }
+
+  // 회수 예정일 < 시작일 체크
+  if (!errors.length) {
+    const badDue = [];
+    for (const r of selectedRows) {
+      const effectiveStart = params.startMode === 'set' ? params.startValue : (r.start || '');
+      const effectiveDue   = params.dueMode === 'set'   ? params.dueValue   : (params.dueMode === 'empty' ? '' : (r.due_date || ''));
+      if (effectiveDue && effectiveStart && effectiveDue < effectiveStart) {
+        badDue.push(r.partner || '(거래처 없음)');
+      }
+    }
+    if (badDue.length) {
+      errors.push(`회수 예정일이 시작일보다 이전인 AR ${badDue.length}건이 있어 수정할 수 없습니다.\n(${badDue.slice(0,3).join(', ')}${badDue.length>3 ? ' 외 '+(badDue.length-3)+'건' : ''})`);
+    }
+  }
+
+  return { errors, warnings };
+}
+
+function previewARBulkEdit() {
+  const selectedRows = arData.filter(r => arSelectedIds.has(r._id));
+  if (!selectedRows.length) return;
+  const params = getARBulkParams();
+  const { errors } = validateARBulkParams(selectedRows, params);
+  if (errors.length) { alert('⚠ 오류\n\n' + errors.join('\n\n')); return; }
+
+  const s = calcARBulkStats(selectedRows, params);
+
+  const previewEl = document.getElementById('ar-bulk-preview');
+  previewEl.style.display = '';
+  previewEl.innerHTML = `
+    <div style="font-weight:600;color:var(--text);margin-bottom:10px">📋 변경사항 미리보기</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tr><td style="padding:3px 0;color:var(--text2)">선택 건수</td><td style="text-align:right;font-weight:600">${selectedRows.length}건</td></tr>
+      <tr><td style="padding:3px 0;color:var(--text2)">실제 변경 예정</td><td style="text-align:right;font-weight:600;color:var(--blue,#6366f1)">${s.actualCnt}건</td></tr>
+      <tr><td style="padding:3px 0;color:var(--text2)">변경 없는 항목</td><td style="text-align:right">${s.noChangeCnt}건</td></tr>
+      ${s.partnerCnt  ? `<tr><td style="padding:3px 0;color:var(--text2)">거래처 변경</td><td style="text-align:right">${s.partnerCnt}건</td></tr>` : ''}
+      ${s.startCnt    ? `<tr><td style="padding:3px 0;color:var(--text2)">시작일 변경</td><td style="text-align:right">${s.startCnt}건</td></tr>` : ''}
+      ${s.dueCnt      ? `<tr><td style="padding:3px 0;color:var(--text2)">회수 예정일 변경</td><td style="text-align:right">${s.dueCnt}건</td></tr>` : ''}
+      ${s.noteCnt     ? `<tr><td style="padding:3px 0;color:var(--text2)">비고 변경</td><td style="text-align:right">${s.noteCnt}건</td></tr>` : ''}
+      <tr><td style="padding:3px 0;color:var(--text2)">상태 변경 예상</td><td style="text-align:right">${s.statusChangeCnt}건</td></tr>
+      <tr><td style="padding:3px 0;color:var(--text2)">위험등급 변경 예상</td><td style="text-align:right">${s.riskChangeCnt}건</td></tr>
+      ${s.doneCnt     ? `<tr><td style="padding:3px 0;color:var(--text2)">완료 AR</td><td style="text-align:right">${s.doneCnt}건</td></tr>` : ''}
+      ${s.cfLinkedCnt ? `<tr><td style="padding:3px 0;color:var(--amber)">CF 회수 연결 AR</td><td style="text-align:right;color:var(--amber)">${s.cfLinkedCnt}건</td></tr>` : ''}
+    </table>
+    ${s.actualCnt === 0 ? '<div style="margin-top:8px;color:var(--text3)">실제 변경되는 항목이 없습니다.</div>' : ''}
+  `;
+}
+
+function applyARBulkEdit() {
+  if (blockIfOffline('선택 수정')) return;
+  const selectedRows = arData.filter(r => arSelectedIds.has(r._id));
+  if (!selectedRows.length) { closeARBulkEditModal(); return; }
+
+  const params = getARBulkParams();
+
+  // 유효성 검증
+  const { errors, warnings } = validateARBulkParams(selectedRows, params);
+  if (errors.length) { alert('⚠ 저장 불가\n\n' + errors.join('\n\n')); return; }
+  if (warnings.length) { if (!confirm('⚠ 경고\n\n' + warnings.join('\n\n') + '\n\n계속 진행하시겠습니까?')) return; }
+
+  const s = calcARBulkStats(selectedRows, params);
+  if (s.actualCnt === 0) { alert('변경할 내용이 없습니다.'); return; }
+
+  if (!confirm(`매출채권 ${s.actualCnt}건을 수정하시겠습니까?\n(${selectedRows.length}건 선택 중 ${s.noChangeCnt}건은 변경 없음)`)) return;
+
+  // 롤백용 백업
+  const arDataBackup = arData.map(r => ({ ...r }));
+  let appliedCnt = 0;
+
+  try {
+    for (let i = 0; i < arData.length; i++) {
+      const r = arData[i];
+      if (!arSelectedIds.has(r._id)) continue;
+
+      const newRow = { ...r };
+      let changed = false;
+
+      // 거래처
+      if (params.partnerMode === 'set' && params.partnerValue !== (newRow.partner || '')) {
+        newRow.partner = params.partnerValue; changed = true;
+      }
+      // 시작일
+      if (params.startMode === 'set') {
+        const nd = normalizeARDate(params.startValue);
+        if (nd !== null && nd !== (newRow.start || '')) { newRow.start = nd; changed = true; }
+      }
+      // 회수 예정일
+      if (params.dueMode === 'set') {
+        const nd = normalizeARDate(params.dueValue);
+        if (nd !== null && nd !== (newRow.due_date || '')) { newRow.due_date = nd; changed = true; }
+      } else if (params.dueMode === 'empty' && (newRow.due_date || '') !== '') {
+        newRow.due_date = ''; changed = true;
+      }
+      // 비고
+      if (params.noteMode === 'set' && params.noteValue !== (newRow.note || '')) {
+        newRow.note = params.noteValue; changed = true;
+      } else if (params.noteMode === 'empty' && (newRow.note || '') !== '') {
+        newRow.note = ''; changed = true;
+      }
+
+      if (!changed) continue;
+
+      // 상태·위험등급 자동 재계산 (calcARStatusAndRisk() 결과 사용)
+      const risk = calcARStatusAndRisk(newRow, refDate);
+      newRow.status  = risk.status;
+      newRow.elapsed = risk.basisDays;
+
+      // expected/collected/remaining/ar_applied/ar_deduct_log 등 보호 필드 — spread로 원본 값 유지됨
+      arData[i] = newRow;
+      appliedCnt++;
+    }
+
+    saveDataExplicit();
+    buildARPartnerSelect();
+    closeARBulkEditModal();
+    arSelectedIds.clear(); // 성공한 경우에만 선택 상태 초기화
+    renderAll();
+    showToast(`✅ ${appliedCnt}건 처리 완료`, 'green');
+  } catch (e) {
+    arData = arDataBackup; // 저장 실패 시 전체 원복
+    renderAll();
+    alert(`오류가 발생했습니다: ${e.message || e}\n선택 상태는 유지되어 있으니 다시 시도하세요.`);
+  }
+}
+
+/* ---- AR 선택 수정 이벤트 바인딩 ---- */
+document.getElementById('ar-bulk-edit-btn').addEventListener('click', openARBulkEditModal);
+document.getElementById('ar-bulk-apply-btn').addEventListener('click', applyARBulkEdit);
+document.getElementById('ar-bulk-preview-btn').addEventListener('click', previewARBulkEdit);
+document.getElementById('ar-bulk-edit-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeARBulkEditModal();
+});
+
+/* ---- 라디오 → 입력칸 표시 토글 (1회 등록) ---- */
+['partner', 'start', 'due', 'note'].forEach(key => {
+  document.querySelectorAll(`input[name="ar-bulk-${key}-mode"]`).forEach(radio => {
+    radio.addEventListener('change', () => {
+      const inp  = document.getElementById(`ar-bulk-${key}-value`);
+      if (!inp) return;
+      const mode = document.querySelector(`input[name="ar-bulk-${key}-mode"]:checked`)?.value || 'keep';
+      inp.style.display = (mode === 'set') ? '' : 'none';
+    });
+  });
+});
 
 /* ===== 입금 CF → AR 미회수액 자동 차감 =====
  * 입금 CF의 중분류가 AR 거래처와 일치하면 경과일 내림차순으로 미회수액을 순차 차감.
