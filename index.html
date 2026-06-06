@@ -1858,6 +1858,7 @@ async function loadDataFromSupabase() {
     else                  cfData = getDefaultCF();
     if (savedAR !== null) arData = JSON.parse(savedAR);
     else                  arData = getDefaultAR();
+    normalizeAllCFData(); // 오프라인 폴백 데이터 메모리 정규화 (Supabase 저장 불가)
     // cf_data 로드 실패 → cat_data도 시도하지 않고 조기 반환
     return false;
   }
@@ -2112,6 +2113,7 @@ function loadData() {
   const savedAR = localStorage.getItem('ar_data');
   cfData = savedCF ? JSON.parse(savedCF) : getDefaultCF();
   arData = savedAR ? JSON.parse(savedAR) : getDefaultAR();
+  normalizeAllCFData(); // 초기 렌더 전 메모리 정규화 (Supabase 저장은 boot 완료 후 실행)
 }
 function saveData() {
   // 자동 저장 경로 (반복거래 생성, ID보정 등) — 급감 차단 적용
@@ -3311,14 +3313,15 @@ function saveCFEdit() {
   }
 
   // ③ CF 데이터 업데이트 (원복 완료 또는 원복 불필요)
-  cfData[idx] = {
+  // normalizeCFRow: status·date·in·out 정규화; _id·ar_created_log·ar_deduct_log 등은 spread 보존
+  cfData[idx] = normalizeCFRow({
     ...r, date, desc,
     in: inAmt, out: outAmt,
     amount: inAmt - outAmt,
     type: inAmt > 0 ? '입금' : '지출',
     status, mid_cat: mid, big_cat: big,
     ...(needRevert ? { ar_applied: '', ar_applied_date: '', ar_applied_error: '', ar_deduct_log: [] } : {}),
-  };
+  });
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
   // ④ AR 재생성 / 직접 업데이트
@@ -3432,6 +3435,7 @@ document.getElementById('cf-add-btn').addEventListener('click', () => {
 function cfAddSingleRow(row) {
   _cfIdCounter++;
   row._id = 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2, 9);
+  row = normalizeCFRow(row); // status 공백·비표준값 / date / in·out 타입 정규화 (_id는 spread 보존)
   cfData.push(row);
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
@@ -5074,6 +5078,31 @@ let _wkSummaryCtx = {}; // renderWeeklyReport()가 매 렌더마다 업데이트
 
 function getWeeklySummaryKey(wStart) { return `weekly_summary_${wStart}`; }
 
+/** HTML 특수문자 escape (사용자 입력을 이메일 HTML에 삽입할 때 사용) */
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/** ISO 문자열 → 'YYYY-MM-DD HH:mm' (KST) 변환
+ *  유효하지 않거나 null이면 '-' 반환 */
+function formatUpdatedAtKST(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).replace(/\./g, '-').replace(/-\s*/g, '-').replace(/\s+/g, ' ').trim();
+  } catch { return '-'; }
+}
+
 function loadWeeklySummary(wStart) {
   try { const r = localStorage.getItem(getWeeklySummaryKey(wStart)); return r ? JSON.parse(r) : null; }
   catch { return null; }
@@ -5081,11 +5110,55 @@ function loadWeeklySummary(wStart) {
 function saveWeeklySummary(wStart, text) {
   const record = { text, updatedAt: new Date().toISOString() };
   localStorage.setItem(getWeeklySummaryKey(wStart), JSON.stringify(record));
+
+  // ── 진단 로그 ①: 저장 시작 ──────────────────────────────────────────
+  const sbKey = getWeeklySummaryKey(wStart);
+  console.log('[weekly-summary:save:start]', {
+    wStart,
+    summaryKey: sbKey,
+    textLength: text.length,
+    textPreview: text.slice(0, 30),
+    updatedAt: record.updatedAt,
+    supabaseReady: !!_supa,
+  });
+
   // Supabase 비동기 저장 — 실패해도 localStorage 저장은 유지
   if (_supa) {
     _supa.from('cat_data')
-      .upsert({ key: getWeeklySummaryKey(wStart), data: { summary: text, updated_at: record.updatedAt } }, { onConflict: 'key' })
-      .catch(e => console.warn('주간 요약 Supabase 저장 실패:', e));
+      .upsert({ key: sbKey, data: { summary: text, updated_at: record.updatedAt } }, { onConflict: 'key' })
+      .select('key, data')
+      .single()
+      .then(({ data: savedRow, error }) => {
+        // ── 진단 로그 ②: upsert 결과 ──────────────────────────────────
+        console.log('[weekly-summary:save:result]', {
+          summaryKey: sbKey,
+          error: error ? error.message : null,
+          savedKey: savedRow?.key ?? null,
+          savedDataType: typeof savedRow?.data,
+          savedSummaryLength: savedRow?.data?.summary?.length ?? (typeof savedRow?.data === 'string' ? savedRow.data.length : null),
+          savedUpdatedAt: savedRow?.data?.updated_at ?? null,
+        });
+        if (error) {
+          console.error('[saveWeeklySummary] Supabase 저장 실패:', error.message, '| key:', sbKey, '| code:', error.code);
+          showToast('⚠ 주간 요약 서버 저장 실패 (로컬에는 저장됨). 콘솔을 확인하세요.', 'amber');
+        } else {
+          console.log('[saveWeeklySummary] Supabase 저장 완료:', sbKey);
+          // ── 진단 로그 ③: 재조회로 저장 검증 ──────────────────────────
+          _supa.from('cat_data').select('key, data').eq('key', sbKey).maybeSingle()
+            .then(({ data: vRow, error: vErr }) => {
+              console.log('[weekly-summary:save:verify]', {
+                summaryKey: sbKey,
+                found: !!vRow,
+                verifyError: vErr ? vErr.message : null,
+                dataType: typeof vRow?.data,
+                summaryInData: vRow?.data?.summary?.slice(0, 30) ?? (typeof vRow?.data === 'string' ? '(string)' : null),
+                updatedAtInData: vRow?.data?.updated_at ?? null,
+              });
+            })
+            .catch(e => console.warn('[weekly-summary:save:verify] 재조회 오류:', e));
+        }
+      })
+      .catch(e => console.warn('[saveWeeklySummary] Supabase 네트워크 오류:', e));
   }
   return record;
 }
@@ -5159,7 +5232,8 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
    buildWeeklyReportHTML — DOM 비의존 순수 함수 (이메일/미리보기용)
    기존 renderWeeklyReport() 계산 로직과 동일, HTML string 반환
    ================================================================= */
-function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText = null) {
+// summaryData: null | string | { summary: string, updated_at: string|null }
+function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
     green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
@@ -5170,8 +5244,26 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText =
 
   // ── 주간 범위 & 주차 계산 ──
   const { wStart, wEnd, pwStart, pwEnd, nwStart, nwEnd } = getWeekRange(targetDate);
-  // 주간 요약 텍스트: 외부 전달값 우선, 없으면 localStorage fallback
-  const effectiveSummary = summaryText !== null ? summaryText : (loadWeeklySummary(wStart)?.text || '');
+
+  // 주간 요약 파싱: summaryData = { summary, updated_at } | 문자열 | null
+  // null이면 localStorage fallback
+  let effectiveSummary = '', effectiveUpdatedAt = null;
+  if (summaryData === null) {
+    const saved = loadWeeklySummary(wStart);
+    effectiveSummary  = saved?.text     || '';
+    effectiveUpdatedAt = saved?.updatedAt || null;
+  } else if (typeof summaryData === 'string') {
+    effectiveSummary = summaryData;
+  } else if (summaryData && typeof summaryData === 'object') {
+    effectiveSummary  = String(summaryData.summary  ?? '');
+    effectiveUpdatedAt = summaryData.updated_at     ?? null;
+  }
+
+  // HTML escape + 줄바꿈 변환 (사용자 입력 XSS 방지)
+  const summaryHtml   = effectiveSummary
+    ? escapeHtml(effectiveSummary).replace(/\r?\n/g, '<br>')
+    : '등록된 주간 요약이 없습니다.';
+  const updatedAtDisp = formatUpdatedAtKST(effectiveUpdatedAt);
   const thuStr  = addDays(wStart, 3);
   const thuDate = new Date(thuStr + 'T00:00:00');
   const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
@@ -5403,7 +5495,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText =
 <!-- 📝 주간 요약 -->
 <tr><td style="background:${C.card};padding:18px 18px 12px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
-  <div style="font-size:13px;color:${C.t2};line-height:1.7">${effectiveSummary ? effectiveSummary.replace(/\n/g,'<br>') : '등록된 주간 요약이 없습니다.'}</div>
+  <div style="font-size:13px;color:${C.t2};line-height:1.7">${summaryHtml}</div>
+  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${updatedAtDisp}</div>
 </td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
@@ -5508,8 +5601,31 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
   statusEl.style.color = 'var(--text2)';
   try {
     if (!_supa) throw new Error('Supabase 연결이 없습니다. 페이지를 새로고침하세요.');
-    const body = { send_type: sendType, dry_run: dryRun, target_date: targetDate || reportBaseDate };
+    const effectiveTarget = targetDate || reportBaseDate;
+    const body = { send_type: sendType, dry_run: dryRun, target_date: effectiveTarget };
     if (recipientOverride) body.recipient_override = recipientOverride;
+
+    // 현재 주차 요약을 body에 포함: Edge Function이 Supabase 저장 여부와 무관하게 내용을 반영할 수 있게
+    // 자동 발송(auto)은 body 없이 Edge Function이 직접 Supabase 조회
+    const _reqSumWkStart = getWeekRange(effectiveTarget).wStart;
+    const _reqSummaryKey = `weekly_summary_${_reqSumWkStart}`;
+    if (sendType !== 'auto') {
+      const _localSum = loadWeeklySummary(_reqSumWkStart);
+      if (_localSum?.text) {
+        body.weekly_summary = { summary: _localSum.text, updated_at: _localSum.updatedAt || null };
+      }
+    }
+
+    // ── 진단 로그 ④: Edge Function 호출 직전 ────────────────────────────
+    console.log('[weekly-summary:request]', {
+      sendType,
+      dryRun,
+      targetDate: effectiveTarget,
+      summaryKey: _reqSummaryKey,
+      weeklySummaryInBody: !!(body.weekly_summary),
+      summaryLength: body.weekly_summary?.summary?.length ?? 0,
+      updatedAt: body.weekly_summary?.updated_at ?? null,
+    });
 
     const { data, error } = await _supa.functions.invoke('send-weekly-report', { body });
 
@@ -5610,9 +5726,12 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
     try {
       /* Edge Function dry-run */
       const res = await callEdgeFunction('auto', true, null, refDate);
-      /* 로컬 HTML 미리보기 */
-      const _previewSummary = loadWeeklySummary(getWeekRange(refDate).wStart)?.text || '';
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummary);
+      /* 로컬 HTML 미리보기: localStorage 요약 + updated_at 포함 */
+      const _previewRawSum = loadWeeklySummary(getWeekRange(refDate).wStart);
+      const _previewSummaryData = _previewRawSum
+        ? { summary: _previewRawSum.text, updated_at: _previewRawSum.updatedAt || null }
+        : null;
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummaryData);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(previewHtml);
@@ -5726,7 +5845,7 @@ function generateRecurring(showToastMsg = true) {
       const status = type === '입금' ? '입금 예정' : '지출 예정';
       const mid = rec.mid_cat || getMidCat(rec.desc, type) || '';
       _cfIdCounter++;
-      cfData.push({
+      cfData.push(normalizeCFRow({
         _id: 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2,9),
         date: targetDate, desc: rec.desc,
         in: rec.in||0, out: rec.out||0,
@@ -5734,7 +5853,7 @@ function generateRecurring(showToastMsg = true) {
         type, status, mid_cat: mid, big_cat: getBigCat(mid),
         recur_id:  rec._id  || null, // R-1: 반복 거래 추적 ID
         recur_day: rec.day  || null, // 디버깅/표시용 원본 반복일
-      });
+      }));
       added++;
     }
   }
@@ -7636,6 +7755,16 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     // ensureCFIds / generateRecurring 은 반드시 이 라인 이후에 실행해야 안전함
     _isInitialized = true;
 
+    // ── CF 데이터 일괄 정규화 (Supabase 로드 직후) ──────────────────────
+    // status 공백·비표준값 / date HH:mm:ss 잔재 / in·out 문자열 타입 등을 보정
+    // 변경이 있으면 saveDataExplicit()로 Supabase에 한 번만 저장 (루프 없음)
+    const _bootNormCount = normalizeAllCFData();
+    if (_bootNormCount > 0) {
+      saveDataExplicit();
+      console.log(`[boot] cfData 정규화 ${_bootNormCount}건 → Supabase 저장`);
+      showToast(`🔧 기존 데이터 ${_bootNormCount}건 정규화 완료`, 'amber');
+    }
+
     ensureCFIds();            // Supabase 데이터 기준으로 _id 보정 (필요 시 저장)
     loadCatData();            // Supabase에서 받은 카테고리로 갱신
     ensureRecurIds();         // 기존 반복 거래 템플릿에 _id 마이그레이션 (필요 시 저장)
@@ -7674,6 +7803,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     // Supabase 로드 실패(오프라인) 시에도 localStorage 기반으로 초기화 완료 처리
     // 단, 오프라인 상태이므로 원격 저장은 어차피 실패 — 플래그는 세우지 않음
     _isInitialized = false;
+    normalizeAllCFData(); // 오프라인 메모리 정규화 (저장 불가)
     ensureCFIds();            // _id 보정 (localStorage 저장만 실행됨)
     ensureRecurIds();         // 반복 거래 _id 마이그레이션 (오프라인 시 localStorage만)
     const autoChanged2 = autoUpdateStatus();
@@ -7726,6 +7856,73 @@ function toNum(v) {
   if (typeof v === 'number') return v;
   const s = String(v).replace(/[,₩\s]/g,'');
   return parseFloat(s) || 0;
+}
+
+// ============================================================
+// CF 데이터 정규화 (저장 시 공통 적용 — status / date / in / out)
+// ============================================================
+function normalizeCFStatus(v) {
+  return String(v ?? '').replace(/\s+/g, ' ').trim();
+}
+function normalizeCFAmount(v) {
+  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : 0;
+}
+function normalizeCFDate(v) {
+  // excelDateToStr 가 HH:mm:ss / '/' '.' 등 모든 형식을 YYYY-MM-DD 로 변환
+  const s = excelDateToStr(v);
+  return s ? s.slice(0, 10) : '';
+}
+/** 단일 CF 행을 정규화한 새 객체를 반환.
+ *  _id·mid_cat·big_cat·desc 등 나머지 필드는 spread로 보존. */
+function normalizeCFRow(row) {
+  const inAmt  = normalizeCFAmount(row.in);
+  const outAmt = normalizeCFAmount(row.out);
+  const type   = inAmt > 0 ? '입금' : '지출';
+
+  // 비표준 status 매핑 (화면 표시용 문구·공백 누락·붙여쓰기 보정)
+  const STATUS_MAP = {
+    '실제 출금': '실제 지출', '출금 예정': '지출 예정',
+    '실제입금':  '실제 입금', '실제지출':  '실제 지출',
+    '입금예정':  '입금 예정', '지출예정':  '지출 예정',
+  };
+  const VALID_STATUSES = ['실제 입금', '실제 지출', '입금 예정', '지출 예정'];
+
+  let status = normalizeCFStatus(row.status);
+  if (STATUS_MAP[status]) status = STATUS_MAP[status];
+
+  // 여전히 유효하지 않으면 날짜 / type 기준으로 자동 생성
+  if (!VALID_STATUSES.includes(status)) {
+    const today = todayKST();
+    const date  = normalizeCFDate(row.date);
+    status = type === '입금'
+      ? (date <= today ? '실제 입금' : '입금 예정')
+      : (date <= today ? '실제 지출' : '지출 예정');
+  }
+
+  return {
+    ...row,
+    date:   normalizeCFDate(row.date),
+    in:     inAmt,
+    out:    outAmt,
+    type,
+    status,
+  };
+}
+
+/** 현재 cfData 전체를 정규화 (메모리 내 변환 — 저장 여부는 호출부가 결정).
+ *  반환값: 실제로 변경된 행 수 (0 = 이미 모두 정규화 상태) */
+function normalizeAllCFData() {
+  let changed = 0;
+  cfData = cfData.map(row => {
+    const before = `${String(row.date ?? '').slice(0,10)}|${Number(row.in)||0}|${Number(row.out)||0}|${String(row.type ?? '')}|${String(row.status ?? '').trim()}`;
+    const norm   = normalizeCFRow(row);
+    const after  = `${norm.date}|${norm.in}|${norm.out}|${norm.type}|${norm.status}`;
+    if (before !== after) changed++;
+    return norm;
+  });
+  if (changed > 0) console.log(`[normalizeAllCFData] ${changed}건 정규화됨`);
+  return changed;
 }
 
 // ---- Generic file reader ----
@@ -7867,7 +8064,9 @@ function parseCFRows() {
     if (!status) status = dateStr <= today ? (type==='입금' ? '실제 입금' : '실제 지출') : (type==='입금' ? '입금 예정' : '지출 예정');
 
     const big = getBigCat(mid);
-    parsed.push({ date: dateStr, desc: finalDesc, in: inAmt, out: outAmt, amount: inAmt - outAmt, type, status, mid_cat: mid, big_cat: big });
+    // normalizeCFRow: status 공백·비표준값 / date 슬라이스 / in·out 숫자 타입 최종 보정
+    const rawRow = { date: dateStr, desc: finalDesc, in: inAmt, out: outAmt, amount: inAmt - outAmt, type, status, mid_cat: mid, big_cat: big };
+    parsed.push(normalizeCFRow(rawRow));
   });
   return { parsed, errors };
 }
