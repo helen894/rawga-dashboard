@@ -565,10 +565,11 @@
     <button class="btn sm" id="cf-filter-reset-btn" style="color:var(--text2);font-size:11px">초기화</button>
   </div>
 
-  <!-- 일괄 삭제 액션 바 -->
-  <div id="cf-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(255,77,106,0.08);border:1px solid rgba(255,77,106,0.25);border-radius:8px">
+  <!-- 일괄 작업 액션 바 -->
+  <div id="cf-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.22);border-radius:8px">
     <span id="cf-selected-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
     <div style="flex:1"></div>
+    <button class="btn sm" id="cf-bulk-edit-btn" style="color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)">선택 수정 (0건)</button>
     <button class="btn sm" id="cf-download-selected-btn" style="color:var(--green);border-color:var(--green)">선택 다운로드</button>
     <button class="btn sm red" id="cf-delete-selected-btn">선택 삭제</button>
     <button class="btn sm" id="cf-bulk-cancel-btn" style="color:var(--text2)">취소</button>
@@ -1278,6 +1279,103 @@
   </div>
 </div>
 
+<!-- ======== CF 선택 수정 모달 ======== -->
+<div class="modal-backdrop hidden" id="cf-bulk-edit-modal">
+  <div class="modal" style="width:540px">
+    <div class="modal-header">
+      <span class="modal-title">✏️ 입출금 내역 선택 수정</span>
+      <button class="modal-close" onclick="closeCFBulkEditModal()">×</button>
+    </div>
+
+    <div style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.7">
+      선택한 입출금 내역 <strong id="cf-bulk-edit-count" style="color:var(--text)">0</strong>건을 수정합니다.<br>
+      <span style="font-size:12px">변경할 항목만 선택하세요. 선택하지 않은 항목은 기존 값을 유지합니다.</span>
+    </div>
+
+    <!-- AR 반영 완료 거래 경고 -->
+    <div id="cf-bulk-ar-warning" style="display:none;padding:10px 14px;margin-bottom:16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:8px;font-size:12px;color:var(--text2)">
+      ⚠ <strong id="cf-bulk-ar-count" style="color:var(--text)">0</strong>건의 AR 반영 완료 거래가 포함되어 있습니다.<br>
+      AR 반영 완료 거래의 <strong>상태 변경은 차단</strong>됩니다. 중분류·대분류·거래내용·비고 변경만 허용됩니다.
+    </div>
+
+    <!-- 상태 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">상태</div>
+      <select id="cf-bulk-status" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;cursor:pointer">
+        <option value="">변경 안 함</option>
+        <option value="실제 입금">실제 입금</option>
+        <option value="입금 예정">입금 예정</option>
+        <option value="실제 지출">실제 지출</option>
+        <option value="지출 예정">지출 예정</option>
+      </select>
+    </div>
+
+    <!-- 중분류 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">중분류</div>
+      <select id="cf-bulk-mid" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;cursor:pointer">
+        <option value="__KEEP__">변경 안 함</option>
+        <option value="">— 빈 값으로 변경 —</option>
+      </select>
+    </div>
+
+    <!-- 대분류 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">대분류</div>
+      <select id="cf-bulk-big" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;cursor:pointer">
+        <option value="__KEEP__">변경 안 함</option>
+        <option value="">— 빈 값으로 변경 —</option>
+      </select>
+    </div>
+
+    <!-- 거래내용 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">거래내용</div>
+      <div style="display:flex;gap:18px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-desc-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-desc-mode" value="empty"> 빈 값으로 변경
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-desc-mode" value="set"> 직접 입력
+        </label>
+      </div>
+      <input type="text" id="cf-bulk-desc-value" placeholder="새 거래내용" disabled
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;opacity:0.35">
+    </div>
+
+    <!-- 비고 -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">비고</div>
+      <div style="display:flex;gap:18px;margin-bottom:8px;font-size:13px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-memo-mode" value="keep" checked> 변경 안 함
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-memo-mode" value="empty"> 빈 값으로 변경
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="cf-bulk-memo-mode" value="set"> 직접 입력
+        </label>
+      </div>
+      <input type="text" id="cf-bulk-memo-value" placeholder="새 비고" disabled
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;box-sizing:border-box;opacity:0.35">
+    </div>
+
+    <!-- 미리보기 결과 (숨김 상태에서 시작) -->
+    <div id="cf-bulk-preview" style="display:none;margin-bottom:16px;padding:12px 14px;background:var(--bg3);border-radius:8px;font-size:12px;line-height:2;border:1px solid var(--border2)"></div>
+
+    <!-- 버튼 -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn green" id="cf-bulk-apply-btn">선택 항목 수정</button>
+      <button class="btn" id="cf-bulk-preview-btn">변경사항 미리보기</button>
+      <button class="btn" onclick="closeCFBulkEditModal()">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======== CF UPLOAD MODAL ======== -->
 <div class="modal-backdrop hidden" id="cf-modal">
   <div class="modal">
@@ -1858,6 +1956,7 @@ async function loadDataFromSupabase() {
     else                  cfData = getDefaultCF();
     if (savedAR !== null) arData = JSON.parse(savedAR);
     else                  arData = getDefaultAR();
+    normalizeAllCFData(); // 오프라인 폴백 데이터 메모리 정규화 (Supabase 저장 불가)
     // cf_data 로드 실패 → cat_data도 시도하지 않고 조기 반환
     return false;
   }
@@ -2032,6 +2131,9 @@ function subscribeRealtime() {
         ensureCFIds();
         // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
         localStorage.setItem('cf_data', JSON.stringify(cfData));
+        // Realtime 갱신 후 존재하지 않는 ID는 선택 목록에서 제거
+        const validIdSet = new Set(cfData.map(r => r._id).filter(Boolean));
+        for (const id of cfSelectedIds) { if (!validIdSet.has(id)) cfSelectedIds.delete(id); }
         renderAll();
         showToast('🔄 입출금 내역이 업데이트됐습니다.', 'green');
       } finally { _isSyncing = false; }
@@ -2112,6 +2214,7 @@ function loadData() {
   const savedAR = localStorage.getItem('ar_data');
   cfData = savedCF ? JSON.parse(savedCF) : getDefaultCF();
   arData = savedAR ? JSON.parse(savedAR) : getDefaultAR();
+  normalizeAllCFData(); // 초기 렌더 전 메모리 정규화 (Supabase 저장은 boot 완료 후 실행)
 }
 function saveData() {
   // 자동 저장 경로 (반복거래 생성, ID보정 등) — 급감 차단 적용
@@ -3040,6 +3143,8 @@ function renderARDonutChart() {
 /* ===== CF TABLE ===== */
 let cfPage = 1, cfPerPage = 30, cfFiltered = [], cfSortCol = 'date', cfSortAsc = false;
 let _cfIdCounter = 0;
+// 선택된 거래 ID 집합 — 페이지 이동·필터 변경 후에도 _id 기준으로 선택 상태 유지
+let cfSelectedIds = new Set();
 
 // 각 row에 안정적인 고유 ID 부여 — loadData 직후 한 번만 실행
 function ensureCFIds() {
@@ -3112,7 +3217,7 @@ function renderCFTable() {
       : `<span class="badge ${r.type}">${r.status}</span>`;
     return `<tr>
       <td style="text-align:center">
-        <input type="checkbox" class="cf-row-check" data-id="${r._id}" style="cursor:pointer">
+        <input type="checkbox" class="cf-row-check" data-id="${r._id}" ${cfSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
       </td>
       <td class="date-cell">${r.date}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
@@ -3166,6 +3271,9 @@ function renderCFTable() {
   delAllBtn.disabled = cfFiltered.length === 0;
   delAllBtn.style.opacity = cfFiltered.length === 0 ? '0.35' : '';
   delAllBtn.style.cursor  = cfFiltered.length === 0 ? 'not-allowed' : '';
+
+  // 선택 상태 복원 및 헤더·바 동기화 (페이지 변경 후에도 cfSelectedIds 기준으로 유지)
+  updateBulkBar();
 }
 
 /* ---- 삭제 / 수정: 이벤트 위임 방식 ---- */
@@ -3311,14 +3419,15 @@ function saveCFEdit() {
   }
 
   // ③ CF 데이터 업데이트 (원복 완료 또는 원복 불필요)
-  cfData[idx] = {
+  // normalizeCFRow: status·date·in·out 정규화; _id·ar_created_log·ar_deduct_log 등은 spread 보존
+  cfData[idx] = normalizeCFRow({
     ...r, date, desc,
     in: inAmt, out: outAmt,
     amount: inAmt - outAmt,
     type: inAmt > 0 ? '입금' : '지출',
     status, mid_cat: mid, big_cat: big,
     ...(needRevert ? { ar_applied: '', ar_applied_date: '', ar_applied_error: '', ar_deduct_log: [] } : {}),
-  };
+  });
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
   // ④ AR 재생성 / 직접 업데이트
@@ -3432,6 +3541,7 @@ document.getElementById('cf-add-btn').addEventListener('click', () => {
 function cfAddSingleRow(row) {
   _cfIdCounter++;
   row._id = 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2, 9);
+  row = normalizeCFRow(row); // status 공백·비표준값 / date / in·out 타입 정규화 (_id는 spread 보존)
   cfData.push(row);
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
@@ -3561,37 +3671,76 @@ document.querySelector('#panel-cashflow thead').addEventListener('click', e => {
 });
 
 /* ---- 체크박스 선택 관련 헬퍼 ---- */
+// getCheckedIds: cfSelectedIds(Set)를 배열로 반환 — 페이지 이동 후에도 전체 선택 목록 유지
 function getCheckedIds() {
-  return [...document.querySelectorAll('.cf-row-check:checked')].map(c => c.dataset.id);
+  return [...cfSelectedIds];
 }
+
 function updateBulkBar() {
-  const ids = getCheckedIds();
-  const bar = document.getElementById('cf-bulk-bar');
-  const countEl = document.getElementById('cf-selected-count');
-  if (ids.length > 0) {
+  const count = cfSelectedIds.size;
+  const bar      = document.getElementById('cf-bulk-bar');
+  const countEl  = document.getElementById('cf-selected-count');
+  const editBtn  = document.getElementById('cf-bulk-edit-btn');
+
+  if (count > 0) {
     bar.style.display = 'flex';
-    countEl.textContent = `${ids.length}건 선택됨`;
+    countEl.textContent = `${count}건 선택됨`;
+    if (editBtn) {
+      editBtn.textContent    = `선택 수정 (${count}건)`;
+      editBtn.disabled       = false;
+      editBtn.style.opacity  = '';
+      editBtn.style.cursor   = '';
+    }
   } else {
     bar.style.display = 'none';
+    if (editBtn) {
+      editBtn.textContent    = '선택 수정 (0건)';
+      editBtn.disabled       = true;
+      editBtn.style.opacity  = '0.35';
+      editBtn.style.cursor   = 'not-allowed';
+    }
   }
-  // 전체 선택 체크박스 상태 동기화
-  const allChecks = document.querySelectorAll('.cf-row-check');
+
+  // 헤더 체크박스: 현재 페이지에 보이는 행 기준으로 동기화
+  const curPageChecks = [...document.querySelectorAll('.cf-row-check')];
+  const curPageIds    = curPageChecks.map(c => c.dataset.id);
+  const selectedOnPage = curPageIds.filter(id => cfSelectedIds.has(id));
   const checkAll = document.getElementById('cf-check-all');
   if (checkAll) {
-    checkAll.indeterminate = ids.length > 0 && ids.length < allChecks.length;
-    checkAll.checked = allChecks.length > 0 && ids.length === allChecks.length;
+    if (curPageIds.length === 0) {
+      checkAll.checked       = false;
+      checkAll.indeterminate = false;
+    } else if (selectedOnPage.length === curPageIds.length) {
+      checkAll.checked       = true;
+      checkAll.indeterminate = false;
+    } else if (selectedOnPage.length > 0) {
+      checkAll.checked       = false;
+      checkAll.indeterminate = true;
+    } else {
+      checkAll.checked       = false;
+      checkAll.indeterminate = false;
+    }
   }
 }
 
-/* ---- 전체 선택 체크박스 ---- */
+/* ---- 전체 선택 체크박스 (현재 페이지만 선택/해제) ---- */
 document.getElementById('cf-check-all').addEventListener('change', e => {
-  document.querySelectorAll('.cf-row-check').forEach(c => c.checked = e.target.checked);
+  document.querySelectorAll('.cf-row-check').forEach(c => {
+    c.checked = e.target.checked;
+    if (e.target.checked) cfSelectedIds.add(c.dataset.id);
+    else                  cfSelectedIds.delete(c.dataset.id);
+  });
   updateBulkBar();
 });
 
-/* ---- 개별 체크박스 (이벤트 위임) ---- */
+/* ---- 개별 체크박스 (이벤트 위임) — cfSelectedIds 동기화 ---- */
 document.getElementById('cf-tbody').addEventListener('change', e => {
-  if (e.target.classList.contains('cf-row-check')) updateBulkBar();
+  if (e.target.classList.contains('cf-row-check')) {
+    const id = e.target.dataset.id;
+    if (e.target.checked) cfSelectedIds.add(id);
+    else                  cfSelectedIds.delete(id);
+    updateBulkBar();
+  }
 });
 
 /* ---- 선택 삭제 ---- */
@@ -3622,10 +3771,11 @@ document.getElementById('cf-delete-selected-btn').addEventListener('click', () =
   }
 
   cfData = cfData.filter(r => !idSet.has(r._id));
+  cfSelectedIds.clear();  // 삭제 완료 후 선택 상태 초기화
   saveDataExplicit();
   renderAll();
-  document.getElementById('cf-bulk-bar').style.display = 'none';
-  document.getElementById('cf-check-all').checked = false;
+  const checkAll = document.getElementById('cf-check-all');
+  if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
   let msg = `🗑 ${ids.length}건 삭제됐습니다.`;
   if (arRevCreated)  msg += ` | AR ${arRevCreated}건 삭제`;
   if (arProtected)   msg += ` | AR ${arProtected}건 보호됨`;
@@ -3633,11 +3783,298 @@ document.getElementById('cf-delete-selected-btn').addEventListener('click', () =
   showToast(msg, 'red');
 });
 
-/* ---- 선택 취소 ---- */
+/* ---- 선택 취소 (액션 바의 "취소" 버튼 — 선택 전체 해제) ---- */
 document.getElementById('cf-bulk-cancel-btn').addEventListener('click', () => {
+  cfSelectedIds.clear();
   document.querySelectorAll('.cf-row-check').forEach(c => c.checked = false);
-  document.getElementById('cf-check-all').checked = false;
-  document.getElementById('cf-bulk-bar').style.display = 'none';
+  const checkAll = document.getElementById('cf-check-all');
+  if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
+  updateBulkBar();
+});
+
+/* ===================================================================
+   CF 선택 수정 (Bulk Edit)
+   ===================================================================
+
+   우선순위:
+   - 상태: 선택 시 → 방향 충돌 검증 → AR 반영 완료 행은 상태 변경 제외
+   - 중분류/대분류: __KEEP__ = 변경 안 함, '' = 빈 값으로 변경, 그 외 = 해당값
+   - 거래내용/비고: 'keep' = 변경 안 함, 'empty' = 빈 값, 'set' = 직접 입력
+   - normalizeCFRow 적용 후 저장
+   - saveDataExplicit() 1회, renderAll() 1회
+   =================================================================== */
+
+function openCFBulkEditModal() {
+  const count = cfSelectedIds.size;
+  if (!count) return;
+
+  document.getElementById('cf-bulk-edit-count').textContent = count;
+
+  // AR 반영 완료 거래 감지
+  const selectedRows = cfData.filter(r => cfSelectedIds.has(r._id));
+  const arRows       = selectedRows.filter(r => r.ar_applied === '완료');
+  const arWarn       = document.getElementById('cf-bulk-ar-warning');
+  if (arRows.length > 0) {
+    document.getElementById('cf-bulk-ar-count').textContent = arRows.length;
+    arWarn.style.display = 'block';
+  } else {
+    arWarn.style.display = 'none';
+  }
+
+  // 중분류 셀렉터 구성
+  const mids   = getMidCats();
+  const midSel = document.getElementById('cf-bulk-mid');
+  midSel.innerHTML =
+    '<option value="__KEEP__">변경 안 함</option>' +
+    '<option value="">— 빈 값으로 변경 —</option>' +
+    mids.map(m => `<option value="${m}">${m}</option>`).join('');
+
+  // 대분류 셀렉터 구성 (catMidToBig + cfData 내 big_cat 포함)
+  const bigSet = new Set([...getBigCats(), ...cfData.map(r => r.big_cat).filter(Boolean)]);
+  const bigs   = [...bigSet].sort((a, b) => a.localeCompare(b, 'ko'));
+  const bigSel = document.getElementById('cf-bulk-big');
+  bigSel.innerHTML =
+    '<option value="__KEEP__">변경 안 함</option>' +
+    '<option value="">— 빈 값으로 변경 —</option>' +
+    bigs.map(b => `<option value="${b}">${b}</option>`).join('');
+
+  // 입력 초기화
+  document.getElementById('cf-bulk-status').value = '';
+  document.querySelector('input[name="cf-bulk-desc-mode"][value="keep"]').checked = true;
+  document.querySelector('input[name="cf-bulk-memo-mode"][value="keep"]').checked = true;
+  const descInput = document.getElementById('cf-bulk-desc-value');
+  const memoInput = document.getElementById('cf-bulk-memo-value');
+  descInput.value = ''; descInput.disabled = true; descInput.style.opacity = '0.35';
+  memoInput.value = ''; memoInput.disabled = true; memoInput.style.opacity = '0.35';
+  document.getElementById('cf-bulk-preview').style.display = 'none';
+
+  document.getElementById('cf-bulk-edit-modal').classList.remove('hidden');
+}
+
+function closeCFBulkEditModal() {
+  document.getElementById('cf-bulk-edit-modal').classList.add('hidden');
+  // 취소 시 선택 상태 유지 (요구사항: "취소 시 데이터는 변경하지 않고 선택 상태는 유지")
+}
+
+/** 모달 폼에서 변경 파라미터를 읽어 반환 */
+function getCFBulkParams() {
+  return {
+    status   : document.getElementById('cf-bulk-status').value,   // '' = 변경 안 함
+    mid      : document.getElementById('cf-bulk-mid').value,      // '__KEEP__' = 변경 안 함
+    big      : document.getElementById('cf-bulk-big').value,      // '__KEEP__' = 변경 안 함
+    descMode : (document.querySelector('input[name="cf-bulk-desc-mode"]:checked') || {}).value || 'keep',
+    descValue: document.getElementById('cf-bulk-desc-value').value,
+    memoMode : (document.querySelector('input[name="cf-bulk-memo-mode"]:checked') || {}).value || 'keep',
+    memoValue: document.getElementById('cf-bulk-memo-value').value,
+  };
+}
+
+/** 각 행에 실제 적용될 변경 건수 계산 (검증과 별개) */
+function calcCFBulkStats(selectedRows, params) {
+  let statusCnt = 0, midCnt = 0, bigCnt = 0, descCnt = 0, memoCnt = 0;
+  let actualCnt = 0, noChangeCnt = 0, arLinkedCnt = 0;
+
+  for (const r of selectedRows) {
+    const isAR = r.ar_applied === '완료';
+    if (isAR) arLinkedCnt++;
+    let changed = false;
+
+    // 상태 (AR 반영 완료 행은 변경 안 함)
+    if (params.status && !isAR && r.status !== params.status) { statusCnt++; changed = true; }
+
+    // 중분류
+    if (params.mid !== '__KEEP__' && (r.mid_cat || '') !== params.mid) { midCnt++; changed = true; }
+
+    // 대분류
+    if (params.big !== '__KEEP__' && (r.big_cat || '') !== params.big) { bigCnt++; changed = true; }
+
+    // 거래내용
+    if (params.descMode === 'empty' && (r.desc || '') !== '') { descCnt++; changed = true; }
+    else if (params.descMode === 'set' && (r.desc || '') !== params.descValue) { descCnt++; changed = true; }
+
+    // 비고
+    if (params.memoMode === 'empty' && (r.memo || '') !== '') { memoCnt++; changed = true; }
+    else if (params.memoMode === 'set' && (r.memo || '') !== params.memoValue) { memoCnt++; changed = true; }
+
+    if (changed) actualCnt++; else noChangeCnt++;
+  }
+  return { statusCnt, midCnt, bigCnt, descCnt, memoCnt, actualCnt, noChangeCnt, arLinkedCnt };
+}
+
+/** 상태 변경 방향 충돌 및 비정상 거래 검증 */
+function validateCFBulkParams(selectedRows, params) {
+  const errors = [], warnings = [];
+
+  if (params.status) {
+    const isInStatus  = params.status === '실제 입금' || params.status === '입금 예정';
+    const isOutStatus = params.status === '실제 지출' || params.status === '지출 예정';
+    let dirConflict = 0;
+    for (const r of selectedRows) {
+      if (r.ar_applied === '완료') continue; // AR 완료 행은 상태 변경 안 함 → 검증 제외
+      const hasIn  = (r.in  || 0) > 0;
+      const hasOut = (r.out || 0) > 0;
+      if (isInStatus  && hasOut && !hasIn) dirConflict++;
+      if (isOutStatus && hasIn  && !hasOut) dirConflict++;
+    }
+    if (dirConflict > 0)
+      errors.push(`선택한 거래 중 ${dirConflict}건은 입출금 방향과 선택한 상태가 일치하지 않습니다.`);
+  }
+
+  // 비정상 거래 감지
+  const abnormal = selectedRows.filter(r => {
+    const i = r.in || 0, o = r.out || 0;
+    return (i > 0 && o > 0) || (i === 0 && o === 0);
+  });
+  if (abnormal.length > 0)
+    warnings.push(`⚠ ${abnormal.length}건의 비정상 거래(입금·출금 동시 존재 또는 둘 다 0)가 포함되어 있습니다.`);
+
+  return { errors, warnings };
+}
+
+/** "변경사항 미리보기" 버튼 클릭 */
+function previewCFBulkEdit() {
+  const selectedRows = cfData.filter(r => cfSelectedIds.has(r._id));
+  if (!selectedRows.length) return;
+  const params = getCFBulkParams();
+  const stats  = calcCFBulkStats(selectedRows, params);
+  const { errors, warnings } = validateCFBulkParams(selectedRows, params);
+
+  let html = '';
+  if (errors.length)
+    html += errors.map(e => `<div style="color:var(--red);margin-bottom:4px">🚫 ${e}</div>`).join('');
+  if (warnings.length)
+    html += warnings.map(w => `<div style="color:#f59e0b;margin-bottom:4px">${w}</div>`).join('');
+
+  html += `<table style="width:100%;border-collapse:collapse">`;
+  const row = (label, val, color) =>
+    `<tr><td style="padding:1px 4px;color:var(--text2)">${label}</td><td style="text-align:right;font-weight:600;${color ? 'color:'+color : ''}">${val}</td></tr>`;
+  html += row('선택 건수',      selectedRows.length + '건');
+  html += row('실제 변경 예정', stats.actualCnt   + '건', stats.actualCnt > 0 ? 'var(--green)' : '');
+  html += row('변경 없는 항목', stats.noChangeCnt + '건', 'var(--text3)');
+  if (params.status)            html += row('　· 상태 변경',   stats.statusCnt + '건');
+  if (params.mid !== '__KEEP__') html += row('　· 중분류 변경', stats.midCnt    + '건');
+  if (params.big !== '__KEEP__') html += row('　· 대분류 변경', stats.bigCnt    + '건');
+  if (params.descMode !== 'keep') html += row('　· 거래내용 변경', stats.descCnt + '건');
+  if (params.memoMode !== 'keep') html += row('　· 비고 변경',     stats.memoCnt + '건');
+  html += row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#f59e0b' : '');
+  html += `</table>`;
+
+  const previewEl = document.getElementById('cf-bulk-preview');
+  previewEl.innerHTML = html;
+  previewEl.style.display = 'block';
+}
+
+/** "선택 항목 수정" 버튼 클릭 — 검증 → 확인 → 적용 */
+function applyCFBulkEdit() {
+  if (blockIfOffline('선택 수정')) return;
+  const selectedRows = cfData.filter(r => cfSelectedIds.has(r._id));
+  if (!selectedRows.length) { alert('선택된 항목이 없습니다.'); return; }
+
+  const params = getCFBulkParams();
+
+  // 아무 변경 항목도 선택 안 됨
+  const hasAnyChange = params.status || params.mid !== '__KEEP__' || params.big !== '__KEEP__' ||
+    params.descMode !== 'keep' || params.memoMode !== 'keep';
+  if (!hasAnyChange) { alert('변경할 항목을 하나 이상 선택하세요.'); return; }
+
+  // 유효성 검증 (오류는 차단, 경고는 안내 후 진행)
+  const { errors, warnings } = validateCFBulkParams(selectedRows, params);
+  if (errors.length) { alert(errors.join('\n')); return; }
+
+  // 변경 건수 계산
+  const stats = calcCFBulkStats(selectedRows, params);
+
+  // 최종 확인 메시지
+  let confirmMsg = `선택한 ${selectedRows.length}건 중 ${stats.actualCnt}건을 수정합니다.\n\n`;
+  if (params.status)              confirmMsg += `· 상태 변경:   ${stats.statusCnt}건\n`;
+  if (params.mid !== '__KEEP__')  confirmMsg += `· 중분류 변경: ${stats.midCnt}건\n`;
+  if (params.big !== '__KEEP__')  confirmMsg += `· 대분류 변경: ${stats.bigCnt}건\n`;
+  if (params.descMode !== 'keep') confirmMsg += `· 거래내용 변경: ${stats.descCnt}건\n`;
+  if (params.memoMode !== 'keep') confirmMsg += `· 비고 변경:   ${stats.memoCnt}건\n`;
+  if (stats.arLinkedCnt > 0)      confirmMsg += `\n⚠ AR 반영 완료 ${stats.arLinkedCnt}건 포함\n   → 상태 변경 제외, 나머지 항목만 수정됩니다.\n`;
+  if (warnings.length)            confirmMsg += '\n' + warnings.join('\n') + '\n';
+  confirmMsg += '\n계속하시겠습니까?';
+  if (!confirm(confirmMsg)) return;
+
+  // cfData 백업 (저장 실패 시 원복용)
+  const cfDataBackup = cfData.map(r => ({ ...r }));
+
+  try {
+    let appliedCnt = 0;
+    for (let i = 0; i < cfData.length; i++) {
+      const r = cfData[i];
+      if (!cfSelectedIds.has(r._id)) continue;
+      const isAR   = r.ar_applied === '완료';
+      const newRow = { ...r };
+
+      // 상태 (AR 반영 완료 행은 변경 안 함)
+      if (params.status && !isAR) newRow.status = params.status;
+
+      // 중분류
+      if (params.mid !== '__KEEP__') newRow.mid_cat = params.mid;
+
+      // 대분류
+      if (params.big !== '__KEEP__') newRow.big_cat = params.big;
+
+      // 거래내용
+      if      (params.descMode === 'empty') newRow.desc = '';
+      else if (params.descMode === 'set')   newRow.desc = params.descValue;
+
+      // 비고
+      if      (params.memoMode === 'empty') newRow.memo = '';
+      else if (params.memoMode === 'set')   newRow.memo = params.memoValue;
+
+      // normalizeCFRow: status·date·in·out 정규화; _id·ar_* 등은 spread 보존
+      cfData[i] = normalizeCFRow(newRow);
+      appliedCnt++;
+    }
+
+    cfData.sort((a, b) => a.date.localeCompare(b.date));
+
+    // 저장 → 모달 닫기 → 선택 초기화 → 렌더링 (단 1회)
+    saveDataExplicit();
+    closeCFBulkEditModal();
+    cfSelectedIds.clear();
+    renderAll();
+    showToast(`✅ ${appliedCnt}건 처리 완료 (실제 변경: ${stats.actualCnt}건)`, 'green');
+  } catch (e) {
+    // 저장 실패 → 원복 + 오류 안내 (선택 상태 유지해 재시도 가능)
+    cfData = cfDataBackup;
+    renderAll();
+    alert(`오류가 발생했습니다: ${e.message}\n\n데이터를 수정 전 상태로 복원했습니다.\n선택 상태는 유지되어 있으니 다시 시도하세요.`);
+  }
+}
+
+/* ---- 선택 수정 버튼 이벤트 바인딩 ---- */
+document.getElementById('cf-bulk-edit-btn').addEventListener('click', openCFBulkEditModal);
+document.getElementById('cf-bulk-apply-btn').addEventListener('click', applyCFBulkEdit);
+document.getElementById('cf-bulk-preview-btn').addEventListener('click', previewCFBulkEdit);
+
+// 배경 클릭으로 닫기
+document.getElementById('cf-bulk-edit-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCFBulkEditModal();
+});
+
+// 거래내용 라디오 → 텍스트 입력 활성/비활성
+document.querySelectorAll('input[name="cf-bulk-desc-mode"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const inp = document.getElementById('cf-bulk-desc-value');
+    const isSet = document.querySelector('input[name="cf-bulk-desc-mode"]:checked').value === 'set';
+    inp.disabled = !isSet;
+    inp.style.opacity = isSet ? '1' : '0.35';
+    if (!isSet) inp.value = '';
+  });
+});
+
+// 비고 라디오 → 텍스트 입력 활성/비활성
+document.querySelectorAll('input[name="cf-bulk-memo-mode"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    const inp = document.getElementById('cf-bulk-memo-value');
+    const isSet = document.querySelector('input[name="cf-bulk-memo-mode"]:checked').value === 'set';
+    inp.disabled = !isSet;
+    inp.style.opacity = isSet ? '1' : '0.35';
+    if (!isSet) inp.value = '';
+  });
 });
 
 /* ---- 선택 다운로드 ---- */
@@ -5074,6 +5511,31 @@ let _wkSummaryCtx = {}; // renderWeeklyReport()가 매 렌더마다 업데이트
 
 function getWeeklySummaryKey(wStart) { return `weekly_summary_${wStart}`; }
 
+/** HTML 특수문자 escape (사용자 입력을 이메일 HTML에 삽입할 때 사용) */
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/** ISO 문자열 → 'YYYY-MM-DD HH:mm' (KST) 변환
+ *  유효하지 않거나 null이면 '-' 반환 */
+function formatUpdatedAtKST(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).replace(/\./g, '-').replace(/-\s*/g, '-').replace(/\s+/g, ' ').trim();
+  } catch { return '-'; }
+}
+
 function loadWeeklySummary(wStart) {
   try { const r = localStorage.getItem(getWeeklySummaryKey(wStart)); return r ? JSON.parse(r) : null; }
   catch { return null; }
@@ -5081,11 +5543,55 @@ function loadWeeklySummary(wStart) {
 function saveWeeklySummary(wStart, text) {
   const record = { text, updatedAt: new Date().toISOString() };
   localStorage.setItem(getWeeklySummaryKey(wStart), JSON.stringify(record));
+
+  // ── 진단 로그 ①: 저장 시작 ──────────────────────────────────────────
+  const sbKey = getWeeklySummaryKey(wStart);
+  console.log('[weekly-summary:save:start]', {
+    wStart,
+    summaryKey: sbKey,
+    textLength: text.length,
+    textPreview: text.slice(0, 30),
+    updatedAt: record.updatedAt,
+    supabaseReady: !!_supa,
+  });
+
   // Supabase 비동기 저장 — 실패해도 localStorage 저장은 유지
   if (_supa) {
     _supa.from('cat_data')
-      .upsert({ key: getWeeklySummaryKey(wStart), data: { summary: text, updated_at: record.updatedAt } }, { onConflict: 'key' })
-      .catch(e => console.warn('주간 요약 Supabase 저장 실패:', e));
+      .upsert({ key: sbKey, data: { summary: text, updated_at: record.updatedAt } }, { onConflict: 'key' })
+      .select('key, data')
+      .single()
+      .then(({ data: savedRow, error }) => {
+        // ── 진단 로그 ②: upsert 결과 ──────────────────────────────────
+        console.log('[weekly-summary:save:result]', {
+          summaryKey: sbKey,
+          error: error ? error.message : null,
+          savedKey: savedRow?.key ?? null,
+          savedDataType: typeof savedRow?.data,
+          savedSummaryLength: savedRow?.data?.summary?.length ?? (typeof savedRow?.data === 'string' ? savedRow.data.length : null),
+          savedUpdatedAt: savedRow?.data?.updated_at ?? null,
+        });
+        if (error) {
+          console.error('[saveWeeklySummary] Supabase 저장 실패:', error.message, '| key:', sbKey, '| code:', error.code);
+          showToast('⚠ 주간 요약 서버 저장 실패 (로컬에는 저장됨). 콘솔을 확인하세요.', 'amber');
+        } else {
+          console.log('[saveWeeklySummary] Supabase 저장 완료:', sbKey);
+          // ── 진단 로그 ③: 재조회로 저장 검증 ──────────────────────────
+          _supa.from('cat_data').select('key, data').eq('key', sbKey).maybeSingle()
+            .then(({ data: vRow, error: vErr }) => {
+              console.log('[weekly-summary:save:verify]', {
+                summaryKey: sbKey,
+                found: !!vRow,
+                verifyError: vErr ? vErr.message : null,
+                dataType: typeof vRow?.data,
+                summaryInData: vRow?.data?.summary?.slice(0, 30) ?? (typeof vRow?.data === 'string' ? '(string)' : null),
+                updatedAtInData: vRow?.data?.updated_at ?? null,
+              });
+            })
+            .catch(e => console.warn('[weekly-summary:save:verify] 재조회 오류:', e));
+        }
+      })
+      .catch(e => console.warn('[saveWeeklySummary] Supabase 네트워크 오류:', e));
   }
   return record;
 }
@@ -5159,7 +5665,8 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
    buildWeeklyReportHTML — DOM 비의존 순수 함수 (이메일/미리보기용)
    기존 renderWeeklyReport() 계산 로직과 동일, HTML string 반환
    ================================================================= */
-function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText = null) {
+// summaryData: null | string | { summary: string, updated_at: string|null }
+function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
     green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
@@ -5170,8 +5677,26 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText =
 
   // ── 주간 범위 & 주차 계산 ──
   const { wStart, wEnd, pwStart, pwEnd, nwStart, nwEnd } = getWeekRange(targetDate);
-  // 주간 요약 텍스트: 외부 전달값 우선, 없으면 localStorage fallback
-  const effectiveSummary = summaryText !== null ? summaryText : (loadWeeklySummary(wStart)?.text || '');
+
+  // 주간 요약 파싱: summaryData = { summary, updated_at } | 문자열 | null
+  // null이면 localStorage fallback
+  let effectiveSummary = '', effectiveUpdatedAt = null;
+  if (summaryData === null) {
+    const saved = loadWeeklySummary(wStart);
+    effectiveSummary  = saved?.text     || '';
+    effectiveUpdatedAt = saved?.updatedAt || null;
+  } else if (typeof summaryData === 'string') {
+    effectiveSummary = summaryData;
+  } else if (summaryData && typeof summaryData === 'object') {
+    effectiveSummary  = String(summaryData.summary  ?? '');
+    effectiveUpdatedAt = summaryData.updated_at     ?? null;
+  }
+
+  // HTML escape + 줄바꿈 변환 (사용자 입력 XSS 방지)
+  const summaryHtml   = effectiveSummary
+    ? escapeHtml(effectiveSummary).replace(/\r?\n/g, '<br>')
+    : '등록된 주간 요약이 없습니다.';
+  const updatedAtDisp = formatUpdatedAtKST(effectiveUpdatedAt);
   const thuStr  = addDays(wStart, 3);
   const thuDate = new Date(thuStr + 'T00:00:00');
   const wYear = thuDate.getFullYear(), wMon = thuDate.getMonth() + 1;
@@ -5403,7 +5928,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryText =
 <!-- 📝 주간 요약 -->
 <tr><td style="background:${C.card};padding:18px 18px 12px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
-  <div style="font-size:13px;color:${C.t2};line-height:1.7">${effectiveSummary ? effectiveSummary.replace(/\n/g,'<br>') : '등록된 주간 요약이 없습니다.'}</div>
+  <div style="font-size:13px;color:${C.t2};line-height:1.7">${summaryHtml}</div>
+  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${updatedAtDisp}</div>
 </td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
@@ -5508,8 +6034,31 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
   statusEl.style.color = 'var(--text2)';
   try {
     if (!_supa) throw new Error('Supabase 연결이 없습니다. 페이지를 새로고침하세요.');
-    const body = { send_type: sendType, dry_run: dryRun, target_date: targetDate || reportBaseDate };
+    const effectiveTarget = targetDate || reportBaseDate;
+    const body = { send_type: sendType, dry_run: dryRun, target_date: effectiveTarget };
     if (recipientOverride) body.recipient_override = recipientOverride;
+
+    // 현재 주차 요약을 body에 포함: Edge Function이 Supabase 저장 여부와 무관하게 내용을 반영할 수 있게
+    // 자동 발송(auto)은 body 없이 Edge Function이 직접 Supabase 조회
+    const _reqSumWkStart = getWeekRange(effectiveTarget).wStart;
+    const _reqSummaryKey = `weekly_summary_${_reqSumWkStart}`;
+    if (sendType !== 'auto') {
+      const _localSum = loadWeeklySummary(_reqSumWkStart);
+      if (_localSum?.text) {
+        body.weekly_summary = { summary: _localSum.text, updated_at: _localSum.updatedAt || null };
+      }
+    }
+
+    // ── 진단 로그 ④: Edge Function 호출 직전 ────────────────────────────
+    console.log('[weekly-summary:request]', {
+      sendType,
+      dryRun,
+      targetDate: effectiveTarget,
+      summaryKey: _reqSummaryKey,
+      weeklySummaryInBody: !!(body.weekly_summary),
+      summaryLength: body.weekly_summary?.summary?.length ?? 0,
+      updatedAt: body.weekly_summary?.updated_at ?? null,
+    });
 
     const { data, error } = await _supa.functions.invoke('send-weekly-report', { body });
 
@@ -5610,9 +6159,12 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
     try {
       /* Edge Function dry-run */
       const res = await callEdgeFunction('auto', true, null, refDate);
-      /* 로컬 HTML 미리보기 */
-      const _previewSummary = loadWeeklySummary(getWeekRange(refDate).wStart)?.text || '';
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummary);
+      /* 로컬 HTML 미리보기: localStorage 요약 + updated_at 포함 */
+      const _previewRawSum = loadWeeklySummary(getWeekRange(refDate).wStart);
+      const _previewSummaryData = _previewRawSum
+        ? { summary: _previewRawSum.text, updated_at: _previewRawSum.updatedAt || null }
+        : null;
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummaryData);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(previewHtml);
@@ -5726,7 +6278,7 @@ function generateRecurring(showToastMsg = true) {
       const status = type === '입금' ? '입금 예정' : '지출 예정';
       const mid = rec.mid_cat || getMidCat(rec.desc, type) || '';
       _cfIdCounter++;
-      cfData.push({
+      cfData.push(normalizeCFRow({
         _id: 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2,9),
         date: targetDate, desc: rec.desc,
         in: rec.in||0, out: rec.out||0,
@@ -5734,7 +6286,7 @@ function generateRecurring(showToastMsg = true) {
         type, status, mid_cat: mid, big_cat: getBigCat(mid),
         recur_id:  rec._id  || null, // R-1: 반복 거래 추적 ID
         recur_day: rec.day  || null, // 디버깅/표시용 원본 반복일
-      });
+      }));
       added++;
     }
   }
@@ -7636,6 +8188,16 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     // ensureCFIds / generateRecurring 은 반드시 이 라인 이후에 실행해야 안전함
     _isInitialized = true;
 
+    // ── CF 데이터 일괄 정규화 (Supabase 로드 직후) ──────────────────────
+    // status 공백·비표준값 / date HH:mm:ss 잔재 / in·out 문자열 타입 등을 보정
+    // 변경이 있으면 saveDataExplicit()로 Supabase에 한 번만 저장 (루프 없음)
+    const _bootNormCount = normalizeAllCFData();
+    if (_bootNormCount > 0) {
+      saveDataExplicit();
+      console.log(`[boot] cfData 정규화 ${_bootNormCount}건 → Supabase 저장`);
+      showToast(`🔧 기존 데이터 ${_bootNormCount}건 정규화 완료`, 'amber');
+    }
+
     ensureCFIds();            // Supabase 데이터 기준으로 _id 보정 (필요 시 저장)
     loadCatData();            // Supabase에서 받은 카테고리로 갱신
     ensureRecurIds();         // 기존 반복 거래 템플릿에 _id 마이그레이션 (필요 시 저장)
@@ -7674,6 +8236,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     // Supabase 로드 실패(오프라인) 시에도 localStorage 기반으로 초기화 완료 처리
     // 단, 오프라인 상태이므로 원격 저장은 어차피 실패 — 플래그는 세우지 않음
     _isInitialized = false;
+    normalizeAllCFData(); // 오프라인 메모리 정규화 (저장 불가)
     ensureCFIds();            // _id 보정 (localStorage 저장만 실행됨)
     ensureRecurIds();         // 반복 거래 _id 마이그레이션 (오프라인 시 localStorage만)
     const autoChanged2 = autoUpdateStatus();
@@ -7726,6 +8289,73 @@ function toNum(v) {
   if (typeof v === 'number') return v;
   const s = String(v).replace(/[,₩\s]/g,'');
   return parseFloat(s) || 0;
+}
+
+// ============================================================
+// CF 데이터 정규화 (저장 시 공통 적용 — status / date / in / out)
+// ============================================================
+function normalizeCFStatus(v) {
+  return String(v ?? '').replace(/\s+/g, ' ').trim();
+}
+function normalizeCFAmount(v) {
+  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : 0;
+}
+function normalizeCFDate(v) {
+  // excelDateToStr 가 HH:mm:ss / '/' '.' 등 모든 형식을 YYYY-MM-DD 로 변환
+  const s = excelDateToStr(v);
+  return s ? s.slice(0, 10) : '';
+}
+/** 단일 CF 행을 정규화한 새 객체를 반환.
+ *  _id·mid_cat·big_cat·desc 등 나머지 필드는 spread로 보존. */
+function normalizeCFRow(row) {
+  const inAmt  = normalizeCFAmount(row.in);
+  const outAmt = normalizeCFAmount(row.out);
+  const type   = inAmt > 0 ? '입금' : '지출';
+
+  // 비표준 status 매핑 (화면 표시용 문구·공백 누락·붙여쓰기 보정)
+  const STATUS_MAP = {
+    '실제 출금': '실제 지출', '출금 예정': '지출 예정',
+    '실제입금':  '실제 입금', '실제지출':  '실제 지출',
+    '입금예정':  '입금 예정', '지출예정':  '지출 예정',
+  };
+  const VALID_STATUSES = ['실제 입금', '실제 지출', '입금 예정', '지출 예정'];
+
+  let status = normalizeCFStatus(row.status);
+  if (STATUS_MAP[status]) status = STATUS_MAP[status];
+
+  // 여전히 유효하지 않으면 날짜 / type 기준으로 자동 생성
+  if (!VALID_STATUSES.includes(status)) {
+    const today = todayKST();
+    const date  = normalizeCFDate(row.date);
+    status = type === '입금'
+      ? (date <= today ? '실제 입금' : '입금 예정')
+      : (date <= today ? '실제 지출' : '지출 예정');
+  }
+
+  return {
+    ...row,
+    date:   normalizeCFDate(row.date),
+    in:     inAmt,
+    out:    outAmt,
+    type,
+    status,
+  };
+}
+
+/** 현재 cfData 전체를 정규화 (메모리 내 변환 — 저장 여부는 호출부가 결정).
+ *  반환값: 실제로 변경된 행 수 (0 = 이미 모두 정규화 상태) */
+function normalizeAllCFData() {
+  let changed = 0;
+  cfData = cfData.map(row => {
+    const before = `${String(row.date ?? '').slice(0,10)}|${Number(row.in)||0}|${Number(row.out)||0}|${String(row.type ?? '')}|${String(row.status ?? '').trim()}`;
+    const norm   = normalizeCFRow(row);
+    const after  = `${norm.date}|${norm.in}|${norm.out}|${norm.type}|${norm.status}`;
+    if (before !== after) changed++;
+    return norm;
+  });
+  if (changed > 0) console.log(`[normalizeAllCFData] ${changed}건 정규화됨`);
+  return changed;
 }
 
 // ---- Generic file reader ----
@@ -7867,7 +8497,9 @@ function parseCFRows() {
     if (!status) status = dateStr <= today ? (type==='입금' ? '실제 입금' : '실제 지출') : (type==='입금' ? '입금 예정' : '지출 예정');
 
     const big = getBigCat(mid);
-    parsed.push({ date: dateStr, desc: finalDesc, in: inAmt, out: outAmt, amount: inAmt - outAmt, type, status, mid_cat: mid, big_cat: big });
+    // normalizeCFRow: status 공백·비표준값 / date 슬라이스 / in·out 숫자 타입 최종 보정
+    const rawRow = { date: dateStr, desc: finalDesc, in: inAmt, out: outAmt, amount: inAmt - outAmt, type, status, mid_cat: mid, big_cat: big };
+    parsed.push(normalizeCFRow(rawRow));
   });
   return { parsed, errors };
 }
