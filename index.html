@@ -2460,6 +2460,34 @@ function monthEnd(d) { const [y,m] = d.slice(0,7).split('-').map(Number); return
 function prevMonthStart(d) { const [y,m] = d.slice(0,7).split('-').map(Number); const pm = m===1?12:m-1; const py = m===1?y-1:y; return `${py}-${String(pm).padStart(2,'0')}-01`; }
 function prevMonthEnd(d) { const [y,m] = d.slice(0,7).split('-').map(Number); const pm = m===1?12:m-1; const py = m===1?y-1:y; return `${py}-${String(pm).padStart(2,'0')}-${new Date(py,pm,0).getDate()}`; }
 
+/**
+ * getARCountSummary — remaining>0 기준 정상/보통/위험 건수 및 표시 텍스트 반환
+ * @param {Array} arRows   - arData 원본 배열 (calcARStatusAndRisk 내부 적용)
+ * @param {string} baseDate - 상태·위험등급 계산 기준일 (YYYY-MM-DD)
+ * @returns {{ total, normal, ordinary, danger, text }}
+ */
+function getARCountSummary(arRows, baseDate) {
+  const active = arRows
+    .map(ar => ({ ...ar, ...calcARStatusAndRisk(ar, baseDate) }))
+    .filter(ar => Number(ar.remaining || 0) > 0);
+  const total    = active.length;
+  const normal   = active.filter(ar => ar.status === '정상').length;
+  const ordinary = active.filter(ar =>
+    (ar.status === '지연' || ar.status === '미정') && ar.riskLevel === '보통'
+  ).length;
+  const danger   = active.filter(ar =>
+    (ar.status === '지연' || ar.status === '미정') && ar.riskLevel === '위험'
+  ).length;
+  const rate = n => total > 0 ? Math.round(n / total * 100) : 0;
+  return {
+    total, normal, ordinary, danger,
+    text:
+      `전체 ${total}건(정상 ${normal}건(${rate(normal)}%) · ` +
+      `보통 ${ordinary}건(${rate(ordinary)}%) · ` +
+      `위험 ${danger}건(${rate(danger)}%))`,
+  };
+}
+
 function calcKPIs() {
   const ref = refDate;
   // 주간 범위 — getWeekRange 1회 호출로 전주·금주·차주 모두 계산
@@ -5890,7 +5918,8 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-ar-collected').textContent     = fmt(wColAmt);
   document.getElementById('wkrpt-ar-collected-cnt').textContent = `${wColCF.length}건`;
   document.getElementById('wkrpt-ar-remaining').textContent     = fmt(remTotal);
-  document.getElementById('wkrpt-ar-remaining-cnt').textContent = `${remAll.length}건`;
+  // 전체 미회수 하단: 대시보드 매출채권 잔액 카드와 동일 형식 — getARCountSummary() 재사용
+  document.getElementById('wkrpt-ar-remaining-cnt').textContent = getARCountSummary(arData, reportBaseDate).text;
   document.getElementById('wkrpt-ar-highrisk').textContent      = fmt(delayedAmt);
   document.getElementById('wkrpt-ar-highrisk-cnt').textContent  =
     `지연 총 ${delayedTotal}건(보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%))`;
@@ -6318,7 +6347,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
 <tr><td style="background:${C.card};padding:0 18px 18px">
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
-    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,`${remAll.length}건`],['지연',fmt(dlyAmt),C.red,dlySub]]
+    ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,arBalanceSub],['지연',fmt(dlyAmt),C.red,dlySub]]
       .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center">
         <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace">${v}</div>
