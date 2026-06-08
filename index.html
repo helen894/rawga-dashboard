@@ -2315,6 +2315,7 @@ async function loadDataFromSupabase() {
           // Fix #8: Realtime 수신 후 존재하지 않는 선택 ID 제거
           const validCCTxIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
           for (const id of corpCardTxSelectedIds) { if (!validCCTxIds.has(id)) corpCardTxSelectedIds.delete(id); }
+          syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
           syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
           updateCCTxAliasFilter();
           renderCorpCardTab();          // 상단 집계 표 갱신
@@ -7592,6 +7593,34 @@ function normalizeCCTxAlias(alias) {
   return null; // 미매핑
 }
 
+/* ── 사용내역 card_alias → 카드 열(corpCardColumns) 자동 동기화 ────────
+ * corpCardTxData 에 있는 card_alias 중 normalizeCCTxAlias() 로 매핑되지 않는
+ * 유효한 별칭을 corpCardColumns 에 신규 열로 추가.
+ * 기존 열 순서 유지, 중복 추가 금지, 빈 값·nan 등 제외.
+ * 반환값: 새로 추가된 카드 열 배열 ─────────────────────────────────── */
+function syncCorpCardColumnsFromTx() {
+  const INVALID = new Set(['', 'nan', 'null', 'undefined', '-', 'n/a', 'na', '#n/a']);
+  const existingLower = new Set(corpCardColumns.map(c => c.trim().toLowerCase()));
+  const added = [];
+  const seen  = new Set(existingLower);
+  for (const row of corpCardTxData) {
+    const alias = String(row.card_alias ?? '').trim();
+    if (!alias || INVALID.has(alias.toLowerCase())) continue;
+    // 이미 매핑 가능하면 추가 불필요
+    if (normalizeCCTxAlias(alias)) continue;
+    // 미매핑 → 원본 별칭을 신규 열로 추가 (중복 방지)
+    if (seen.has(alias.toLowerCase())) continue;
+    corpCardColumns.push(alias);
+    seen.add(alias.toLowerCase());
+    added.push(alias);
+  }
+  if (added.length > 0) {
+    saveCorpCardSettings();
+    console.info('[법인카드] 신규 카드 열 자동 추가:', added.join(', '));
+  }
+  return added;
+}
+
 /* ── 사용내역 memo → 계정과목 자동 동기화 ─────────────────────────────
  * corpCardTxData 에 있는 memo 값 중 corpCardAccounts 에 없는 것을 추가.
  * 빈 문자열 / nan / null / undefined / - 같은 잘못된 값은 제외.
@@ -7668,6 +7697,7 @@ function renderCorpCardTab() {
 // 탭 클릭 진입점 (기존 호출 유지)
 // TX 데이터 변경 시에도 이 함수를 통해 상단 표 갱신
 function renderCorporateCardTab() {
+  syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
   syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
   renderCorpCardTab();          // 상단 카드×계정과목 집계 표
   updateCCTxAliasFilter();
@@ -7892,6 +7922,7 @@ function applyCCTxUpload() {
   document.getElementById('cctx-upload-modal').classList.add('hidden');
   _pendingCCTxRows = [];
   saveCorpCardTxToSupabase();
+  syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
   syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
   updateCCTxAliasFilter();
   renderCorpCardTab();          // 상단 집계 표 갱신
@@ -8617,7 +8648,8 @@ async function saveCCTxEdit() {
     return;
   }
   document.getElementById('cctx-edit-modal').classList.add('hidden');
-  syncCorpCardAccountsFromTx();
+  syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
+  syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
   updateCCTxAliasFilter();
   renderCorpCardTab();
   renderCCTxTable();
@@ -8819,7 +8851,8 @@ async function applyCCTxBulkEdit() {
     if (error) throw error;
     if (scope !== 'all') corpCardTxSelectedIds.clear();
     closeCCTxBulkEditModal();
-    syncCorpCardAccountsFromTx();
+    syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
+    syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
     updateCCTxAliasFilter();
     renderCorpCardTab();
     renderCCTxTable();
