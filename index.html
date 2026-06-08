@@ -1216,7 +1216,7 @@
   <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border2)">
     <!-- 툴바 -->
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-      <span style="font-size:13px;font-weight:600;color:var(--text)">청구내역</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text)">💳 사용내역</span>
       <button class="btn sm" id="cctx-upload-btn">📤 업로드</button>
       <input type="file" id="cctx-file-input" accept=".xlsx,.xls" style="display:none">
       <button class="btn sm" id="cctx-filter-reset" style="color:var(--text2)">필터 초기화</button>
@@ -1265,7 +1265,7 @@
 <div class="modal-backdrop hidden" id="cctx-upload-modal">
   <div class="modal" style="width:480px">
     <div class="modal-header">
-      <span class="modal-title">법인카드 청구내역 업로드</span>
+      <span class="modal-title">법인카드 사용내역 업로드</span>
       <button class="modal-close" id="cctx-modal-close">×</button>
     </div>
     <div id="cctx-modal-body" style="padding:4px 0 12px"></div>
@@ -1280,7 +1280,7 @@
 <div class="modal-backdrop hidden" id="cctx-edit-modal">
   <div class="modal" style="width:480px">
     <div class="modal-header">
-      <span class="modal-title">청구내역 수정</span>
+      <span class="modal-title">사용내역 수정</span>
       <button class="modal-close" onclick="document.getElementById('cctx-edit-modal').classList.add('hidden')">×</button>
     </div>
     <div class="cctx-modal-body" style="padding:8px 0 4px">
@@ -1320,7 +1320,7 @@
 <div class="modal-backdrop hidden" id="cctx-delete-modal">
   <div class="modal" style="width:460px">
     <div class="modal-header">
-      <span class="modal-title">청구내역 삭제</span>
+      <span class="modal-title">사용내역 삭제</span>
       <button class="modal-close" onclick="document.getElementById('cctx-delete-modal').classList.add('hidden')">×</button>
     </div>
     <div id="cctx-delete-body" style="padding:4px 0 12px"></div>
@@ -2300,7 +2300,9 @@ async function loadDataFromSupabase() {
           // Fix #8: Realtime 수신 후 존재하지 않는 선택 ID 제거
           const validCCTxIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
           for (const id of corpCardTxSelectedIds) { if (!validCCTxIds.has(id)) corpCardTxSelectedIds.delete(id); }
+          syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
           updateCCTxAliasFilter();
+          renderCorpCardTab();          // 상단 집계 표 갱신
           renderCCTxTable();
         }
       }
@@ -7406,22 +7408,107 @@ function saveCorpCardSettings() {
   localStorage.setItem('corp_card_accounts', JSON.stringify(corpCardAccounts));
 }
 
+/* ── 카드 별칭 → corpCardColumns 매핑 규칙 ──────────────────────────────
+ * 1. 정확 일치 (card_alias === col)
+ * 2. 괄호 앞 접두어 추출: "SO(롯데카드)" → "SO", "BX(이신소)" → "BX"
+ *    + M숫자 정규화:       "M1(김형석)"   → prefix "M1" → "M01"
+ * 3. 괄호 안 내용 추출:   "비씨카드(김현민)" → inner "김현민"
+ * 4. 문자열 포함 검사:    "하경수대표님" → col "하경수" ∈ alias
+ * ── 미매핑 별칭은 null 반환 후 console.info로 보고 ─────────────────── */
+function normalizeCCTxAlias(alias) {
+  if (!alias) return null;
+  const a = String(alias).trim();
+  if (!a) return null;
+  // 1. 정확 일치
+  if (corpCardColumns.includes(a)) return a;
+  // 2. 괄호 앞 접두어 (M숫자 정규화 포함)
+  const prefixM = a.match(/^([^(]+)\(/);
+  if (prefixM) {
+    let prefix = prefixM[1].trim();
+    const mNorm = prefix.replace(/^M(\d)$/, (_, d) => 'M0' + d); // M1→M01
+    if (corpCardColumns.includes(mNorm))   return mNorm;
+    if (corpCardColumns.includes(prefix))  return prefix;
+    // 3. 괄호 안 내용: "비씨카드(김현민)" → "김현민"
+    const innerM = a.match(/\(([^)]+)\)/);
+    if (innerM) {
+      const inner = innerM[1].trim();
+      if (corpCardColumns.includes(inner)) return inner;
+    }
+  }
+  // 4. 문자열 포함: "하경수대표님".includes("하경수") → true
+  for (const col of corpCardColumns) {
+    if (a.includes(col)) return col;
+  }
+  return null; // 미매핑
+}
+
+/* ── 사용내역 memo → 계정과목 자동 동기화 ─────────────────────────────
+ * corpCardTxData 에 있는 memo 값 중 corpCardAccounts 에 없는 것을 추가.
+ * 빈 문자열 / nan / null / undefined / - 같은 잘못된 값은 제외.
+ * 반환값: 새로 추가된 계정과목 배열 ─────────────────────────────────── */
+function syncCorpCardAccountsFromTx() {
+  const INVALID = new Set(['', 'nan', 'null', 'undefined', '-', 'n/a', 'na', '#n/a']);
+  const existingLower = new Set(corpCardAccounts.map(a => a.trim().toLowerCase()));
+  const added = [];
+  const seen  = new Set(existingLower); // 이미 추가된 것 추적 (이번 호출 중 중복 방지)
+  for (const row of corpCardTxData) {
+    const memo = String(row.memo ?? '').trim();
+    if (!memo || INVALID.has(memo.toLowerCase())) continue;
+    if (seen.has(memo.toLowerCase())) continue;
+    corpCardAccounts.push(memo);
+    seen.add(memo.toLowerCase());
+    added.push(memo);
+  }
+  if (added.length > 0) {
+    saveCorpCardSettings();
+    console.info('[법인카드] 신규 계정과목 자동 추가:', added.join(', '));
+  }
+  return added;
+}
+
 function renderCorpCardTab() {
   const container = document.getElementById('corp-table-container');
   if (!container) return;
+
+  // ── 사용내역 기준 카드×계정과목 금액 집계 ─────────────────────────
+  // aliasAmounts[colName][accountName] = 청구금액 합계
+  const aliasAmounts = {};
+  const unmapped = new Set();
+  for (const row of corpCardTxData) {
+    const col = normalizeCCTxAlias(row.card_alias);
+    const acc = String(row.memo ?? '').trim();
+    const amt = Number(row.billing_amount) || 0;
+    if (!col) {
+      if (row.card_alias) unmapped.add(String(row.card_alias).trim());
+      continue;
+    }
+    if (!acc) continue;
+    if (!aliasAmounts[col]) aliasAmounts[col] = {};
+    aliasAmounts[col][acc] = (aliasAmounts[col][acc] || 0) + amt;
+  }
+  if (unmapped.size > 0) {
+    console.info('[법인카드] 미매핑 카드별칭:', [...unmapped].join(', '));
+  }
+
   // 헤더 열 (카드명칭 + 수정/삭제 버튼)
   const colThs = corpCardColumns.map((col, i) =>
     `<th><div class="corp-cell-hd"><span>${col}</span>` +
     `<button class="corp-ibtn" title="수정" onclick="editCorpCardColumn(${i})">✏</button>` +
     `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardColumn(${i})">×</button></div></th>`
   ).join('');
-  // 본문 행 (계정과목 + 빈 셀)
+
+  // 본문 행 (계정과목 + 집계 금액 셀)
   const rows = corpCardAccounts.map((acc, i) => {
-    const cells = corpCardColumns.map(() => '<td>0</td>').join('');
+    const cells = corpCardColumns.map(col => {
+      const amt = (aliasAmounts[col] && aliasAmounts[col][acc]) || 0;
+      const display = amt ? amt.toLocaleString() : '';
+      return `<td class="num">${display}</td>`;
+    }).join('');
     return `<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span>` +
       `<button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button>` +
       `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}</tr>`;
   }).join('');
+
   container.innerHTML =
     `<table class="corp-usage-table"><thead><tr>` +
     `<th class="corp-account-col">계정과목</th>${colThs}</tr></thead>` +
@@ -7429,8 +7516,10 @@ function renderCorpCardTab() {
 }
 
 // 탭 클릭 진입점 (기존 호출 유지)
+// TX 데이터 변경 시에도 이 함수를 통해 상단 표 갱신
 function renderCorporateCardTab() {
-  renderCorpCardTab();
+  syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
+  renderCorpCardTab();          // 상단 카드×계정과목 집계 표
   updateCCTxAliasFilter();
   renderCCTxTable();
 }
@@ -7653,7 +7742,9 @@ function applyCCTxUpload() {
   document.getElementById('cctx-upload-modal').classList.add('hidden');
   _pendingCCTxRows = [];
   saveCorpCardTxToSupabase();
+  syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
   updateCCTxAliasFilter();
+  renderCorpCardTab();          // 상단 집계 표 갱신
   renderCCTxTable();
 }
 
@@ -7766,7 +7857,7 @@ function renderCCTxTable() {
 
   if (!total) {
     container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px">` +
-      (corpCardTxData.length ? '검색 결과가 없습니다.' : '업로드된 청구내역이 없습니다. 엑셀 파일을 업로드해 주세요.') +
+      (corpCardTxData.length ? '검색 결과가 없습니다.' : '업로드된 사용내역이 없습니다. 엑셀 파일을 업로드해 주세요.') +
       `</div>`;
     updateCCTxSelectionBar();
     return;
@@ -8375,7 +8466,9 @@ async function saveCCTxEdit() {
     return;
   }
   document.getElementById('cctx-edit-modal').classList.add('hidden');
+  syncCorpCardAccountsFromTx();
   updateCCTxAliasFilter();
+  renderCorpCardTab();
   renderCCTxTable();
   showToast('✅ 수정 완료', 'green');
 }
@@ -8385,7 +8478,7 @@ async function deleteCCTxRow(id) {
   const row = corpCardTxData.find(r => r._id === id);
   if (!row) { alert('항목을 찾을 수 없습니다.'); return; }
   const info = `${row.use_date || '-'} / ${row.card_alias || '-'} / ${row.merchant || '-'} / ${(row.billing_amount || 0).toLocaleString()}원`;
-  if (!confirm(`아래 청구내역을 삭제하시겠습니까?\n\n${info}`)) return;
+  if (!confirm(`아래 사용내역을 삭제하시겠습니까?\n\n${info}`)) return;
 
   const backup = structuredClone(corpCardTxData);
   corpCardTxData = corpCardTxData.filter(r => r._id !== id);
@@ -8398,6 +8491,7 @@ async function deleteCCTxRow(id) {
   }
   corpCardTxSelectedIds.delete(id);
   updateCCTxAliasFilter();
+  renderCorpCardTab();
   renderCCTxTable();
   showToast('✅ 삭제 완료', 'green');
 }
@@ -8422,6 +8516,7 @@ async function deleteSelectedCCTx() {
   }
   corpCardTxSelectedIds.clear();
   updateCCTxAliasFilter();
+  renderCorpCardTab();
   renderCCTxTable();
   showToast(`✅ ${ids.length.toLocaleString()}건 삭제 완료`, 'green');
 }
@@ -8573,7 +8668,9 @@ async function applyCCTxBulkEdit() {
     if (error) throw error;
     if (scope !== 'all') corpCardTxSelectedIds.clear();
     closeCCTxBulkEditModal();
+    syncCorpCardAccountsFromTx();
     updateCCTxAliasFilter();
+    renderCorpCardTab();
     renderCCTxTable();
     showToast(`✅ ${appliedCnt.toLocaleString()}건 수정 완료`, 'green');
   } catch(e) {
@@ -8603,7 +8700,7 @@ function openCCTxDeleteModal(scope) {
   const remaining = scope === 'filtered' ? corpCardTxData.length - targets.length : 0;
   const totalAmt  = targets.reduce((s, r) => s + (r.billing_amount || 0), 0);
   const isAll     = scope === 'all';
-  const scopeLbl  = isAll ? '저장된 전체 청구내역' : '현재 필터 결과';
+  const scopeLbl  = isAll ? '저장된 전체 사용내역' : '현재 필터 결과';
   let html =
     `<div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:2">` +
     `<div><b>삭제 범위:</b> ${scopeLbl}</div>` +
@@ -8621,8 +8718,8 @@ function openCCTxDeleteModal(scope) {
     html +=
       `<div style="padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
       `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 삭제 — 복구 불가</div>` +
-      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>법인카드 청구내역 전체삭제</b>를 정확히 입력해야 실행됩니다.</div>` +
-      `<input type="text" id="cctx-del-confirm" placeholder="법인카드 청구내역 전체삭제" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box">` +
+      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>법인카드 사용내역 전체삭제</b>를 정확히 입력해야 실행됩니다.</div>` +
+      `<input type="text" id="cctx-del-confirm" placeholder="법인카드 사용내역 전체삭제" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box">` +
       `</div>`;
   } else {
     html += `<div style="font-size:12px;color:var(--text2);margin-top:6px">필터 결과 <b>${targets.length.toLocaleString()}건</b>을 삭제하시겠습니까?</div>`;
@@ -8635,7 +8732,7 @@ async function applyCCTxDelete() {
   const isAll   = _cctxDeleteScope === 'all';
   if (isAll) {
     const cv = document.getElementById('cctx-del-confirm')?.value?.trim();
-    if (cv !== '법인카드 청구내역 전체삭제') { alert('"법인카드 청구내역 전체삭제"를 정확히 입력해주세요.'); return; }
+    if (cv !== '법인카드 사용내역 전체삭제') { alert('"법인카드 사용내역 전체삭제"를 정확히 입력해주세요.'); return; }
   }
   const targets  = isAll ? corpCardTxData : getCCTxFilteredRows();
   if (!targets.length) { alert('삭제 대상이 없습니다.'); return; }
@@ -8653,6 +8750,7 @@ async function applyCCTxDelete() {
   for (const id of targetIds) corpCardTxSelectedIds.delete(id);
   document.getElementById('cctx-delete-modal').classList.add('hidden');
   updateCCTxAliasFilter();
+  renderCorpCardTab();
   renderCCTxTable();
   showToast(`✅ ${targets.length.toLocaleString()}건 삭제 완료`, 'green');
 }
