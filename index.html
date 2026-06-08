@@ -1245,7 +1245,6 @@
       <input type="date" id="cctx-to" style="width:120px">
       <select id="cctx-alias" style="width:150px"><option value="">카드 전체</option></select>
       <input type="text" id="cctx-merchant" placeholder="가맹점 검색" style="width:140px">
-      <input type="text" id="cctx-memo" placeholder="메모 검색" style="width:120px">
     </div>
     <!-- 활성 헤더 필터 태그 -->
     <div class="cctx-active-filters" id="cctx-active-filter-tags" style="display:none"></div>
@@ -1292,7 +1291,7 @@
       <div class="cctx-frow"><label>카드번호</label><input type="text" id="cctx-edit-card-no" placeholder="카드번호" style="font-family:var(--mono)"></div>
       <div class="cctx-frow"><label>가맹점명</label><input type="text" id="cctx-edit-merchant" placeholder="가맹점명"></div>
       <div class="cctx-frow"><label>청구금액</label><input type="number" id="cctx-edit-amount" placeholder="청구금액" style="font-family:var(--mono)"></div>
-      <div class="cctx-frow"><label>메모</label><input type="text" id="cctx-edit-memo" placeholder="메모"></div>
+      <div class="cctx-frow"><label>계정과목</label><input type="text" id="cctx-edit-memo" placeholder="계정과목"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border2);margin-top:6px">
       <button class="btn green" id="cctx-edit-save-btn">저장</button>
@@ -7911,18 +7910,16 @@ function updateCCTxAliasFilter() {
 
 /* ===== 법인카드 청구내역 — 필터 ===== */
 function getCCTxFilteredRows() {
-  // Step 1: 상단 기간·카드·가맹점·메모 필터
+  // Step 1: 상단 기간·카드·가맹점 필터 (계정과목은 헤더 다중 선택 필터로 처리)
   const from     = document.getElementById('cctx-from')?.value     || '';
   const to       = document.getElementById('cctx-to')?.value       || '';
   const alias    = document.getElementById('cctx-alias')?.value    || '';
   const merchant = (document.getElementById('cctx-merchant')?.value || '').trim().toLowerCase();
-  const memo     = (document.getElementById('cctx-memo')?.value    || '').trim().toLowerCase();
   let rows = corpCardTxData;
   if (from)     rows = rows.filter(r => (r.use_date || '') >= from);
   if (to)       rows = rows.filter(r => (r.use_date || '') <= to);
   if (alias)    rows = rows.filter(r => r.card_alias === alias);
   if (merchant) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(merchant));
-  if (memo)     rows = rows.filter(r => (r.memo     || '').toLowerCase().includes(memo));
   // Step 2: 헤더별 컬럼 필터 (한 번의 파이프라인으로 처리, 원본 배열 미변경)
   for (const [field, f] of Object.entries(cctxColumnFilters)) {
     if (!f) continue;
@@ -8070,7 +8067,7 @@ function renderCCTxTable() {
         th('card_no',        '카드번호') +
         th('merchant',       '가맹점명') +
         th('billing_amount', '청구금액', 'right') +
-        th('memo',           '메모') +
+        th('memo',           '계정과목') +
         `<th style="width:56px">작업</th>` +
       `</tr></thead>` +
       `<tbody>${tbRows}</tbody>` +
@@ -8117,8 +8114,11 @@ function renderCCTxTable() {
 /* ===== 법인카드 청구내역 — 헤더 컬럼 필터 ===== */
 // 전체 데이터 기준 고유값 목록 (드롭다운 옵션용, corpCardTxData 원본 기준)
 function getCCTxUniqueValues(field) {
+  const INVALID_VALS = new Set(['nan', 'null', 'undefined', '-', 'n/a', 'na', '#n/a']);
   return [...new Set(
-    corpCardTxData.map(r => String(r[field] ?? '').trim()).filter(Boolean)
+    corpCardTxData
+      .map(r => String(r[field] ?? '').trim())
+      .filter(v => v && !INVALID_VALS.has(v.toLowerCase()))
   )].sort((a, b) => a.localeCompare(b, 'ko-KR', { numeric: true }));
 }
 
@@ -8179,8 +8179,8 @@ function _matchCCTxColumnFilter(row, field, f) {
     }
     return true;
   }
-  // 다중 선택 필터 (card_alias, card_no) — 마스킹 문자 포함 원본 문자열 비교
-  if (field === 'card_alias' || field === 'card_no') {
+  // 다중 선택 필터 (card_alias, card_no, memo) — OR 조건
+  if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     const v = String(row[field] ?? '').trim();
     // 하위 호환: 기존 단일 선택 타입
     if (f.type === 'empty')     return v === '';
@@ -8194,7 +8194,7 @@ function _matchCCTxColumnFilter(row, field, f) {
     }
     return true;
   }
-  // 텍스트 컬럼 (merchant, memo — 포함/일치/시작 문자)
+  // 텍스트 컬럼 (merchant — 포함/일치/시작 문자)
   const s = (row[field] || '').toLowerCase();
   if (f.type === 'empty')      return s === '';
   if (f.type === 'nonempty')   return s !== '';
@@ -8208,7 +8208,7 @@ function _matchCCTxColumnFilter(row, field, f) {
 
 // 필터 상태를 사람이 읽을 수 있는 설명으로 변환
 function _describeCCTxFilter(field, f) {
-  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'계정과목' };
   const lbl = labels[field] || field;
   const type = f.type;
   let desc = '';
@@ -8235,7 +8235,7 @@ function _describeCCTxFilter(field, f) {
       else if (f.num1 != null) desc = `${fmtA(f.num1)} 이상`;
       else if (f.num2 != null) desc = `${fmtA(f.num2)} 이하`;
     }
-  } else if (field === 'card_alias' || field === 'card_no') {
+  } else if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     if (type === 'empty')          desc = '비어 있음';
     else if (type === 'not_empty') desc = '비어 있지 않음';
     else if (type === 'select')    desc = f.value || '';  // legacy
@@ -8289,7 +8289,7 @@ function closeAllCCTxPopovers() {
 
 // 팝오버 내부 HTML 생성 (날짜 / 텍스트 / 금액 타입)
 function _buildCCTxPopoverHtml(field) {
-  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'계정과목' };
   const title  = labels[field] || field;
   let body = '';
   if (field === 'use_date' || field === 'billing_date') {
@@ -8331,7 +8331,7 @@ function _buildCCTxPopoverHtml(field) {
         `<span class="cctx-pop-label">최댓값</span>` +
         `<input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">` +
       `</div>`;
-  } else if (field === 'card_alias' || field === 'card_no') {
+  } else if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     // 체크박스 기반 다중 선택: corpCardTxData 전체 기준 고유값 목록
     const vals = getCCTxUniqueValues(field);
     const esc  = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -8389,8 +8389,8 @@ function _onCCTxPopoverModeChange(field) {
 
 // 기존 필터 상태를 팝오버에 복원
 function _restoreCCTxPopoverState(field) {
-  // 다중 선택 필드 (card_alias, card_no) 체크박스 복원
-  if (field === 'card_alias' || field === 'card_no') {
+  // 다중 선택 필드 (card_alias, card_no, memo) 체크박스 복원
+  if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     const f    = cctxColumnFilters[field];
     const list = document.getElementById(`cctx-ms-list-${field}`);
     if (!list) return;
@@ -8452,8 +8452,8 @@ function _restoreCCTxPopoverState(field) {
 
 // 팝오버 적용 버튼 처리
 function applyCCTxColumnFilter(field) {
-  // 다중 선택 필드 (card_alias, card_no)
-  if (field === 'card_alias' || field === 'card_no') {
+  // 다중 선택 필드 (card_alias, card_no, memo)
+  if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     const list = document.getElementById(`cctx-ms-list-${field}`);
     if (!list) return;
     const includeEmpty    = document.getElementById(`cctx-ms-empty-${field}`)?.checked    || false;
@@ -8701,7 +8701,7 @@ function _buildCCTxBulkEditForm(scope, count) {
   html += brow('card-no',      '카드번호',  'text',   textOpts);
   html += brow('merchant',     '가맹점명',  'text',   textOpts);
   html += brow('amount',       '청구금액',  'number', amtOpts);
-  html += brow('memo',         '메모',      'text',   textOpts);
+  html += brow('memo',         '계정과목',  'text',   textOpts);
   if (isAll) {
     html += `<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
       `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 수정 확인</div>` +
@@ -8912,12 +8912,12 @@ document.getElementById('cctx-file-input').addEventListener('change', handleCCTx
 document.getElementById('cctx-modal-close').addEventListener('click', () => document.getElementById('cctx-upload-modal').classList.add('hidden'));
 document.getElementById('cctx-cancel-btn').addEventListener('click',  () => document.getElementById('cctx-upload-modal').classList.add('hidden'));
 document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxUpload);
-['cctx-from', 'cctx-to', 'cctx-alias', 'cctx-merchant', 'cctx-memo'].forEach(id => {
+['cctx-from', 'cctx-to', 'cctx-alias', 'cctx-merchant'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', renderCCTxTable); el.addEventListener('change', renderCCTxTable); }
 });
 document.getElementById('cctx-filter-reset').addEventListener('click', () => {
-  ['cctx-from', 'cctx-to', 'cctx-merchant', 'cctx-memo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['cctx-from', 'cctx-to', 'cctx-merchant'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const sel = document.getElementById('cctx-alias'); if (sel) sel.value = '';
   // 헤더 컬럼 필터 전체 초기화
   Object.keys(cctxColumnFilters).forEach(k => { cctxColumnFilters[k] = null; });
