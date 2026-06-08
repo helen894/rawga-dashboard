@@ -119,6 +119,31 @@
   .cctx-filter-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
   .cctx-filter-bar input[type=date], .cctx-filter-bar input[type=text], .cctx-filter-bar select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:12px; font-family:var(--font); padding:5px 8px; border-radius:6px; }
   .cctx-filter-bar input[type=date]:focus, .cctx-filter-bar input[type=text]:focus, .cctx-filter-bar select:focus { outline:none; border-color:var(--blue); }
+  /* cctx 정렬·선택·행작업·드롭다운·수정 모달 */
+  .cctx-table th.cctx-sort { cursor:pointer; user-select:none; }
+  .cctx-table th.cctx-sort:hover { color:var(--text); background:var(--hover); }
+  .cctx-sort-ic { margin-left:3px; font-size:9px; opacity:0.3; }
+  .cctx-table th.cctx-sa .cctx-sort-ic, .cctx-table th.cctx-sd .cctx-sort-ic { opacity:1; color:var(--blue); }
+  .cctx-sel-bar { display:flex; align-items:center; gap:8px; padding:7px 10px; margin-bottom:6px; background:rgba(99,102,241,0.07); border:1px solid rgba(99,102,241,0.22); border-radius:8px; flex-wrap:wrap; }
+  .cctx-ract { background:none; border:none; cursor:pointer; padding:2px 4px; font-size:13px; line-height:1; color:var(--text3); border-radius:3px; }
+  .cctx-ract:hover { background:var(--bg3); color:var(--blue); }
+  .cctx-ract.del:hover { color:var(--red); }
+  .cctx-dd { position:relative; display:inline-block; }
+  .cctx-dd-menu { position:absolute; top:calc(100% + 2px); left:0; z-index:200; background:var(--card); border:1px solid var(--border2); border-radius:8px; min-width:178px; box-shadow:0 4px 16px rgba(0,0,0,.18); padding:4px 0; }
+  .cctx-dd-menu.hidden { display:none; }
+  .cctx-dd-item { padding:7px 14px; font-size:12px; cursor:pointer; color:var(--text); white-space:nowrap; }
+  .cctx-dd-item:hover { background:var(--bg3); }
+  .cctx-dd-item.danger { color:var(--red); }
+  .cctx-modal-body { max-height:60vh; overflow-y:auto; padding-right:2px; }
+  .cctx-frow { display:grid; grid-template-columns:76px 1fr; align-items:center; gap:8px; margin-bottom:8px; }
+  .cctx-frow label { font-size:12px; color:var(--text2); }
+  .cctx-frow input, .cctx-frow select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:12px; font-family:var(--font); padding:5px 8px; border-radius:6px; width:100%; box-sizing:border-box; }
+  .cctx-frow input:focus, .cctx-frow select:focus { outline:none; border-color:var(--blue); }
+  .cctx-brow { display:grid; grid-template-columns:72px 154px 1fr; align-items:center; gap:6px; margin-bottom:7px; }
+  .cctx-brow label { font-size:12px; color:var(--text2); }
+  .cctx-brow input, .cctx-brow select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:12px; font-family:var(--font); padding:5px 8px; border-radius:6px; width:100%; box-sizing:border-box; }
+  .cctx-brow input:focus, .cctx-brow select:focus { outline:none; border-color:var(--blue); }
+  .cctx-preview { background:var(--bg3); border-radius:7px; padding:10px 12px; font-size:11px; line-height:1.8; margin-top:8px; }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1162,13 +1187,30 @@
 
   <!-- ======== 법인카드 청구내역 ======== -->
   <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border2)">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <!-- 툴바 -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
       <span style="font-size:13px;font-weight:600;color:var(--text)">청구내역</span>
-      <button class="btn sm" id="cctx-upload-btn">📤 엑셀 업로드</button>
+      <button class="btn sm" id="cctx-upload-btn">📤 업로드</button>
       <input type="file" id="cctx-file-input" accept=".xlsx,.xls" style="display:none">
+      <button class="btn sm" id="cctx-filter-reset" style="color:var(--text2)">필터 초기화</button>
+      <div class="cctx-dd">
+        <button class="btn sm" id="cctx-all-edit-btn">전체 수정 ▾</button>
+        <div class="cctx-dd-menu hidden" id="cctx-all-edit-menu">
+          <div class="cctx-dd-item" id="cctx-all-edit-filtered">현재 필터 결과 수정</div>
+          <div class="cctx-dd-item" id="cctx-all-edit-all">전체 데이터 수정</div>
+        </div>
+      </div>
+      <div class="cctx-dd">
+        <button class="btn sm red" id="cctx-all-del-btn">전체 삭제 ▾</button>
+        <div class="cctx-dd-menu hidden" id="cctx-all-del-menu">
+          <div class="cctx-dd-item danger" id="cctx-all-del-filtered">현재 필터 결과 삭제</div>
+          <div class="cctx-dd-item danger" id="cctx-all-del-all">전체 데이터 삭제</div>
+        </div>
+      </div>
       <div style="flex:1"></div>
       <span id="cctx-summary" style="font-size:12px;color:var(--text2)">데이터 없음</span>
     </div>
+    <!-- 필터 바 -->
     <div class="cctx-filter-bar" id="cctx-filter-bar">
       <input type="date" id="cctx-from" style="width:120px">
       <span style="color:var(--text3);font-size:12px">~</span>
@@ -1176,8 +1218,16 @@
       <select id="cctx-alias" style="width:150px"><option value="">카드 전체</option></select>
       <input type="text" id="cctx-merchant" placeholder="가맹점 검색" style="width:140px">
       <input type="text" id="cctx-memo" placeholder="메모 검색" style="width:120px">
-      <button class="btn sm" id="cctx-filter-reset" style="color:var(--text2)">초기화</button>
     </div>
+    <!-- 선택 작업 바 -->
+    <div class="cctx-sel-bar" id="cctx-sel-bar" style="display:none">
+      <span id="cctx-sel-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
+      <div style="flex:1"></div>
+      <button class="btn sm" id="cctx-sel-edit-btn">선택 수정</button>
+      <button class="btn sm red" id="cctx-sel-del-btn">선택 삭제</button>
+      <button class="btn sm" id="cctx-sel-cancel-btn" style="color:var(--text2)">취소</button>
+    </div>
+    <!-- 테이블 -->
     <div class="cctx-wrap"><div id="cctx-table-container"></div></div>
   </div>
 </div><!-- /panel-corp-card -->
@@ -1193,6 +1243,61 @@
     <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border2);margin-top:4px">
       <button class="btn green" id="cctx-apply-btn">적용</button>
       <button class="btn" id="cctx-cancel-btn">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 청구내역 개별 수정 모달 ======== -->
+<div class="modal-backdrop hidden" id="cctx-edit-modal">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <span class="modal-title">청구내역 수정</span>
+      <button class="modal-close" onclick="document.getElementById('cctx-edit-modal').classList.add('hidden')">×</button>
+    </div>
+    <div class="cctx-modal-body" style="padding:8px 0 4px">
+      <input type="hidden" id="cctx-edit-id">
+      <div class="cctx-frow"><label>이용일자</label><input type="date" id="cctx-edit-use-date"></div>
+      <div class="cctx-frow"><label>청구일자</label><input type="date" id="cctx-edit-billing-date"></div>
+      <div class="cctx-frow"><label>카드 별칭</label><input type="text" id="cctx-edit-card-alias" placeholder="카드 별칭"></div>
+      <div class="cctx-frow"><label>카드번호</label><input type="text" id="cctx-edit-card-no" placeholder="카드번호" style="font-family:var(--mono)"></div>
+      <div class="cctx-frow"><label>가맹점명</label><input type="text" id="cctx-edit-merchant" placeholder="가맹점명"></div>
+      <div class="cctx-frow"><label>청구금액</label><input type="number" id="cctx-edit-amount" placeholder="청구금액" style="font-family:var(--mono)"></div>
+      <div class="cctx-frow"><label>메모</label><input type="text" id="cctx-edit-memo" placeholder="메모"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border2);margin-top:6px">
+      <button class="btn green" id="cctx-edit-save-btn">저장</button>
+      <button class="btn" onclick="document.getElementById('cctx-edit-modal').classList.add('hidden')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 청구내역 일괄 수정 모달 ======== -->
+<div class="modal-backdrop hidden" id="cctx-bulk-edit-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="cctx-bulk-edit-title">일괄 수정</span>
+      <button class="modal-close" onclick="closeCCTxBulkEditModal()">×</button>
+    </div>
+    <div class="cctx-modal-body" id="cctx-bulk-edit-body" style="padding:8px 0 4px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border2);margin-top:6px">
+      <button class="btn" id="cctx-bulk-preview-btn">미리보기</button>
+      <button class="btn green" id="cctx-bulk-apply-btn">적용</button>
+      <button class="btn" onclick="closeCCTxBulkEditModal()">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 청구내역 전체 삭제 확인 모달 ======== -->
+<div class="modal-backdrop hidden" id="cctx-delete-modal">
+  <div class="modal" style="width:460px">
+    <div class="modal-header">
+      <span class="modal-title">청구내역 삭제</span>
+      <button class="modal-close" onclick="document.getElementById('cctx-delete-modal').classList.add('hidden')">×</button>
+    </div>
+    <div id="cctx-delete-body" style="padding:4px 0 12px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border2);margin-top:4px">
+      <button class="btn red" id="cctx-delete-apply-btn">삭제</button>
+      <button class="btn" onclick="document.getElementById('cctx-delete-modal').classList.add('hidden')">취소</button>
     </div>
   </div>
 </div>
@@ -1977,6 +2082,12 @@ function loadCorpCardTxFromStorage() {
   try { const v = localStorage.getItem('corp_card_tx_data'); return v ? JSON.parse(v) : []; } catch { return []; }
 }
 let corpCardTxData = loadCorpCardTxFromStorage(); // 법인카드 청구내역
+let corpCardTxSelectedIds = new Set(); // 선택된 청구내역 ID 집합
+let cctxSortCol = 'use_date';          // 현재 정렬 컬럼 (기본: 이용일자)
+let cctxSortDir = 'desc';              // 현재 정렬 방향 (기본: 내림차순)
+let cctxSortIsDefault = true;          // 기본 정렬 여부
+let _cctxBulkScope = 'selected';       // 일괄 수정 범위
+let _cctxDeleteScope = 'filtered';     // 삭제 범위
 const DESC_TO_MID = {"Npay정산":"매출","스마트스토어정":"매출","카카오페이정산":"매출","Toss정산0330":"매출","한국정보통신(주)":"매출","오늘의집정산":"매출","Toss정산0331":"매출","Toss정산0401":"매출","Toss정산0402":"매출","Toss정산0403":"매출","쿠팡(주)":"매출","(주)씨제이이엔엠":"매출","엔에이치엔페이":"매출","(유)동이식품_매출":"매출","분당（１４４）　　　":"세금과공과금","성남시지방소":"세금과공과금","쿠팡페이주식회":"매출","씨엔에이바이오":"매입대금","태성수산 영어":"매입대금","기업주식회사　월드씨푸드":"매입대금","하나(주)모락스":"운반비","(주)디앤비푸드_매출":"매출","(주)제이에스푸":"매입대금","우리대주회계법인":"지급수수료","신한동백로지스주식회사":"운반비","하나(사)한국건강기능식":"지급수수료","기업(주)옥수":"매입대금","AMAZON":"매출","tosspaymen":"매출","(주)다날":"매출","(주)씨제이이엔":"매출","신한미디어브릿지그룹(주":"지급수수료","기업RC주식회사　로가":"연구개발비","신한(주)지앤원":"매입대금","신한유한회사　위써트인증":"지급수수료","신한카드":"법인카드 대금","롯데카드(주)":"법인카드 대금","Toss정산0406":"매출","급여":"급여","4대보험":"보험료","원천세":"세금과공과금","이자-32-00039 다음납입예정일-20260329":"이자비용","이자-32-00035 다음납입예정일-20260328":"이자비용","이자-32-00042 다음납입예정일-20260329":"이자비용","신솔민":"광고선전비","임형규":"광고선전비","우미연":"광고선전비","신병철":"광고선전비","방군석":"광고선전비","(유)바다향":"매출","신동섭":"매입대금","(주)로가제이에":"대여금 지급","아난티 오시리":"매출","jht코스메틱":"매출","황건숙":"광고선전비","홍지민":"광고선전비","박민아":"광고선전비","유나윤":"광고선전비","김선영":"광고선전비","이상훈(페퍼스":"광고선전비","휴온스엔":"매출","(주)프라임카고":"운반비","(유)동이식품_매출":"매출","주)로릭코리아":"운반비","김대영(이성국":"지급수수료","중진공대출":"이자비용","tosspaymen":"매출","하경수_회수":"대여금 수취","주식회사에이치이공일":"대여금 수취","(주)로가제이에_회수":"대여금 수취","신한(주)지앤원":"매입대금","농협(주)우앤파트너스":"지급수수료","주식회사로가":"계좌간이체","신한주식회사　로가":"계좌간이체","주식회사 호마":"매입대금","주식회사 코코":"매입대금","(주)루리인터내":"매입대금","이아인":"광고선전비","박미영":"광고선전비","김세라":"광고선전비","황귀순":"광고선전비","이태호":"광고선전비","안나근":"광고선전비","장혜진":"광고선전비","이솔":"광고선전비","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","RAWGA USA":"대여금 지급","Toss정산0309":"매출","중진공대출원리":"이자비용","SMS140***24316":"지급수수료","이성국제특허법_반환":"기타 입금","주식회사무신사":"매출","SSG상품대":"매출","안성환":"광고선전비","모은지":"광고선전비","고재경":"광고선전비","허영식":"광고선전비","조영현":"광고선전비","주식회사　로가":"계좌간이체","주식회사 로가":"계좌간이체","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","(주)씨제이이엔":"매출","허진관":"광고선전비","이상희":"광고선전비","방군석":"광고선전비","서지은":"광고선전비","이윤서":"광고선전비","허진숙":"광고선전비","우미연":"광고선전비","문현주":"광고선전비","(주)에이치이공":"대여금 수취","성남시등록면":"세금과공과금","장부식_수취":"대여금 수취","미쓰이소꼬코리":"운반비","(주)로가":"소모품비","(유)바다향":"매출","이준영":"광고선전비","방군석":"광고선전비","유도연":"광고선전비","김한나":"광고선전비","김미아":"광고선전비","주식회사　로가_투자":"투자금","주식회사로가_투자":"투자금"};
 const MID_TO_BIG = {"세금과공과금":"세금과공과금","매입대금":"재고/상품매입","운반비":"판매관리비","지급수수료":"판매관리비","연구개발비":"연구개발비","법인카드 대금":"자금이동/제외","급여":"판매관리비","보험료":"보험료","이자비용":"금융비용","광고선전비":"판매관리비","대여금 지급":"자금이동/제외","소모품비":"판매관리비","통신비":"판매관리비","대여금 상환":"자금이동/제외","기타 지출":"기타 지출","판매수수료":"판매관리비","보증금":"보증금","설비 대금":"세종시","임차료":"판매관리비","여비교통비":"판매관리비","매출":"기타","대여금 수취":"기타","투자금":"자금이동/제외","이자수익":"기타","기타 입금":"기타","인오가닉":"인오가닉","계좌간이체":"자금이동/제외"};
 const MID_CATS = Object.keys(MID_TO_BIG);
@@ -7336,14 +7447,20 @@ document.getElementById('corp-add-col-btn').addEventListener('click', addCorpCar
 document.getElementById('corp-add-acc-btn').addEventListener('click', addCorpCardAccount);
 document.getElementById('corp-reset-btn').addEventListener('click', resetCorpCardSettings);
 
-/* ===== 법인카드 청구내역 — 저장 ===== */
+/* ===== 법인카드 청구내역 — 저장 (error 반환, 실패 시 throw 가능) ===== */
 async function saveCorpCardTxToSupabase() {
   try {
     localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
-    if (!_isInitialized) return;
-    await _supa.from('cat_data').upsert([{ key: 'corp_card_tx_data', data: corpCardTxData }], { onConflict: 'key' });
+    if (!_isInitialized) return { error: null };
+    const { error } = await _supa.from('cat_data').upsert(
+      [{ key: 'corp_card_tx_data', data: corpCardTxData }],
+      { onConflict: 'key' }
+    );
+    if (error) throw error;
+    return { error: null };
   } catch(e) {
     console.warn('[saveCorpCardTx] 저장 실패:', e);
+    return { error: e };
   }
 }
 
@@ -7351,7 +7468,6 @@ async function saveCorpCardTxToSupabase() {
 function normalizeCCDate(v) {
   if (v === null || v === undefined || v === '') return '';
   if (typeof v === 'number') {
-    // Excel serial date
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return d.toISOString().slice(0, 10);
   }
@@ -7365,6 +7481,21 @@ function normalizeCCAmount(v) {
   if (typeof v === 'number') return Math.round(v);
   const n = parseInt(String(v).replace(/[^0-9\-]/g, ''), 10);
   return isNaN(n) ? 0 : n;
+}
+
+/* ===== 법인카드 청구내역 — 공통 정규화 ===== */
+function normalizeCorpCardTxRow(row) {
+  return {
+    ...row,
+    _id:            row._id,
+    use_date:       normalizeCCDate(row.use_date),
+    billing_date:   normalizeCCDate(row.billing_date),
+    card_alias:     String(row.card_alias     ?? '').trim(),
+    card_no:        String(row.card_no        ?? '').trim(),
+    merchant:       String(row.merchant       ?? '').trim(),
+    billing_amount: normalizeCCAmount(row.billing_amount),
+    memo:           String(row.memo           ?? '').trim(),
+  };
 }
 
 /* ===== 법인카드 청구내역 — 업로드 처리 ===== */
@@ -7490,23 +7621,80 @@ function updateCCTxAliasFilter() {
     aliases.map(a => `<option value="${a}"${a === current ? ' selected' : ''}>${a}</option>`).join('');
 }
 
-/* ===== 법인카드 청구내역 — 렌더 ===== */
-function renderCCTxTable() {
-  const from     = (document.getElementById('cctx-from')?.value     || '');
-  const to       = (document.getElementById('cctx-to')?.value       || '');
-  const alias    = (document.getElementById('cctx-alias')?.value    || '');
+/* ===== 법인카드 청구내역 — 필터 ===== */
+function getCCTxFilteredRows() {
+  const from     = document.getElementById('cctx-from')?.value     || '';
+  const to       = document.getElementById('cctx-to')?.value       || '';
+  const alias    = document.getElementById('cctx-alias')?.value    || '';
   const merchant = (document.getElementById('cctx-merchant')?.value || '').trim().toLowerCase();
-  const memo     = (document.getElementById('cctx-memo')?.value     || '').trim().toLowerCase();
-
+  const memo     = (document.getElementById('cctx-memo')?.value    || '').trim().toLowerCase();
   let rows = corpCardTxData;
   if (from)     rows = rows.filter(r => (r.use_date || '') >= from);
   if (to)       rows = rows.filter(r => (r.use_date || '') <= to);
   if (alias)    rows = rows.filter(r => r.card_alias === alias);
   if (merchant) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(merchant));
   if (memo)     rows = rows.filter(r => (r.memo     || '').toLowerCase().includes(memo));
+  return rows;
+}
 
-  const total = rows.length;
-  const sum   = rows.reduce((s, r) => s + (r.billing_amount || 0), 0);
+/* ===== 법인카드 청구내역 — 정렬 ===== */
+function getCCTxSortedRows(rows) {
+  const col = cctxSortCol;
+  const dir = cctxSortDir;
+  return [...rows].sort((a, b) => {
+    const va = a[col] ?? '';
+    const vb = b[col] ?? '';
+    if (va === '' && vb !== '') return 1;
+    if (vb === '' && va !== '') return -1;
+    if (va === '' && vb === '') return 0;
+    if (col === 'billing_amount') {
+      const na = Number(va) || 0, nb = Number(vb) || 0;
+      return dir === 'asc' ? na - nb : nb - na;
+    }
+    const cmp = String(va).localeCompare(String(vb), 'ko');
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function onCCTxSortClick(col) {
+  if (cctxSortIsDefault || cctxSortCol !== col) {
+    cctxSortCol = col; cctxSortDir = 'asc'; cctxSortIsDefault = false;
+  } else if (cctxSortDir === 'asc') {
+    cctxSortDir = 'desc';
+  } else {
+    cctxSortCol = 'use_date'; cctxSortDir = 'desc'; cctxSortIsDefault = true;
+  }
+  renderCCTxTable();
+}
+
+/* ===== 법인카드 청구내역 — 선택 바 갱신 ===== */
+function updateCCTxSelectionBar() {
+  const count  = corpCardTxSelectedIds.size;
+  const bar    = document.getElementById('cctx-sel-bar');
+  const cntEl  = document.getElementById('cctx-sel-count');
+  const editBtn= document.getElementById('cctx-sel-edit-btn');
+  if (!bar) return;
+  if (count > 0) {
+    bar.style.display = 'flex';
+    if (cntEl)    cntEl.textContent  = `${count.toLocaleString()}건 선택됨`;
+    if (editBtn)  editBtn.textContent = `선택 수정 (${count.toLocaleString()}건)`;
+  } else {
+    bar.style.display = 'none';
+  }
+  const visible = [...document.querySelectorAll('.cctx-row-check')].map(c => c.dataset.id);
+  const selVis  = visible.filter(id => corpCardTxSelectedIds.has(id));
+  const allCk   = document.getElementById('cctx-check-all');
+  if (allCk) {
+    allCk.indeterminate = selVis.length > 0 && selVis.length < visible.length;
+    allCk.checked       = visible.length > 0 && selVis.length === visible.length;
+  }
+}
+
+/* ===== 법인카드 청구내역 — 렌더 ===== */
+function renderCCTxTable() {
+  const filtered = getCCTxFilteredRows();
+  const total    = filtered.length;
+  const sum      = filtered.reduce((s, r) => s + (r.billing_amount || 0), 0);
 
   const summaryEl = document.getElementById('cctx-summary');
   if (summaryEl) {
@@ -7515,37 +7703,414 @@ function renderCCTxTable() {
       : '데이터 없음';
   }
 
+  // 존재하지 않는 ID 선택 해제
+  const allIds = new Set(corpCardTxData.map(r => r._id));
+  for (const id of corpCardTxSelectedIds) { if (!allIds.has(id)) corpCardTxSelectedIds.delete(id); }
+
+  const rows      = getCCTxSortedRows(filtered);
   const container = document.getElementById('cctx-table-container');
   if (!container) return;
+
   if (!total) {
     container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px">` +
       (corpCardTxData.length ? '검색 결과가 없습니다.' : '업로드된 청구내역이 없습니다. 엑셀 파일을 업로드해 주세요.') +
       `</div>`;
+    updateCCTxSelectionBar();
     return;
   }
 
+  const sic = col => {
+    if (cctxSortCol !== col) return `<span class="cctx-sort-ic">↕</span>`;
+    return `<span class="cctx-sort-ic">${cctxSortDir === 'asc' ? '↑' : '↓'}</span>`;
+  };
+  const scl = col => {
+    if (cctxSortCol !== col) return 'cctx-sort';
+    return cctxSortIsDefault ? 'cctx-sort cctx-sd' : (cctxSortDir === 'asc' ? 'cctx-sort cctx-sa' : 'cctx-sort cctx-sd');
+  };
+  const th = (col, lbl, align) =>
+    `<th class="${scl(col)}" data-sort="${col}"${align ? ` style="text-align:${align}"` : ''}>${lbl}${sic(col)}</th>`;
+
   const fmt = n => Number(n).toLocaleString();
-  const tbRows = rows.map(r =>
-    `<tr>` +
+  const filtIds  = filtered.map(r => r._id);
+  const selPage  = filtIds.filter(id => corpCardTxSelectedIds.has(id));
+  const allChk   = filtIds.length > 0 && selPage.length === filtIds.length ? 'checked' : '';
+  const allIndet = selPage.length > 0 && selPage.length < filtIds.length;
+
+  const tbRows = rows.map(r => {
+    const chk = corpCardTxSelectedIds.has(r._id) ? 'checked' : '';
+    return `<tr>` +
+      `<td style="width:32px;padding:4px 8px"><input type="checkbox" class="cctx-row-check" data-id="${r._id}" ${chk} style="cursor:pointer"></td>` +
       `<td>${r.use_date || ''}</td>` +
       `<td>${r.billing_date || ''}</td>` +
       `<td>${r.card_alias || ''}</td>` +
       `<td style="font-family:var(--mono);font-size:11px">${r.card_no || ''}</td>` +
       `<td>${r.merchant || ''}</td>` +
       `<td class="num">${fmt(r.billing_amount || 0)}</td>` +
-      `<td>${r.memo || ''}</td>` +
-    `</tr>`
-  ).join('');
+      `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.memo || ''}</td>` +
+      `<td style="padding:3px 6px;white-space:nowrap">` +
+        `<button class="cctx-ract" title="수정" data-editid="${r._id}">✏</button>` +
+        `<button class="cctx-ract del" title="삭제" data-delid="${r._id}">🗑</button>` +
+      `</td>` +
+    `</tr>`;
+  }).join('');
 
   container.innerHTML =
     `<table class="cctx-table">` +
       `<thead><tr>` +
-        `<th>이용일자</th><th>청구일자</th><th>카드 별칭</th>` +
-        `<th>카드번호</th><th>가맹점명</th>` +
-        `<th style="text-align:right">청구금액</th><th>메모</th>` +
+        `<th style="width:32px;padding:4px 8px"><input type="checkbox" id="cctx-check-all" ${allChk}></th>` +
+        th('use_date',       '이용일자') +
+        th('billing_date',   '청구일자') +
+        th('card_alias',     '카드 별칭') +
+        th('card_no',        '카드번호') +
+        th('merchant',       '가맹점명') +
+        th('billing_amount', '청구금액', 'right') +
+        th('memo',           '메모') +
+        `<th style="width:56px">작업</th>` +
       `</tr></thead>` +
       `<tbody>${tbRows}</tbody>` +
     `</table>`;
+
+  // 헤더 체크박스
+  const allCkEl = document.getElementById('cctx-check-all');
+  if (allCkEl) {
+    allCkEl.indeterminate = allIndet;
+    allCkEl.addEventListener('change', () => {
+      const ids = getCCTxFilteredRows().map(r => r._id);
+      if (allCkEl.checked) ids.forEach(id => corpCardTxSelectedIds.add(id));
+      else                  ids.forEach(id => corpCardTxSelectedIds.delete(id));
+      renderCCTxTable();
+    });
+  }
+  // 행 체크박스
+  container.querySelectorAll('.cctx-row-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) corpCardTxSelectedIds.add(cb.dataset.id);
+      else            corpCardTxSelectedIds.delete(cb.dataset.id);
+      updateCCTxSelectionBar();
+    });
+  });
+  // 정렬 헤더
+  container.querySelectorAll('.cctx-sort').forEach(thEl => {
+    thEl.addEventListener('click', () => onCCTxSortClick(thEl.dataset.sort));
+  });
+  // 행 작업 버튼
+  container.querySelectorAll('.cctx-ract').forEach(btn => {
+    if (btn.dataset.editid) btn.addEventListener('click', () => openCCTxEditModal(btn.dataset.editid));
+    if (btn.dataset.delid)  btn.addEventListener('click', () => deleteCCTxRow(btn.dataset.delid));
+  });
+  updateCCTxSelectionBar();
+}
+
+/* ===== 법인카드 청구내역 — 개별 수정 ===== */
+function openCCTxEditModal(id) {
+  const row = corpCardTxData.find(r => r._id === id);
+  if (!row) { alert('항목을 찾을 수 없습니다.'); return; }
+  document.getElementById('cctx-edit-id').value             = row._id;
+  document.getElementById('cctx-edit-use-date').value       = row.use_date     || '';
+  document.getElementById('cctx-edit-billing-date').value   = row.billing_date || '';
+  document.getElementById('cctx-edit-card-alias').value     = row.card_alias   || '';
+  document.getElementById('cctx-edit-card-no').value        = row.card_no      || '';
+  document.getElementById('cctx-edit-merchant').value       = row.merchant     || '';
+  document.getElementById('cctx-edit-amount').value         = row.billing_amount ?? '';
+  document.getElementById('cctx-edit-memo').value           = row.memo         || '';
+  document.getElementById('cctx-edit-modal').classList.remove('hidden');
+}
+
+async function saveCCTxEdit() {
+  const id  = document.getElementById('cctx-edit-id').value;
+  const idx = corpCardTxData.findIndex(r => r._id === id);
+  if (idx < 0) { alert('항목을 찾을 수 없습니다.'); return; }
+
+  const oldRow = corpCardTxData[idx];
+  const newRow = normalizeCorpCardTxRow({
+    ...oldRow,
+    use_date:       document.getElementById('cctx-edit-use-date').value,
+    billing_date:   document.getElementById('cctx-edit-billing-date').value,
+    card_alias:     document.getElementById('cctx-edit-card-alias').value,
+    card_no:        document.getElementById('cctx-edit-card-no').value,
+    billing_amount: document.getElementById('cctx-edit-amount').value,
+    merchant:       document.getElementById('cctx-edit-merchant').value,
+    memo:           document.getElementById('cctx-edit-memo').value,
+  });
+
+  if (JSON.stringify(oldRow) === JSON.stringify(newRow)) {
+    document.getElementById('cctx-edit-modal').classList.add('hidden');
+    showToast('변경 사항 없음', '');
+    return;
+  }
+
+  const backup = structuredClone(corpCardTxData);
+  corpCardTxData[idx] = newRow;
+  const { error } = await saveCorpCardTxToSupabase();
+  if (error) {
+    corpCardTxData = backup;
+    renderCCTxTable();
+    alert(`저장 실패: ${error?.message || String(error)}`);
+    return;
+  }
+  document.getElementById('cctx-edit-modal').classList.add('hidden');
+  updateCCTxAliasFilter();
+  renderCCTxTable();
+  showToast('✅ 수정 완료', 'green');
+}
+
+/* ===== 법인카드 청구내역 — 개별 삭제 ===== */
+async function deleteCCTxRow(id) {
+  const row = corpCardTxData.find(r => r._id === id);
+  if (!row) { alert('항목을 찾을 수 없습니다.'); return; }
+  const info = `${row.use_date || '-'} / ${row.card_alias || '-'} / ${row.merchant || '-'} / ${(row.billing_amount || 0).toLocaleString()}원`;
+  if (!confirm(`아래 청구내역을 삭제하시겠습니까?\n\n${info}`)) return;
+
+  const backup = structuredClone(corpCardTxData);
+  corpCardTxData = corpCardTxData.filter(r => r._id !== id);
+  const { error } = await saveCorpCardTxToSupabase();
+  if (error) {
+    corpCardTxData = backup;
+    renderCCTxTable();
+    alert(`저장 실패: ${error?.message || String(error)}`);
+    return;
+  }
+  corpCardTxSelectedIds.delete(id);
+  updateCCTxAliasFilter();
+  renderCCTxTable();
+  showToast('✅ 삭제 완료', 'green');
+}
+
+/* ===== 법인카드 청구내역 — 선택 삭제 ===== */
+async function deleteSelectedCCTx() {
+  const ids = [...corpCardTxSelectedIds];
+  if (!ids.length) { alert('선택된 항목이 없습니다.'); return; }
+  const targets  = corpCardTxData.filter(r => ids.includes(r._id));
+  const totalAmt = targets.reduce((s, r) => s + (r.billing_amount || 0), 0);
+  if (!confirm(`선택 삭제 대상: ${ids.length.toLocaleString()}건\n합계 금액: ${totalAmt.toLocaleString()}원\n\n삭제하시겠습니까?`)) return;
+
+  const backup = structuredClone(corpCardTxData);
+  const idsSet = new Set(ids);
+  corpCardTxData = corpCardTxData.filter(r => !idsSet.has(r._id));
+  const { error } = await saveCorpCardTxToSupabase();
+  if (error) {
+    corpCardTxData = backup;
+    renderCCTxTable();
+    alert(`저장 실패: ${error?.message || String(error)}`);
+    return;
+  }
+  corpCardTxSelectedIds.clear();
+  updateCCTxAliasFilter();
+  renderCCTxTable();
+  showToast(`✅ ${ids.length.toLocaleString()}건 삭제 완료`, 'green');
+}
+
+/* ===== 법인카드 청구내역 — 일괄/전체 수정 ===== */
+function _getCCTxBulkTargets(scope) {
+  if (scope === 'selected') return corpCardTxData.filter(r => corpCardTxSelectedIds.has(r._id));
+  if (scope === 'filtered') return getCCTxFilteredRows();
+  return corpCardTxData;
+}
+
+function _buildCCTxBulkEditForm(scope, count) {
+  const scopeLabel = scope === 'selected' ? `선택 ${count.toLocaleString()}건`
+                   : scope === 'filtered' ? `현재 필터 결과 ${count.toLocaleString()}건`
+                   : `전체 데이터 ${count.toLocaleString()}건`;
+  const isAll = scope === 'all';
+  const textOpts = `<option value="no_change">변경 안 함</option><option value="set_value">입력값으로 변경</option><option value="set_empty">빈 값으로 변경</option>`;
+  const amtOpts  = `<option value="no_change">변경 안 함</option><option value="set_value">지정 금액으로 변경</option><option value="add_value">현재 금액에 더하기</option><option value="subtract_value">현재 금액에서 빼기</option>`;
+  const brow = (fid, label, type, opts) => {
+    const inp = type === 'date'   ? `<input type="date"   id="cctx-bv-${fid}" disabled style="flex:1">` :
+                type === 'number' ? `<input type="number" id="cctx-bv-${fid}" disabled placeholder="금액" style="font-family:var(--mono)">` :
+                                    `<input type="text"   id="cctx-bv-${fid}" disabled placeholder="${label}" style="flex:1">`;
+    return `<div class="cctx-brow"><label>${label}</label>` +
+      `<select id="cctx-bm-${fid}" data-fid="${fid}" onchange="onCCTxBulkModeChange(this)">${opts}</select>` +
+      inp + `</div>`;
+  };
+  let html = `<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:7px;font-size:12px;color:var(--text2)">수정 범위: <b style="color:var(--text)">${scopeLabel}</b></div>`;
+  html += brow('use-date',     '이용일자',  'date',   textOpts);
+  html += brow('billing-date', '청구일자',  'date',   textOpts);
+  html += brow('card-alias',   '카드 별칭', 'text',   textOpts);
+  html += brow('card-no',      '카드번호',  'text',   textOpts);
+  html += brow('merchant',     '가맹점명',  'text',   textOpts);
+  html += brow('amount',       '청구금액',  'number', amtOpts);
+  html += brow('memo',         '메모',      'text',   textOpts);
+  if (isAll) {
+    html += `<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
+      `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 수정 확인</div>` +
+      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>전체수정</b>을 정확히 입력해야 적용됩니다.</div>` +
+      `<input type="text" id="cctx-bulk-confirm" placeholder="전체수정" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box"></div>`;
+  }
+  html += `<div id="cctx-bulk-preview-area" style="margin-top:6px"></div>`;
+  return html;
+}
+
+function openCCTxBulkEditModal(scope) {
+  _cctxBulkScope = scope;
+  const titles = { selected: '선택 항목 수정', filtered: '현재 필터 결과 수정', all: '전체 데이터 수정' };
+  document.getElementById('cctx-bulk-edit-title').textContent = titles[scope] || '일괄 수정';
+  const targets = _getCCTxBulkTargets(scope);
+  document.getElementById('cctx-bulk-edit-body').innerHTML = _buildCCTxBulkEditForm(scope, targets.length);
+  document.getElementById('cctx-bulk-edit-modal').classList.remove('hidden');
+}
+
+function closeCCTxBulkEditModal() {
+  document.getElementById('cctx-bulk-edit-modal').classList.add('hidden');
+}
+
+function onCCTxBulkModeChange(sel) {
+  const fid   = sel.dataset.fid;
+  const mode  = sel.value;
+  const valEl = document.getElementById(`cctx-bv-${fid}`);
+  if (!valEl) return;
+  valEl.disabled = (mode === 'no_change' || mode === 'set_empty');
+  if (mode === 'set_empty') valEl.value = '';
+}
+
+function _getCCTxBulkChangeDef() {
+  const fmap = { 'use-date':'use_date','billing-date':'billing_date','card-alias':'card_alias','card-no':'card_no','merchant':'merchant','amount':'billing_amount','memo':'memo' };
+  return Object.entries(fmap).map(([fid, field]) => {
+    const modeEl = document.getElementById(`cctx-bm-${fid}`);
+    if (!modeEl) return null;
+    const mode = modeEl.value;
+    if (mode === 'no_change') return null;
+    return { fid, field, mode, rawVal: (document.getElementById(`cctx-bv-${fid}`)?.value ?? '').trim() };
+  }).filter(Boolean);
+}
+
+function _applyCCTxChangesToRow(row, defs) {
+  const r = { ...row };
+  for (const d of defs) {
+    if (d.mode === 'set_empty') {
+      r[d.field] = '';
+    } else if (d.mode === 'set_value') {
+      if (d.field === 'use_date' || d.field === 'billing_date') r[d.field] = normalizeCCDate(d.rawVal);
+      else if (d.field === 'billing_amount') r[d.field] = normalizeCCAmount(d.rawVal);
+      else r[d.field] = d.rawVal;
+    } else if (d.mode === 'add_value') {
+      r.billing_amount = (row.billing_amount || 0) + normalizeCCAmount(d.rawVal);
+    } else if (d.mode === 'subtract_value') {
+      r.billing_amount = (row.billing_amount || 0) - normalizeCCAmount(d.rawVal);
+    }
+  }
+  return r;
+}
+
+function previewCCTxBulkEdit() {
+  const defs = _getCCTxBulkChangeDef();
+  const prevEl = document.getElementById('cctx-bulk-preview-area');
+  if (!defs.length) { if (prevEl) prevEl.innerHTML = `<div style="font-size:12px;color:var(--text2)">변경할 필드를 선택해주세요.</div>`; return; }
+  const targets   = _getCCTxBulkTargets(_cctxBulkScope);
+  const changed   = targets.filter(r => JSON.stringify(r) !== JSON.stringify(_applyCCTxChangesToRow(r, defs)));
+  const unchanged = targets.length - changed.length;
+  const fnames    = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const fieldSummary = defs.map(d => {
+    const fn = fnames[d.field] || d.field;
+    const ml = d.mode === 'set_value' ? `→ "${d.rawVal}"` : d.mode === 'set_empty' ? '→ (빈 값)' : d.mode === 'add_value' ? `+${d.rawVal}` : `-${d.rawVal}`;
+    return `${fn} ${ml}`;
+  }).join(', ');
+  const exRows = changed.slice(0, 10).map(r => {
+    const nr = _applyCCTxChangesToRow(r, defs);
+    const diff = defs.map(d => {
+      const fn = fnames[d.field] || d.field;
+      const bef = d.field === 'billing_amount' ? (r[d.field]||0).toLocaleString() : (r[d.field]||'(없음)');
+      const aft = d.field === 'billing_amount' ? (nr[d.field]||0).toLocaleString() : (nr[d.field]||'(빈 값)');
+      return `${fn}: ${bef} → ${aft}`;
+    }).join(' | ');
+    return `<div style="padding:2px 0;border-bottom:1px solid var(--border);font-size:11px">${r.merchant||r.use_date||r._id.slice(-6)}: ${diff}</div>`;
+  }).join('');
+  if (prevEl) prevEl.innerHTML =
+    `<div class="cctx-preview">` +
+    `<div><b>선택:</b> ${targets.length.toLocaleString()}건 &nbsp;|&nbsp; <b>변경 예정:</b> ${changed.length.toLocaleString()}건 &nbsp;|&nbsp; <b>변경 없음:</b> ${unchanged.toLocaleString()}건</div>` +
+    `<div style="margin-top:4px"><b>변경 필드:</b> ${fieldSummary}</div>` +
+    (exRows ? `<div style="margin-top:6px;max-height:180px;overflow-y:auto">${exRows}</div>` : '') +
+    `</div>`;
+}
+
+async function applyCCTxBulkEdit() {
+  const scope = _cctxBulkScope;
+  if (scope === 'all') {
+    const cv = document.getElementById('cctx-bulk-confirm')?.value?.trim();
+    if (cv !== '전체수정') { alert('전체 수정을 진행하려면 "전체수정"을 정확히 입력해주세요.'); return; }
+  }
+  const defs = _getCCTxBulkChangeDef();
+  if (!defs.length) { alert('변경할 필드를 선택해주세요.'); return; }
+  const targets = _getCCTxBulkTargets(scope);
+  if (!targets.length) { alert('수정 대상 항목이 없습니다.'); return; }
+
+  const targetIds = new Set(targets.map(r => r._id));
+  const backup    = structuredClone(corpCardTxData);
+  let appliedCnt  = 0;
+  try {
+    corpCardTxData = corpCardTxData.map(r => {
+      if (!targetIds.has(r._id)) return r;
+      const nr = _applyCCTxChangesToRow(r, defs);
+      if (JSON.stringify(r) !== JSON.stringify(nr)) appliedCnt++;
+      return nr;
+    });
+    const { error } = await saveCorpCardTxToSupabase();
+    if (error) throw error;
+    if (scope !== 'all') corpCardTxSelectedIds.clear();
+    closeCCTxBulkEditModal();
+    updateCCTxAliasFilter();
+    renderCCTxTable();
+    showToast(`✅ ${appliedCnt.toLocaleString()}건 수정 완료`, 'green');
+  } catch(e) {
+    corpCardTxData = backup;
+    renderCCTxTable();
+    alert(`저장 실패: ${e?.message || String(e)}`);
+  }
+}
+
+/* ===== 법인카드 청구내역 — 전체 삭제 모달 ===== */
+function openCCTxDeleteModal(scope) {
+  _cctxDeleteScope = scope;
+  const targets   = scope === 'filtered' ? getCCTxFilteredRows() : corpCardTxData;
+  const remaining = scope === 'filtered' ? corpCardTxData.length - targets.length : 0;
+  const totalAmt  = targets.reduce((s, r) => s + (r.billing_amount || 0), 0);
+  const isAll     = scope === 'all';
+  const scopeLbl  = isAll ? '저장된 전체 청구내역' : '현재 필터 결과';
+  let html =
+    `<div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:2">` +
+    `<div><b>삭제 범위:</b> ${scopeLbl}</div>` +
+    `<div><b>삭제 대상:</b> ${targets.length.toLocaleString()}건</div>` +
+    `<div><b>합계 금액:</b> ${totalAmt.toLocaleString()}원</div>` +
+    (isAll ? `<div style="color:var(--red)"><b>삭제 후 남는 건수:</b> 0건 — 전체 삭제</div>`
+           : `<div><b>삭제 후 남는 건수:</b> ${remaining.toLocaleString()}건</div>`) +
+    `</div>`;
+  if (isAll) {
+    html +=
+      `<div style="padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
+      `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 삭제 — 복구 불가</div>` +
+      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>법인카드 청구내역 전체삭제</b>를 정확히 입력해야 실행됩니다.</div>` +
+      `<input type="text" id="cctx-del-confirm" placeholder="법인카드 청구내역 전체삭제" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box">` +
+      `</div>`;
+  } else {
+    html += `<div style="font-size:12px;color:var(--text2);margin-top:6px">필터 결과 <b>${targets.length.toLocaleString()}건</b>을 삭제하시겠습니까?</div>`;
+  }
+  document.getElementById('cctx-delete-body').innerHTML = html;
+  document.getElementById('cctx-delete-modal').classList.remove('hidden');
+}
+
+async function applyCCTxDelete() {
+  const isAll   = _cctxDeleteScope === 'all';
+  if (isAll) {
+    const cv = document.getElementById('cctx-del-confirm')?.value?.trim();
+    if (cv !== '법인카드 청구내역 전체삭제') { alert('"법인카드 청구내역 전체삭제"를 정확히 입력해주세요.'); return; }
+  }
+  const targets  = isAll ? corpCardTxData : getCCTxFilteredRows();
+  if (!targets.length) { alert('삭제 대상이 없습니다.'); return; }
+  const targetIds = new Set(targets.map(r => r._id));
+  const backup    = structuredClone(corpCardTxData);
+  corpCardTxData  = isAll ? [] : corpCardTxData.filter(r => !targetIds.has(r._id));
+  const { error } = await saveCorpCardTxToSupabase();
+  if (error) {
+    corpCardTxData = backup;
+    renderCCTxTable();
+    document.getElementById('cctx-delete-modal').classList.add('hidden');
+    alert(`저장 실패: ${error?.message || String(error)}`);
+    return;
+  }
+  for (const id of targetIds) corpCardTxSelectedIds.delete(id);
+  document.getElementById('cctx-delete-modal').classList.add('hidden');
+  updateCCTxAliasFilter();
+  renderCCTxTable();
+  showToast(`✅ ${targets.length.toLocaleString()}건 삭제 완료`, 'green');
 }
 
 /* ===== 법인카드 청구내역 — 이벤트 바인딩 ===== */
@@ -7561,8 +8126,38 @@ document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxU
 document.getElementById('cctx-filter-reset').addEventListener('click', () => {
   ['cctx-from', 'cctx-to', 'cctx-merchant', 'cctx-memo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const sel = document.getElementById('cctx-alias'); if (sel) sel.value = '';
+  cctxSortCol = 'use_date'; cctxSortDir = 'desc'; cctxSortIsDefault = true;
   renderCCTxTable();
 });
+// 선택 작업 바
+document.getElementById('cctx-sel-edit-btn').addEventListener('click',   () => openCCTxBulkEditModal('selected'));
+document.getElementById('cctx-sel-del-btn').addEventListener('click',    deleteSelectedCCTx);
+document.getElementById('cctx-sel-cancel-btn').addEventListener('click', () => { corpCardTxSelectedIds.clear(); renderCCTxTable(); });
+// 개별 수정 모달
+document.getElementById('cctx-edit-save-btn').addEventListener('click',  saveCCTxEdit);
+// 일괄 수정 모달
+document.getElementById('cctx-bulk-preview-btn').addEventListener('click', previewCCTxBulkEdit);
+document.getElementById('cctx-bulk-apply-btn').addEventListener('click',   applyCCTxBulkEdit);
+// 전체 삭제 모달
+document.getElementById('cctx-delete-apply-btn').addEventListener('click', applyCCTxDelete);
+// 드롭다운 (전체 수정/삭제)
+(function() {
+  const toggle = (menuId, otherId, e) => {
+    e.stopPropagation();
+    document.getElementById(menuId).classList.toggle('hidden');
+    document.getElementById(otherId).classList.add('hidden');
+  };
+  document.getElementById('cctx-all-edit-btn').addEventListener('click', e => toggle('cctx-all-edit-menu', 'cctx-all-del-menu', e));
+  document.getElementById('cctx-all-del-btn').addEventListener('click',  e => toggle('cctx-all-del-menu', 'cctx-all-edit-menu', e));
+  document.addEventListener('click', () => {
+    document.getElementById('cctx-all-edit-menu')?.classList.add('hidden');
+    document.getElementById('cctx-all-del-menu')?.classList.add('hidden');
+  });
+  document.getElementById('cctx-all-edit-filtered').addEventListener('click', () => { document.getElementById('cctx-all-edit-menu').classList.add('hidden'); openCCTxBulkEditModal('filtered'); });
+  document.getElementById('cctx-all-edit-all').addEventListener('click',      () => { document.getElementById('cctx-all-edit-menu').classList.add('hidden'); openCCTxBulkEditModal('all'); });
+  document.getElementById('cctx-all-del-filtered').addEventListener('click',  () => { document.getElementById('cctx-all-del-menu').classList.add('hidden');  openCCTxDeleteModal('filtered'); });
+  document.getElementById('cctx-all-del-all').addEventListener('click',       () => { document.getElementById('cctx-all-del-menu').classList.add('hidden');  openCCTxDeleteModal('all'); });
+})();
 
 // AR 탭으로 이동 + 거래처 필터 적용
 function switchToARTab(partner) {
