@@ -161,6 +161,16 @@
   .cctx-filter-tag { display:inline-flex; align-items:center; gap:3px; padding:2px 10px 2px 10px; background:rgba(7,81,56,0.10); border:1px solid rgba(7,81,56,0.28); border-radius:12px; font-size:11px; color:var(--blue); white-space:nowrap; }
   .cctx-filter-tag-x { background:none; border:none; cursor:pointer; color:var(--blue); padding:0; font-size:13px; line-height:1; margin-left:3px; }
   .cctx-filter-tag-x:hover { color:var(--red); }
+  /* cctx 다중 선택 필터 — 체크박스 리스트 */
+  .cctx-ms-controls { display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap; }
+  .cctx-ms-ctrl-btn { background:none; border:1px solid var(--border2); border-radius:4px; color:var(--text2); font-size:11px; padding:2px 7px; cursor:pointer; line-height:1.6; }
+  .cctx-ms-ctrl-btn:hover { color:var(--text); border-color:var(--text2); background:var(--bg3); }
+  .cctx-ms-list { max-height:190px; overflow-y:auto; border:1px solid var(--border2); border-radius:6px; background:var(--bg3); padding:4px 0; margin:0 0 4px; }
+  .cctx-ms-item { display:flex; align-items:center; gap:6px; padding:5px 10px; cursor:pointer; }
+  .cctx-ms-item:hover { background:var(--bg2); }
+  .cctx-ms-item input[type=checkbox] { cursor:pointer; accent-color:var(--blue); flex-shrink:0; width:14px; height:14px; }
+  .cctx-ms-item span { cursor:pointer; font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; font-family:var(--font); }
+  .cctx-ms-sep { height:1px; background:var(--border2); margin:3px 0; }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -7874,6 +7884,18 @@ function isCCTxColumnFilterActive(field) {
   return cctxColumnFilters[field] != null;
 }
 
+// 다중 선택 팝오버 전체 체크 / 전체 해제
+function cctxMsSelectAll(field) {
+  const list = document.getElementById(`cctx-ms-list-${field}`);
+  if (!list) return;
+  list.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = true; });
+}
+function cctxMsClearAll(field) {
+  const list = document.getElementById(`cctx-ms-list-${field}`);
+  if (!list) return;
+  list.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = false; });
+}
+
 // 금액 문자열 파서 (쉼표·통화기호·공백 제거)
 function _parseCCTxFilterAmount(raw) {
   if (raw === '' || raw == null) return null;
@@ -7915,12 +7937,19 @@ function _matchCCTxColumnFilter(row, field, f) {
     }
     return true;
   }
-  // 드롭다운 선택 필터 (card_alias, card_no) — 정확 일치, 숫자 변환 없음
+  // 다중 선택 필터 (card_alias, card_no) — 마스킹 문자 포함 원본 문자열 비교
   if (field === 'card_alias' || field === 'card_no') {
     const v = String(row[field] ?? '').trim();
+    // 하위 호환: 기존 단일 선택 타입
     if (f.type === 'empty')     return v === '';
     if (f.type === 'not_empty') return v !== '';
-    if (f.type === 'select')    return v === f.value; // 마스킹 문자 포함 원본 문자열 비교
+    if (f.type === 'select')    return v === f.value;
+    // 다중 선택 — OR 조건
+    if (f.type === 'multi_select') {
+      return (f.includeEmpty    && v === '') ||
+             (f.includeNotEmpty && v !== '') ||
+             (Array.isArray(f.values) && f.values.includes(v));
+    }
     return true;
   }
   // 텍스트 컬럼 (merchant, memo — 포함/일치/시작 문자)
@@ -7967,7 +7996,19 @@ function _describeCCTxFilter(field, f) {
   } else if (field === 'card_alias' || field === 'card_no') {
     if (type === 'empty')          desc = '비어 있음';
     else if (type === 'not_empty') desc = '비어 있지 않음';
-    else if (type === 'select')    desc = f.value || '';
+    else if (type === 'select')    desc = f.value || '';  // legacy
+    else if (type === 'multi_select') {
+      if (f.includeNotEmpty) {
+        // 비어 있지 않음이 모든 실제 값을 포함하므로 실제 값 표시 생략
+        desc = '비어 있지 않음';
+      } else {
+        const parts = [];
+        if (f.includeEmpty) parts.push('비어 있음');
+        if (Array.isArray(f.values) && f.values.length === 1) parts.push(f.values[0]);
+        else if (Array.isArray(f.values) && f.values.length > 1) parts.push(`${f.values[0]} 외 ${f.values.length - 1}개`);
+        desc = parts.join(' + ') || '';
+      }
+    }
   } else {
     if (type === 'empty')         desc = '비어 있음';
     else if (type === 'nonempty') desc = '비어 있지 않음';
@@ -8049,20 +8090,21 @@ function _buildCCTxPopoverHtml(field) {
         `<input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">` +
       `</div>`;
   } else if (field === 'card_alias' || field === 'card_no') {
-    // 드롭다운 선택 방식: corpCardTxData 전체 기준 고유값 목록
-    const vals    = getCCTxUniqueValues(field);
-    const esc     = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const showCnt = Math.min(vals.length + 3, 12);
+    // 체크박스 기반 다중 선택: corpCardTxData 전체 기준 고유값 목록
+    const vals = getCCTxUniqueValues(field);
+    const esc  = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     body =
-      `<select id="cctx-pop-sv-${field}" size="${showCnt}" ` +
-        `style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);` +
-               `font-size:12px;font-family:var(--font);border-radius:6px;box-sizing:border-box;` +
-               `cursor:pointer;outline:none;">` +
-        `<option value="__all__">전체 (필터 없음)</option>` +
-        `<option value="__empty__">비어 있음</option>` +
-        `<option value="__not_empty__">비어 있지 않음</option>` +
-        vals.map(v => `<option value="${esc(v)}" title="${esc(v)}">${esc(v)}</option>`).join('') +
-      `</select>`;
+      `<div class="cctx-ms-controls">` +
+        `<button type="button" class="cctx-ms-ctrl-btn" onclick="clearCCTxColumnFilter('${field}');closeAllCCTxPopovers()">전체</button>` +
+        `<button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsSelectAll('${field}')">모두 선택</button>` +
+        `<button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsClearAll('${field}')">모두 해제</button>` +
+      `</div>` +
+      `<div class="cctx-ms-list" id="cctx-ms-list-${field}">` +
+        `<label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-empty-${field}"><span>비어 있음</span></label>` +
+        `<label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-notempty-${field}"><span>비어 있지 않음</span></label>` +
+        `<div class="cctx-ms-sep"></div>` +
+        vals.map(v => `<label class="cctx-ms-item"><input type="checkbox" class="cctx-ms-val-${field}" value="${esc(v)}"><span title="${esc(v)}">${esc(v)}</span></label>`).join('') +
+      `</div>`;
   } else {
     body =
       `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
@@ -8105,15 +8147,40 @@ function _onCCTxPopoverModeChange(field) {
 
 // 기존 필터 상태를 팝오버에 복원
 function _restoreCCTxPopoverState(field) {
-  // 드롭다운 선택 필드 (card_alias, card_no) 복원
+  // 다중 선택 필드 (card_alias, card_no) 체크박스 복원
   if (field === 'card_alias' || field === 'card_no') {
-    const f   = cctxColumnFilters[field];
-    const sel = document.getElementById(`cctx-pop-sv-${field}`);
-    if (!sel) return;
-    if (!f)                    sel.value = '__all__';
-    else if (f.type === 'empty')     sel.value = '__empty__';
-    else if (f.type === 'not_empty') sel.value = '__not_empty__';
-    else if (f.type === 'select')    sel.value = f.value;
+    const f    = cctxColumnFilters[field];
+    const list = document.getElementById(`cctx-ms-list-${field}`);
+    if (!list) return;
+    // 전체 해제 후 복원
+    list.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = false; });
+    if (!f) return; // 필터 없음 — 모두 미선택
+    // 하위 호환: 기존 단일 선택 타입 변환
+    if (f.type === 'empty') {
+      const cb = document.getElementById(`cctx-ms-empty-${field}`);
+      if (cb) cb.checked = true;
+    } else if (f.type === 'not_empty') {
+      const cb = document.getElementById(`cctx-ms-notempty-${field}`);
+      if (cb) cb.checked = true;
+    } else if (f.type === 'select') {
+      list.querySelectorAll(`.cctx-ms-val-${field}`).forEach(cb => {
+        if (cb.value === f.value) cb.checked = true;
+      });
+    } else if (f.type === 'multi_select') {
+      if (f.includeEmpty) {
+        const cb = document.getElementById(`cctx-ms-empty-${field}`);
+        if (cb) cb.checked = true;
+      }
+      if (f.includeNotEmpty) {
+        const cb = document.getElementById(`cctx-ms-notempty-${field}`);
+        if (cb) cb.checked = true;
+      }
+      if (Array.isArray(f.values)) {
+        list.querySelectorAll(`.cctx-ms-val-${field}`).forEach(cb => {
+          if (f.values.includes(cb.value)) cb.checked = true;
+        });
+      }
+    }
     return;
   }
   const f      = cctxColumnFilters[field];
@@ -8143,17 +8210,23 @@ function _restoreCCTxPopoverState(field) {
 
 // 팝오버 적용 버튼 처리
 function applyCCTxColumnFilter(field) {
-  // 드롭다운 선택 필드 (card_alias, card_no)
+  // 다중 선택 필드 (card_alias, card_no)
   if (field === 'card_alias' || field === 'card_no') {
-    const sv = document.getElementById(`cctx-pop-sv-${field}`)?.value;
-    if (!sv || sv === '__all__') {
+    const list = document.getElementById(`cctx-ms-list-${field}`);
+    if (!list) return;
+    const includeEmpty    = document.getElementById(`cctx-ms-empty-${field}`)?.checked    || false;
+    const includeNotEmpty = document.getElementById(`cctx-ms-notempty-${field}`)?.checked || false;
+    const rawValues = [...list.querySelectorAll(`.cctx-ms-val-${field}`)]
+      .filter(cb => cb.checked).map(cb => cb.value);
+    const values = [...new Set(rawValues)]; // 중복 제거
+    // 비어 있음 + 비어 있지 않음 → 전체 = 필터 없음
+    if (includeEmpty && includeNotEmpty) {
       cctxColumnFilters[field] = null;
-    } else if (sv === '__empty__') {
-      cctxColumnFilters[field] = { type: 'empty' };
-    } else if (sv === '__not_empty__') {
-      cctxColumnFilters[field] = { type: 'not_empty' };
+    // 아무것도 선택 안 함 → 필터 없음
+    } else if (!includeEmpty && !includeNotEmpty && values.length === 0) {
+      cctxColumnFilters[field] = null;
     } else {
-      cctxColumnFilters[field] = { type: 'select', value: sv };
+      cctxColumnFilters[field] = { type: 'multi_select', values, includeEmpty, includeNotEmpty };
     }
     closeAllCCTxPopovers();
     renderCCTxFilterTags();
