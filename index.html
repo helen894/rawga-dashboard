@@ -7899,21 +7899,29 @@ function showCCTxUploadModal(total, dupeCount, sheetName) {
   document.getElementById('cctx-upload-modal').classList.remove('hidden');
 }
 
-function applyCCTxUpload() {
+async function applyCCTxUpload() {
   const modeEl = document.querySelector('input[name="cctx-mode"]:checked');
   const mode = modeEl ? modeEl.value : 'add';
   const rows = _pendingCCTxRows;
 
+  // 저장 실패 시 복원을 위해 변경 전 상태 백업 (tx + columns + accounts)
+  const backup = {
+    tx:       structuredClone(corpCardTxData),
+    columns:  structuredClone(corpCardColumns),
+    accounts: structuredClone(corpCardAccounts),
+  };
+
+  let successMsg = '';
   if (mode === 'replace') {
     corpCardTxData = rows;
-    showToast(`✅ ${corpCardTxData.length.toLocaleString()}건으로 전체 교체`, 'green');
+    successMsg = `✅ ${corpCardTxData.length.toLocaleString()}건으로 전체 교체`;
   } else {
     const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`));
     const newOnly = rows.filter(r => !existingKeys.has(`${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`));
     corpCardTxData = [...corpCardTxData, ...newOnly];
     const added = newOnly.length;
     const skipped = rows.length - added;
-    showToast(`✅ ${added.toLocaleString()}건 추가 (중복 ${skipped.toLocaleString()}건 제외)`, 'green');
+    successMsg = `✅ ${added.toLocaleString()}건 추가 (중복 ${skipped.toLocaleString()}건 제외)`;
   }
 
   // 이용일자 내림차순 정렬
@@ -7921,12 +7929,29 @@ function applyCCTxUpload() {
 
   document.getElementById('cctx-upload-modal').classList.add('hidden');
   _pendingCCTxRows = [];
-  saveCorpCardTxToSupabase();
+
+  // Supabase 저장 성공 여부 확인 후에만 sync/render 진행
+  const { error } = await saveCorpCardTxToSupabase();
+  if (error) {
+    // 저장 실패: tx·columns·accounts 전부 원복, localStorage도 복원
+    corpCardTxData   = backup.tx;
+    corpCardColumns  = backup.columns;
+    corpCardAccounts = backup.accounts;
+    localStorage.setItem('corp_card_columns',  JSON.stringify(corpCardColumns));
+    localStorage.setItem('corp_card_accounts', JSON.stringify(corpCardAccounts));
+    renderCorpCardTab();
+    renderCCTxTable();
+    alert(`저장 실패: ${error?.message || String(error)}`);
+    return;
+  }
+
+  // 저장 성공 후에만 sync 실행 (localStorage에 신규 열/행 기록)
   syncCorpCardColumnsFromTx();  // 신규 카드 열 자동 추가
   syncCorpCardAccountsFromTx(); // 신규 계정과목 자동 추가
   updateCCTxAliasFilter();
   renderCorpCardTab();          // 상단 집계 표 갱신
   renderCCTxTable();
+  showToast(successMsg, 'green');
 }
 
 /* ===== 법인카드 청구내역 — 카드 별칭 필터 갱신 ===== */
