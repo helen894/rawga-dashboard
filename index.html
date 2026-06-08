@@ -7863,6 +7863,13 @@ function renderCCTxTable() {
 }
 
 /* ===== 법인카드 청구내역 — 헤더 컬럼 필터 ===== */
+// 전체 데이터 기준 고유값 목록 (드롭다운 옵션용, corpCardTxData 원본 기준)
+function getCCTxUniqueValues(field) {
+  return [...new Set(
+    corpCardTxData.map(r => String(r[field] ?? '').trim()).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'ko-KR', { numeric: true }));
+}
+
 function isCCTxColumnFilterActive(field) {
   return cctxColumnFilters[field] != null;
 }
@@ -7908,7 +7915,15 @@ function _matchCCTxColumnFilter(row, field, f) {
     }
     return true;
   }
-  // 텍스트 컬럼
+  // 드롭다운 선택 필터 (card_alias, card_no) — 정확 일치, 숫자 변환 없음
+  if (field === 'card_alias' || field === 'card_no') {
+    const v = String(row[field] ?? '').trim();
+    if (f.type === 'empty')     return v === '';
+    if (f.type === 'not_empty') return v !== '';
+    if (f.type === 'select')    return v === f.value; // 마스킹 문자 포함 원본 문자열 비교
+    return true;
+  }
+  // 텍스트 컬럼 (merchant, memo — 포함/일치/시작 문자)
   const s = (row[field] || '').toLowerCase();
   if (f.type === 'empty')      return s === '';
   if (f.type === 'nonempty')   return s !== '';
@@ -7949,6 +7964,10 @@ function _describeCCTxFilter(field, f) {
       else if (f.num1 != null) desc = `${fmtA(f.num1)} 이상`;
       else if (f.num2 != null) desc = `${fmtA(f.num2)} 이하`;
     }
+  } else if (field === 'card_alias' || field === 'card_no') {
+    if (type === 'empty')          desc = '비어 있음';
+    else if (type === 'not_empty') desc = '비어 있지 않음';
+    else if (type === 'select')    desc = f.value || '';
   } else {
     if (type === 'empty')         desc = '비어 있음';
     else if (type === 'nonempty') desc = '비어 있지 않음';
@@ -8029,6 +8048,21 @@ function _buildCCTxPopoverHtml(field) {
         `<span class="cctx-pop-label">최댓값</span>` +
         `<input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">` +
       `</div>`;
+  } else if (field === 'card_alias' || field === 'card_no') {
+    // 드롭다운 선택 방식: corpCardTxData 전체 기준 고유값 목록
+    const vals    = getCCTxUniqueValues(field);
+    const esc     = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const showCnt = Math.min(vals.length + 3, 12);
+    body =
+      `<select id="cctx-pop-sv-${field}" size="${showCnt}" ` +
+        `style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);` +
+               `font-size:12px;font-family:var(--font);border-radius:6px;box-sizing:border-box;` +
+               `cursor:pointer;outline:none;">` +
+        `<option value="__all__">전체 (필터 없음)</option>` +
+        `<option value="__empty__">비어 있음</option>` +
+        `<option value="__not_empty__">비어 있지 않음</option>` +
+        vals.map(v => `<option value="${esc(v)}" title="${esc(v)}">${esc(v)}</option>`).join('') +
+      `</select>`;
   } else {
     body =
       `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
@@ -8071,6 +8105,17 @@ function _onCCTxPopoverModeChange(field) {
 
 // 기존 필터 상태를 팝오버에 복원
 function _restoreCCTxPopoverState(field) {
+  // 드롭다운 선택 필드 (card_alias, card_no) 복원
+  if (field === 'card_alias' || field === 'card_no') {
+    const f   = cctxColumnFilters[field];
+    const sel = document.getElementById(`cctx-pop-sv-${field}`);
+    if (!sel) return;
+    if (!f)                    sel.value = '__all__';
+    else if (f.type === 'empty')     sel.value = '__empty__';
+    else if (f.type === 'not_empty') sel.value = '__not_empty__';
+    else if (f.type === 'select')    sel.value = f.value;
+    return;
+  }
   const f      = cctxColumnFilters[field];
   const modeEl = document.getElementById(`cctx-pop-mode-${field}`);
   if (!f) { if (modeEl) { modeEl.value = modeEl.options[0]?.value || ''; _onCCTxPopoverModeChange(field); } return; }
@@ -8098,6 +8143,23 @@ function _restoreCCTxPopoverState(field) {
 
 // 팝오버 적용 버튼 처리
 function applyCCTxColumnFilter(field) {
+  // 드롭다운 선택 필드 (card_alias, card_no)
+  if (field === 'card_alias' || field === 'card_no') {
+    const sv = document.getElementById(`cctx-pop-sv-${field}`)?.value;
+    if (!sv || sv === '__all__') {
+      cctxColumnFilters[field] = null;
+    } else if (sv === '__empty__') {
+      cctxColumnFilters[field] = { type: 'empty' };
+    } else if (sv === '__not_empty__') {
+      cctxColumnFilters[field] = { type: 'not_empty' };
+    } else {
+      cctxColumnFilters[field] = { type: 'select', value: sv };
+    }
+    closeAllCCTxPopovers();
+    renderCCTxFilterTags();
+    renderCCTxTable();
+    return;
+  }
   const mode = document.getElementById(`cctx-pop-mode-${field}`)?.value;
   let filter = null;
   if (field === 'use_date' || field === 'billing_date') {
