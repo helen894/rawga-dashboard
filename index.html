@@ -2262,6 +2262,11 @@ async function loadDataFromSupabase() {
         if (row.key === 'corp_card_tx_data' && Array.isArray(row.data)) {
           corpCardTxData = row.data;
           localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
+          // Fix #8: Realtime 수신 후 존재하지 않는 선택 ID 제거
+          const validCCTxIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
+          for (const id of corpCardTxSelectedIds) { if (!validCCTxIds.has(id)) corpCardTxSelectedIds.delete(id); }
+          updateCCTxAliasFilter();
+          renderCCTxTable();
         }
       }
     }
@@ -7449,14 +7454,20 @@ document.getElementById('corp-reset-btn').addEventListener('click', resetCorpCar
 
 /* ===== 법인카드 청구내역 — 저장 (error 반환, 실패 시 throw 가능) ===== */
 async function saveCorpCardTxToSupabase() {
+  // Fix #2: localStorage는 Supabase 저장 성공 후에만 갱신.
+  // 실패 시 메모리(corpCardTxData)는 호출부에서 backup으로 복원되고
+  // localStorage도 오염되지 않아 새로고침 시 올바른 상태를 유지함.
   try {
-    localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
-    if (!_isInitialized) return { error: null };
+    if (!_isInitialized) {
+      localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
+      return { error: null };
+    }
     const { error } = await _supa.from('cat_data').upsert(
       [{ key: 'corp_card_tx_data', data: corpCardTxData }],
       { onConflict: 'key' }
     );
     if (error) throw error;
+    localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData)); // 성공 후 갱신
     return { error: null };
   } catch(e) {
     console.warn('[saveCorpCardTx] 저장 실패:', e);
@@ -8057,6 +8068,19 @@ async function applyCCTxBulkEdit() {
   }
 }
 
+/* ===== 법인카드 청구내역 — JSON 백업 다운로드 ===== */
+function downloadCCTxBackup(rows) {
+  const data = Array.isArray(rows) ? rows : corpCardTxData;
+  const ts   = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '');
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `corp_card_tx_backup_${ts}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* ===== 법인카드 청구내역 — 전체 삭제 모달 ===== */
 function openCCTxDeleteModal(scope) {
   _cctxDeleteScope = scope;
@@ -8072,6 +8096,11 @@ function openCCTxDeleteModal(scope) {
     `<div><b>합계 금액:</b> ${totalAmt.toLocaleString()}원</div>` +
     (isAll ? `<div style="color:var(--red)"><b>삭제 후 남는 건수:</b> 0건 — 전체 삭제</div>`
            : `<div><b>삭제 후 남는 건수:</b> ${remaining.toLocaleString()}건</div>`) +
+    `</div>` +
+    `<div style="margin-bottom:12px">` +
+      `<button class="btn sm" onclick="downloadCCTxBackup(${isAll ? 'null' : 'getCCTxFilteredRows()'})" ` +
+        `style="font-size:11px;color:var(--text2)">⬇ JSON 백업 다운로드</button>` +
+      `<span style="font-size:11px;color:var(--text3);margin-left:8px">삭제 전 데이터를 저장해두세요.</span>` +
     `</div>`;
   if (isAll) {
     html +=
