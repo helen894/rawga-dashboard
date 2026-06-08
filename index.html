@@ -144,6 +144,23 @@
   .cctx-brow input, .cctx-brow select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:12px; font-family:var(--font); padding:5px 8px; border-radius:6px; width:100%; box-sizing:border-box; }
   .cctx-brow input:focus, .cctx-brow select:focus { outline:none; border-color:var(--blue); }
   .cctx-preview { background:var(--bg3); border-radius:7px; padding:10px 12px; font-size:11px; line-height:1.8; margin-top:8px; }
+  /* cctx 헤더 컬럼 필터 — 버튼·팝오버·태그 */
+  .cctx-hf-btn { background:none; border:none; cursor:pointer; padding:0 0 0 4px; line-height:1; color:var(--text3); vertical-align:middle; display:inline-flex; align-items:center; gap:2px; font-size:10px; flex-shrink:0; }
+  .cctx-hf-btn:hover { color:var(--blue); }
+  .cctx-hf-btn.active { color:var(--blue); }
+  .cctx-hf-dot { display:inline-block; width:5px; height:5px; background:var(--blue); border-radius:50%; flex-shrink:0; }
+  .cctx-th-sort-lbl { cursor:pointer; }
+  .cctx-th-sort-lbl:hover { color:var(--text); }
+  .cctx-popover { position:fixed; z-index:1000; background:var(--card); border:1px solid var(--border2); border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.22); padding:12px 14px; min-width:224px; max-width:min(290px,calc(100vw - 16px)); }
+  .cctx-popover select, .cctx-popover input[type=text], .cctx-popover input[type=date], .cctx-popover input[type=number] { background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:12px; font-family:var(--font); padding:5px 8px; border-radius:6px; width:100%; box-sizing:border-box; }
+  .cctx-popover select:focus, .cctx-popover input:focus { outline:none; border-color:var(--blue); }
+  .cctx-pop-label { font-size:11px; color:var(--text2); display:block; margin:6px 0 2px; }
+  .cctx-popover-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .cctx-popover-btns { display:flex; gap:6px; margin-top:10px; justify-content:flex-end; }
+  .cctx-active-filters { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:4px 0 6px; }
+  .cctx-filter-tag { display:inline-flex; align-items:center; gap:3px; padding:2px 10px 2px 10px; background:rgba(7,81,56,0.10); border:1px solid rgba(7,81,56,0.28); border-radius:12px; font-size:11px; color:var(--blue); white-space:nowrap; }
+  .cctx-filter-tag-x { background:none; border:none; cursor:pointer; color:var(--blue); padding:0; font-size:13px; line-height:1; margin-left:3px; }
+  .cctx-filter-tag-x:hover { color:var(--red); }
 
   /* FILTER BAR */
   .filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -1219,6 +1236,8 @@
       <input type="text" id="cctx-merchant" placeholder="가맹점 검색" style="width:140px">
       <input type="text" id="cctx-memo" placeholder="메모 검색" style="width:120px">
     </div>
+    <!-- 활성 헤더 필터 태그 -->
+    <div class="cctx-active-filters" id="cctx-active-filter-tags" style="display:none"></div>
     <!-- 선택 작업 바 -->
     <div class="cctx-sel-bar" id="cctx-sel-bar" style="display:none">
       <span id="cctx-sel-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
@@ -2088,6 +2107,12 @@ let cctxSortDir = 'desc';              // 현재 정렬 방향 (기본: 내림�
 let cctxSortIsDefault = true;          // 기본 정렬 여부
 let _cctxBulkScope = 'selected';       // 일괄 수정 범위
 let _cctxDeleteScope = 'filtered';     // 삭제 범위
+// 헤더별 컬럼 필터 상태 (null = 비활성)
+const cctxColumnFilters = {
+  use_date: null, billing_date: null, card_alias: null,
+  card_no: null, merchant: null, billing_amount: null, memo: null,
+};
+let _cctxOpenPopover = null; // 현재 열린 팝오버 컬럼명
 const DESC_TO_MID = {"Npay정산":"매출","스마트스토어정":"매출","카카오페이정산":"매출","Toss정산0330":"매출","한국정보통신(주)":"매출","오늘의집정산":"매출","Toss정산0331":"매출","Toss정산0401":"매출","Toss정산0402":"매출","Toss정산0403":"매출","쿠팡(주)":"매출","(주)씨제이이엔엠":"매출","엔에이치엔페이":"매출","(유)동이식품_매출":"매출","분당（１４４）　　　":"세금과공과금","성남시지방소":"세금과공과금","쿠팡페이주식회":"매출","씨엔에이바이오":"매입대금","태성수산 영어":"매입대금","기업주식회사　월드씨푸드":"매입대금","하나(주)모락스":"운반비","(주)디앤비푸드_매출":"매출","(주)제이에스푸":"매입대금","우리대주회계법인":"지급수수료","신한동백로지스주식회사":"운반비","하나(사)한국건강기능식":"지급수수료","기업(주)옥수":"매입대금","AMAZON":"매출","tosspaymen":"매출","(주)다날":"매출","(주)씨제이이엔":"매출","신한미디어브릿지그룹(주":"지급수수료","기업RC주식회사　로가":"연구개발비","신한(주)지앤원":"매입대금","신한유한회사　위써트인증":"지급수수료","신한카드":"법인카드 대금","롯데카드(주)":"법인카드 대금","Toss정산0406":"매출","급여":"급여","4대보험":"보험료","원천세":"세금과공과금","이자-32-00039 다음납입예정일-20260329":"이자비용","이자-32-00035 다음납입예정일-20260328":"이자비용","이자-32-00042 다음납입예정일-20260329":"이자비용","신솔민":"광고선전비","임형규":"광고선전비","우미연":"광고선전비","신병철":"광고선전비","방군석":"광고선전비","(유)바다향":"매출","신동섭":"매입대금","(주)로가제이에":"대여금 지급","아난티 오시리":"매출","jht코스메틱":"매출","황건숙":"광고선전비","홍지민":"광고선전비","박민아":"광고선전비","유나윤":"광고선전비","김선영":"광고선전비","이상훈(페퍼스":"광고선전비","휴온스엔":"매출","(주)프라임카고":"운반비","(유)동이식품_매출":"매출","주)로릭코리아":"운반비","김대영(이성국":"지급수수료","중진공대출":"이자비용","tosspaymen":"매출","하경수_회수":"대여금 수취","주식회사에이치이공일":"대여금 수취","(주)로가제이에_회수":"대여금 수취","신한(주)지앤원":"매입대금","농협(주)우앤파트너스":"지급수수료","주식회사로가":"계좌간이체","신한주식회사　로가":"계좌간이체","주식회사 호마":"매입대금","주식회사 코코":"매입대금","(주)루리인터내":"매입대금","이아인":"광고선전비","박미영":"광고선전비","김세라":"광고선전비","황귀순":"광고선전비","이태호":"광고선전비","안나근":"광고선전비","장혜진":"광고선전비","이솔":"광고선전비","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","RAWGA USA":"대여금 지급","Toss정산0309":"매출","중진공대출원리":"이자비용","SMS140***24316":"지급수수료","이성국제특허법_반환":"기타 입금","주식회사무신사":"매출","SSG상품대":"매출","안성환":"광고선전비","모은지":"광고선전비","고재경":"광고선전비","허영식":"광고선전비","조영현":"광고선전비","주식회사　로가":"계좌간이체","주식회사 로가":"계좌간이체","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","(주)씨제이이엔":"매출","허진관":"광고선전비","이상희":"광고선전비","방군석":"광고선전비","서지은":"광고선전비","이윤서":"광고선전비","허진숙":"광고선전비","우미연":"광고선전비","문현주":"광고선전비","(주)에이치이공":"대여금 수취","성남시등록면":"세금과공과금","장부식_수취":"대여금 수취","미쓰이소꼬코리":"운반비","(주)로가":"소모품비","(유)바다향":"매출","이준영":"광고선전비","방군석":"광고선전비","유도연":"광고선전비","김한나":"광고선전비","김미아":"광고선전비","주식회사　로가_투자":"투자금","주식회사로가_투자":"투자금"};
 const MID_TO_BIG = {"세금과공과금":"세금과공과금","매입대금":"재고/상품매입","운반비":"판매관리비","지급수수료":"판매관리비","연구개발비":"연구개발비","법인카드 대금":"자금이동/제외","급여":"판매관리비","보험료":"보험료","이자비용":"금융비용","광고선전비":"판매관리비","대여금 지급":"자금이동/제외","소모품비":"판매관리비","통신비":"판매관리비","대여금 상환":"자금이동/제외","기타 지출":"기타 지출","판매수수료":"판매관리비","보증금":"보증금","설비 대금":"세종시","임차료":"판매관리비","여비교통비":"판매관리비","매출":"기타","대여금 수취":"기타","투자금":"자금이동/제외","이자수익":"기타","기타 입금":"기타","인오가닉":"인오가닉","계좌간이체":"자금이동/제외"};
 const MID_CATS = Object.keys(MID_TO_BIG);
@@ -7634,6 +7659,7 @@ function updateCCTxAliasFilter() {
 
 /* ===== 법인카드 청구내역 — 필터 ===== */
 function getCCTxFilteredRows() {
+  // Step 1: 상단 기간·카드·가맹점·메모 필터
   const from     = document.getElementById('cctx-from')?.value     || '';
   const to       = document.getElementById('cctx-to')?.value       || '';
   const alias    = document.getElementById('cctx-alias')?.value    || '';
@@ -7645,6 +7671,11 @@ function getCCTxFilteredRows() {
   if (alias)    rows = rows.filter(r => r.card_alias === alias);
   if (merchant) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(merchant));
   if (memo)     rows = rows.filter(r => (r.memo     || '').toLowerCase().includes(memo));
+  // Step 2: 헤더별 컬럼 필터 (한 번의 파이프라인으로 처리, 원본 배열 미변경)
+  for (const [field, f] of Object.entries(cctxColumnFilters)) {
+    if (!f) continue;
+    rows = rows.filter(r => _matchCCTxColumnFilter(r, field, f));
+  }
   return rows;
 }
 
@@ -7703,6 +7734,7 @@ function updateCCTxSelectionBar() {
 
 /* ===== 법인카드 청구내역 — 렌더 ===== */
 function renderCCTxTable() {
+  renderCCTxFilterTags();
   const filtered = getCCTxFilteredRows();
   const total    = filtered.length;
   const sum      = filtered.reduce((s, r) => s + (r.billing_amount || 0), 0);
@@ -7714,7 +7746,7 @@ function renderCCTxTable() {
       : '데이터 없음';
   }
 
-  // 존재하지 않는 ID 선택 해제
+  // 존재하지 않는 ID 선택 해제 (삭제 후 처리)
   const allIds = new Set(corpCardTxData.map(r => r._id));
   for (const id of corpCardTxSelectedIds) { if (!allIds.has(id)) corpCardTxSelectedIds.delete(id); }
 
@@ -7738,8 +7770,19 @@ function renderCCTxTable() {
     if (cctxSortCol !== col) return 'cctx-sort';
     return cctxSortIsDefault ? 'cctx-sort cctx-sd' : (cctxSortDir === 'asc' ? 'cctx-sort cctx-sa' : 'cctx-sort cctx-sd');
   };
-  const th = (col, lbl, align) =>
-    `<th class="${scl(col)}" data-sort="${col}"${align ? ` style="text-align:${align}"` : ''}>${lbl}${sic(col)}</th>`;
+  // 헤더 필터 버튼 — 활성 필터는 파란 점 표시
+  const fic = col => {
+    const on = isCCTxColumnFilterActive(col);
+    return `<button class="cctx-hf-btn${on ? ' active' : ''}" data-filtercol="${col}" aria-label="${col} 필터" title="헤더 필터">` +
+      (on ? `<span class="cctx-hf-dot"></span>` : '') + `▽</button>`;
+  };
+  // TH: 정렬 span + 필터 버튼 (클릭 이벤트가 각각 독립)
+  const th = (col, lbl, align) => {
+    const style = align ? ` style="text-align:${align}"` : '';
+    return `<th class="${scl(col)}" data-sort="${col}"${style}>` +
+      `<span class="cctx-th-sort-lbl" data-sort="${col}">${lbl}${sic(col)}</span>${fic(col)}` +
+      `</th>`;
+  };
 
   const fmt = n => Number(n).toLocaleString();
   const filtIds  = filtered.map(r => r._id);
@@ -7800,9 +7843,16 @@ function renderCCTxTable() {
       updateCCTxSelectionBar();
     });
   });
-  // 정렬 헤더
-  container.querySelectorAll('.cctx-sort').forEach(thEl => {
-    thEl.addEventListener('click', () => onCCTxSortClick(thEl.dataset.sort));
+  // 정렬: TH 전체 클릭 — 단, 필터 버튼 클릭은 stopPropagation으로 차단
+  container.querySelectorAll('th.cctx-sort').forEach(thEl => {
+    thEl.addEventListener('click', e => {
+      if (e.target.closest('.cctx-hf-btn')) return; // 필터 버튼 클릭 시 정렬 실행 금지
+      onCCTxSortClick(thEl.dataset.sort);
+    });
+  });
+  // 헤더 필터 버튼 클릭
+  container.querySelectorAll('.cctx-hf-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openCCTxColumnFilter(btn.dataset.filtercol, btn, e); });
   });
   // 행 작업 버튼
   container.querySelectorAll('.cctx-ract').forEach(btn => {
@@ -7810,6 +7860,336 @@ function renderCCTxTable() {
     if (btn.dataset.delid)  btn.addEventListener('click', () => deleteCCTxRow(btn.dataset.delid));
   });
   updateCCTxSelectionBar();
+}
+
+/* ===== 법인카드 청구내역 — 헤더 컬럼 필터 ===== */
+function isCCTxColumnFilterActive(field) {
+  return cctxColumnFilters[field] != null;
+}
+
+// 금액 문자열 파서 (쉼표·통화기호·공백 제거)
+function _parseCCTxFilterAmount(raw) {
+  if (raw === '' || raw == null) return null;
+  const cleaned = String(raw).replace(/[,\s원₩$]/g, '');
+  const neg     = cleaned.startsWith('-');
+  const digits  = cleaned.replace(/[^0-9.]/g, '');
+  if (!digits) return null;
+  const n = parseFloat(digits);
+  return isNaN(n) ? null : (neg ? -n : n);
+}
+
+// 단일 행에 컬럼 필터 적용
+function _matchCCTxColumnFilter(row, field, f) {
+  if (field === 'use_date' || field === 'billing_date') {
+    const d = row[field] || '';
+    if (f.type === 'empty')    return d === '';
+    if (f.type === 'nonempty') return d !== '';
+    if (f.type === 'exact')    return d === f.date1;
+    if (f.type === 'range') {
+      if (f.date1 && f.date2) return d >= f.date1 && d <= f.date2;
+      if (f.date1)            return d >= f.date1;
+      if (f.date2)            return d <= f.date2;
+    }
+    return true;
+  }
+  if (field === 'billing_amount') {
+    const n = Number(row[field]) || 0;
+    if (f.type === 'empty')    return row[field] === '' || row[field] == null;
+    if (f.type === 'zero')     return n === 0;
+    if (f.type === 'positive') return n > 0;
+    if (f.type === 'negative') return n < 0;
+    if (f.type === 'eq')       return n === f.num1;
+    if (f.type === 'gte')      return n >= f.num1;
+    if (f.type === 'lte')      return n <= f.num1;
+    if (f.type === 'range') {
+      if (f.num1 != null && f.num2 != null) return n >= f.num1 && n <= f.num2;
+      if (f.num1 != null) return n >= f.num1;
+      if (f.num2 != null) return n <= f.num2;
+    }
+    return true;
+  }
+  // 텍스트 컬럼
+  const s = (row[field] || '').toLowerCase();
+  if (f.type === 'empty')      return s === '';
+  if (f.type === 'nonempty')   return s !== '';
+  const q = (f.text || '').toLowerCase();
+  if (!q) return true;
+  if (f.type === 'contains')   return s.includes(q);
+  if (f.type === 'exact')      return s === q;
+  if (f.type === 'startswith') return s.startsWith(q);
+  return true;
+}
+
+// 필터 상태를 사람이 읽을 수 있는 설명으로 변환
+function _describeCCTxFilter(field, f) {
+  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const lbl = labels[field] || field;
+  const type = f.type;
+  let desc = '';
+  if (field === 'use_date' || field === 'billing_date') {
+    if (type === 'empty')        desc = '비어 있음';
+    else if (type === 'nonempty') desc = '비어 있지 않음';
+    else if (type === 'exact')    desc = f.date1;
+    else if (type === 'range') {
+      if (f.date1 && f.date2) desc = `${f.date1} ~ ${f.date2}`;
+      else if (f.date1)       desc = `${f.date1} 이상`;
+      else if (f.date2)       desc = `${f.date2} 이하`;
+    }
+  } else if (field === 'billing_amount') {
+    const fmtA = n => Number(n).toLocaleString() + '원';
+    if (type === 'empty')         desc = '비어 있음';
+    else if (type === 'zero')     desc = '0원';
+    else if (type === 'positive') desc = '양수';
+    else if (type === 'negative') desc = '음수';
+    else if (type === 'eq')       desc = `= ${fmtA(f.num1)}`;
+    else if (type === 'gte')      desc = `${fmtA(f.num1)} 이상`;
+    else if (type === 'lte')      desc = `${fmtA(f.num1)} 이하`;
+    else if (type === 'range') {
+      if (f.num1 != null && f.num2 != null) desc = `${fmtA(f.num1)} ~ ${fmtA(f.num2)}`;
+      else if (f.num1 != null) desc = `${fmtA(f.num1)} 이상`;
+      else if (f.num2 != null) desc = `${fmtA(f.num2)} 이하`;
+    }
+  } else {
+    if (type === 'empty')         desc = '비어 있음';
+    else if (type === 'nonempty') desc = '비어 있지 않음';
+    else desc = f.text || '';
+  }
+  return `${lbl}: ${desc}`;
+}
+
+// 활성 필터 태그 렌더 + 필터 초기화 버튼 숫자 갱신
+function renderCCTxFilterTags() {
+  const area = document.getElementById('cctx-active-filter-tags');
+  if (!area) return;
+  const active = Object.entries(cctxColumnFilters).filter(([, f]) => f != null);
+  const cnt = active.length;
+  const resetBtn = document.getElementById('cctx-filter-reset');
+  if (resetBtn) resetBtn.textContent = cnt > 0 ? `필터 초기화 (${cnt})` : '필터 초기화';
+  if (!cnt) { area.style.display = 'none'; return; }
+  area.style.display = 'flex';
+  area.innerHTML = active.map(([field, f]) =>
+    `<span class="cctx-filter-tag">${_describeCCTxFilter(field, f)}<button class="cctx-filter-tag-x" onclick="clearCCTxColumnFilter('${field}')" title="필터 제거">×</button></span>`
+  ).join('');
+}
+
+function clearCCTxColumnFilter(field) {
+  cctxColumnFilters[field] = null;
+  renderCCTxFilterTags();
+  renderCCTxTable();
+}
+
+// 팝오버 닫기
+function closeAllCCTxPopovers() {
+  const existing = document.getElementById('cctx-col-filter-popover');
+  if (existing) existing.remove();
+  _cctxOpenPopover = null;
+}
+
+// 팝오버 내부 HTML 생성 (날짜 / 텍스트 / 금액 타입)
+function _buildCCTxPopoverHtml(field) {
+  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const title  = labels[field] || field;
+  let body = '';
+  if (field === 'use_date' || field === 'billing_date') {
+    body =
+      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
+        `<option value="range">기간</option>` +
+        `<option value="exact">특정 날짜</option>` +
+        `<option value="empty">비어 있음</option>` +
+        `<option value="nonempty">비어 있지 않음</option>` +
+      `</select>` +
+      `<div id="cctx-pop-exact-${field}" style="display:none">` +
+        `<span class="cctx-pop-label">날짜</span>` +
+        `<input type="date" id="cctx-pop-d1-${field}">` +
+      `</div>` +
+      `<div id="cctx-pop-range-${field}" style="margin-top:4px">` +
+        `<span class="cctx-pop-label">시작일</span>` +
+        `<input type="date" id="cctx-pop-dr1-${field}">` +
+        `<span class="cctx-pop-label">종료일</span>` +
+        `<input type="date" id="cctx-pop-dr2-${field}">` +
+      `</div>`;
+  } else if (field === 'billing_amount') {
+    body =
+      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
+        `<option value="gte">이상 (≥)</option>` +
+        `<option value="lte">이하 (≤)</option>` +
+        `<option value="eq">같음 (=)</option>` +
+        `<option value="range">범위</option>` +
+        `<option value="zero">0원</option>` +
+        `<option value="positive">양수</option>` +
+        `<option value="negative">음수</option>` +
+        `<option value="empty">비어 있음</option>` +
+      `</select>` +
+      `<div id="cctx-pop-single-${field}" style="margin-top:4px">` +
+        `<input type="number" id="cctx-pop-n1-${field}" placeholder="금액 입력" step="1" style="font-family:var(--mono)">` +
+      `</div>` +
+      `<div id="cctx-pop-range-${field}" style="display:none">` +
+        `<span class="cctx-pop-label">최솟값</span>` +
+        `<input type="number" id="cctx-pop-nr1-${field}" placeholder="최솟값" step="1" style="font-family:var(--mono)">` +
+        `<span class="cctx-pop-label">최댓값</span>` +
+        `<input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">` +
+      `</div>`;
+  } else {
+    body =
+      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
+        `<option value="contains">포함</option>` +
+        `<option value="exact">일치</option>` +
+        `<option value="startswith">시작 문자</option>` +
+        `<option value="empty">비어 있음</option>` +
+        `<option value="nonempty">비어 있지 않음</option>` +
+      `</select>` +
+      `<div id="cctx-pop-text-${field}" style="margin-top:4px">` +
+        `<input type="text" id="cctx-pop-t1-${field}" placeholder="검색어" autocomplete="off">` +
+      `</div>`;
+  }
+  return `<div class="cctx-popover-title">▽ ${title} 필터</div>${body}` +
+    `<div class="cctx-popover-btns">` +
+      `<button class="btn sm cctx-pop-clear" style="color:var(--text2)">초기화</button>` +
+      `<button class="btn sm green cctx-pop-apply">적용</button>` +
+    `</div>`;
+}
+
+// 팝오버 모드 변경에 따라 입력 UI 전환
+function _onCCTxPopoverModeChange(field) {
+  const mode = document.getElementById(`cctx-pop-mode-${field}`)?.value;
+  if (!mode) return;
+  if (field === 'use_date' || field === 'billing_date') {
+    const exact = document.getElementById(`cctx-pop-exact-${field}`);
+    const range = document.getElementById(`cctx-pop-range-${field}`);
+    if (exact) exact.style.display = mode === 'exact' ? 'block' : 'none';
+    if (range) range.style.display = mode === 'range' ? 'block' : 'none';
+  } else if (field === 'billing_amount') {
+    const single = document.getElementById(`cctx-pop-single-${field}`);
+    const range  = document.getElementById(`cctx-pop-range-${field}`);
+    if (single) single.style.display = ['eq','gte','lte'].includes(mode) ? 'block' : 'none';
+    if (range)  range.style.display  = mode === 'range' ? 'block' : 'none';
+  } else {
+    const textEl = document.getElementById(`cctx-pop-text-${field}`);
+    if (textEl) textEl.style.display = ['empty','nonempty'].includes(mode) ? 'none' : 'block';
+  }
+}
+
+// 기존 필터 상태를 팝오버에 복원
+function _restoreCCTxPopoverState(field) {
+  const f      = cctxColumnFilters[field];
+  const modeEl = document.getElementById(`cctx-pop-mode-${field}`);
+  if (!f) { if (modeEl) { modeEl.value = modeEl.options[0]?.value || ''; _onCCTxPopoverModeChange(field); } return; }
+  if (modeEl) { modeEl.value = f.type; _onCCTxPopoverModeChange(field); }
+  if (field === 'use_date' || field === 'billing_date') {
+    if (f.type === 'exact') {
+      const el = document.getElementById(`cctx-pop-d1-${field}`); if (el) el.value = f.date1 || '';
+    } else if (f.type === 'range') {
+      const r1 = document.getElementById(`cctx-pop-dr1-${field}`);
+      const r2 = document.getElementById(`cctx-pop-dr2-${field}`);
+      if (r1) r1.value = f.date1 || ''; if (r2) r2.value = f.date2 || '';
+    }
+  } else if (field === 'billing_amount') {
+    if (['eq','gte','lte'].includes(f.type)) {
+      const n1 = document.getElementById(`cctx-pop-n1-${field}`); if (n1 && f.num1 != null) n1.value = f.num1;
+    } else if (f.type === 'range') {
+      const nr1 = document.getElementById(`cctx-pop-nr1-${field}`);
+      const nr2 = document.getElementById(`cctx-pop-nr2-${field}`);
+      if (nr1 && f.num1 != null) nr1.value = f.num1; if (nr2 && f.num2 != null) nr2.value = f.num2;
+    }
+  } else {
+    const t1 = document.getElementById(`cctx-pop-t1-${field}`); if (t1 && f.text) t1.value = f.text;
+  }
+}
+
+// 팝오버 적용 버튼 처리
+function applyCCTxColumnFilter(field) {
+  const mode = document.getElementById(`cctx-pop-mode-${field}`)?.value;
+  let filter = null;
+  if (field === 'use_date' || field === 'billing_date') {
+    if (mode === 'empty' || mode === 'nonempty') {
+      filter = { type: mode };
+    } else if (mode === 'exact') {
+      const d1 = document.getElementById(`cctx-pop-d1-${field}`)?.value?.trim();
+      if (!d1) { alert('날짜를 입력해주세요.'); return; }
+      filter = { type: 'exact', date1: d1 };
+    } else if (mode === 'range') {
+      const d1 = document.getElementById(`cctx-pop-dr1-${field}`)?.value?.trim() || null;
+      const d2 = document.getElementById(`cctx-pop-dr2-${field}`)?.value?.trim() || null;
+      if (!d1 && !d2) { alert('시작일 또는 종료일을 입력해주세요.'); return; }
+      filter = { type: 'range', date1: d1, date2: d2 };
+    }
+  } else if (field === 'billing_amount') {
+    if (['zero','positive','negative','empty'].includes(mode)) {
+      filter = { type: mode };
+    } else if (['eq','gte','lte'].includes(mode)) {
+      const num1 = _parseCCTxFilterAmount(document.getElementById(`cctx-pop-n1-${field}`)?.value);
+      if (num1 === null) { alert('유효한 숫자를 입력해주세요.'); return; }
+      filter = { type: mode, num1 };
+    } else if (mode === 'range') {
+      const rv1 = document.getElementById(`cctx-pop-nr1-${field}`)?.value || '';
+      const rv2 = document.getElementById(`cctx-pop-nr2-${field}`)?.value || '';
+      if (!rv1 && !rv2) { alert('최솟값 또는 최댓값을 입력해주세요.'); return; }
+      const num1 = rv1 ? _parseCCTxFilterAmount(rv1) : null;
+      const num2 = rv2 ? _parseCCTxFilterAmount(rv2) : null;
+      if (rv1 && num1 === null) { alert('최솟값이 유효하지 않습니다.'); return; }
+      if (rv2 && num2 === null) { alert('최댓값이 유효하지 않습니다.'); return; }
+      filter = { type: 'range', num1, num2 };
+    }
+  } else {
+    if (mode === 'empty' || mode === 'nonempty') {
+      filter = { type: mode };
+    } else {
+      const text = document.getElementById(`cctx-pop-t1-${field}`)?.value?.trim() || '';
+      if (!text) { alert('검색어를 입력해주세요.'); return; }
+      filter = { type: mode, text };
+    }
+  }
+  if (!filter) { alert('필터 조건을 설정해주세요.'); return; }
+  cctxColumnFilters[field] = filter;
+  closeAllCCTxPopovers();
+  renderCCTxFilterTags();
+  renderCCTxTable();
+}
+
+// 팝오버 위치 계산 (화면 경계 보정 포함)
+function _positionCCTxPopover(pop, btnEl) {
+  const rect = btnEl.getBoundingClientRect();
+  const vpW  = window.innerWidth;
+  const vpH  = window.innerHeight;
+  pop.style.visibility = 'hidden'; pop.style.display = 'block';
+  const popW = pop.offsetWidth || 260;
+  const popH = pop.offsetHeight || 220;
+  pop.style.visibility = '';
+  let left = rect.left;
+  let top  = rect.bottom + 4;
+  if (left + popW > vpW - 8) left = vpW - popW - 8;
+  if (left < 8) left = 8;
+  if (top + popH > vpH - 8) top = Math.max(8, rect.top - popH - 4);
+  pop.style.left = left + 'px'; pop.style.top = top + 'px';
+}
+
+// 팝오버 열기
+function openCCTxColumnFilter(field, btnEl, event) {
+  if (_cctxOpenPopover === field) { closeAllCCTxPopovers(); return; }
+  closeAllCCTxPopovers();
+  const pop = document.createElement('div');
+  pop.id = 'cctx-col-filter-popover';
+  pop.className = 'cctx-popover';
+  pop.innerHTML = _buildCCTxPopoverHtml(field);
+  document.body.appendChild(pop);
+  _cctxOpenPopover = field;
+  _positionCCTxPopover(pop, btnEl);
+  _restoreCCTxPopoverState(field);
+  // 모드 변경
+  document.getElementById(`cctx-pop-mode-${field}`)?.addEventListener('change', () => _onCCTxPopoverModeChange(field));
+  // 적용/초기화 버튼
+  pop.querySelector('.cctx-pop-apply')?.addEventListener('click', e => { e.stopPropagation(); applyCCTxColumnFilter(field); });
+  pop.querySelector('.cctx-pop-clear')?.addEventListener('click', e => { e.stopPropagation(); clearCCTxColumnFilter(field); closeAllCCTxPopovers(); });
+  // Enter 키 적용
+  pop.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.stopPropagation(); applyCCTxColumnFilter(field); } });
+  });
+  // 팝오버 내부 클릭/마우스다운이 정렬 이벤트로 버블링되지 않게 차단
+  pop.addEventListener('click',     e => e.stopPropagation());
+  pop.addEventListener('mousedown', e => e.stopPropagation());
+  // Esc 닫기
+  const escH = e => { if (e.key === 'Escape') { closeAllCCTxPopovers(); document.removeEventListener('keydown', escH); } };
+  document.addEventListener('keydown', escH);
 }
 
 /* ===== 법인카드 청구내역 — 개별 수정 ===== */
@@ -8155,8 +8535,18 @@ document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxU
 document.getElementById('cctx-filter-reset').addEventListener('click', () => {
   ['cctx-from', 'cctx-to', 'cctx-merchant', 'cctx-memo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const sel = document.getElementById('cctx-alias'); if (sel) sel.value = '';
+  // 헤더 컬럼 필터 전체 초기화
+  Object.keys(cctxColumnFilters).forEach(k => { cctxColumnFilters[k] = null; });
+  closeAllCCTxPopovers();
   cctxSortCol = 'use_date'; cctxSortDir = 'desc'; cctxSortIsDefault = true;
+  renderCCTxFilterTags();
   renderCCTxTable();
+});
+// 팝오버 외부 클릭 시 닫기 (document 레벨)
+document.addEventListener('click', e => {
+  if (_cctxOpenPopover && !e.target.closest('#cctx-col-filter-popover') && !e.target.closest('.cctx-hf-btn')) {
+    closeAllCCTxPopovers();
+  }
 });
 // 선택 작업 바
 document.getElementById('cctx-sel-edit-btn').addEventListener('click',   () => openCCTxBulkEditModal('selected'));
