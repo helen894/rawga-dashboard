@@ -1286,7 +1286,6 @@
     <div class="cctx-modal-body" style="padding:8px 0 4px">
       <input type="hidden" id="cctx-edit-id">
       <div class="cctx-frow"><label>사용일자</label><input type="date" id="cctx-edit-use-date"></div>
-      <div class="cctx-frow"><label>청구일자</label><input type="date" id="cctx-edit-billing-date"></div>
       <div class="cctx-frow"><label>사용자</label><input type="text" id="cctx-edit-card-alias" placeholder="사용자"></div>
       <div class="cctx-frow"><label>카드번호</label><input type="text" id="cctx-edit-card-no" placeholder="카드번호" style="font-family:var(--mono)"></div>
       <div class="cctx-frow"><label>가맹점명</label><input type="text" id="cctx-edit-merchant" placeholder="가맹점명"></div>
@@ -2123,7 +2122,14 @@ function loadCorpCardAccounts() {
 let corpCardColumns  = loadCorpCardColumns();
 let corpCardAccounts = loadCorpCardAccounts();
 function loadCorpCardTxFromStorage() {
-  try { const v = localStorage.getItem('corp_card_tx_data'); return v ? JSON.parse(v) : []; } catch { return []; }
+  try {
+    const v = localStorage.getItem('corp_card_tx_data');
+    if (!v) return [];
+    const parsed = JSON.parse(v);
+    if (!Array.isArray(parsed)) return [];
+    // billing_date 제거 (localStorage에 잔류 데이터 정리)
+    return parsed.map(r => { const { billing_date: _bd, ...rest } = r; return rest; });
+  } catch { return []; }
 }
 let corpCardTxData = loadCorpCardTxFromStorage(); // 법인카드 청구내역
 let corpCardTxSelectedIds = new Set(); // 선택된 청구내역 ID 집합
@@ -2134,7 +2140,7 @@ let _cctxBulkScope = 'selected';       // 일괄 수정 범위
 let _cctxDeleteScope = 'filtered';     // 삭제 범위
 // 헤더별 컬럼 필터 상태 (null = 비활성)
 const cctxColumnFilters = {
-  use_date: null, billing_date: null, card_alias: null,
+  use_date: null, card_alias: null,
   card_no: null, merchant: null, billing_amount: null, memo: null,
 };
 let _cctxOpenPopover = null; // 현재 열린 팝오버 컬럼명
@@ -2309,10 +2315,24 @@ async function loadDataFromSupabase() {
         if (row.key === 'report_base_date' && row.data) {
           reportBaseDate = row.data; // 리포팅 전용 기준일만 갱신 — refDate(입출금 기준)는 건드리지 않음
         }
-        if (row.key === 'corp_card_tx_data' && Array.isArray(row.data)) {
-          corpCardTxData = row.data;
+        if (row.key === 'corp_card_tx_data') {
+          // 방어적 파싱: JSONB 배열 또는 JSON 문자열 모두 처리
+          let raw = row.data;
+          if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+          if (!Array.isArray(raw)) continue;
+          // billing_date 자동 제거 (마이그레이션)
+          const needsMigration = raw.some(r => 'billing_date' in r);
+          corpCardTxData = raw.map(r => { const { billing_date: _bd, ...rest } = r; return rest; });
           localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
-          // Fix #8: Realtime 수신 후 존재하지 않는 선택 ID 제거
+          if (needsMigration) {
+            // 마이그레이션: billing_date 제거 후 Supabase에 저장
+            console.info('[corp-card] billing_date 마이그레이션 시작 —', raw.length, '건');
+            saveCorpCardTxToSupabase().then(({ error }) => {
+              if (error) console.warn('[corp-card] 마이그레이션 저장 실패:', error.message);
+              else       console.info('[corp-card] billing_date 마이그레이션 완료');
+            });
+          }
+          // Fix #8: 존재하지 않는 선택 ID 제거
           const validCCTxIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
           for (const id of corpCardTxSelectedIds) { if (!validCCTxIds.has(id)) corpCardTxSelectedIds.delete(id); }
           syncCorpCardColumnsFromTx();                 // 신규 카드 열 자동 추가
@@ -2513,6 +2533,22 @@ function subscribeRealtime() {
               INIT_CASH = row.data.init_cash;
               localStorage.setItem('init_cash', String(INIT_CASH));
               updateInitCashDisplay();
+            }
+            if (row.key === 'corp_card_tx_data') {
+              let raw = row.data;
+              if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+              if (Array.isArray(raw)) {
+                corpCardTxData = raw.map(r => { const { billing_date: _bd, ...rest } = r; return rest; });
+                localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
+                const validCCIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
+                for (const id of corpCardTxSelectedIds) { if (!validCCIds.has(id)) corpCardTxSelectedIds.delete(id); }
+                syncCorpCardColumnsFromTx();
+                syncCorpCardAccountsFromTx();
+                pruneEmptyCorpCardAccountsFromTx(true);
+                updateCCTxAliasFilter();
+                renderCorpCardTab();
+                renderCCTxTable();
+              }
             }
           }
           ['cf-midcat','edit-cf-midcat'].forEach(id => {
@@ -7831,11 +7867,11 @@ function normalizeCCAmount(v) {
 
 /* ===== 법인카드 청구내역 — 공통 정규화 ===== */
 function normalizeCorpCardTxRow(row) {
+  const { billing_date: _bd, ...rest } = row || {};
   return {
-    ...row,
+    ...rest,
     _id:            row._id,
     use_date:       normalizeCCDate(row.use_date),
-    billing_date:   normalizeCCDate(row.billing_date),
     card_alias:     String(row.card_alias     ?? '').trim(),
     card_no:        String(row.card_no        ?? '').trim(),
     merchant:       String(row.merchant       ?? '').trim(),
@@ -7866,13 +7902,12 @@ function handleCCTxFileSelect(e) {
 
       // 열 이름 후보 → 실제 열 찾기
       const colCandidates = {
-        use_date:       ['이용일자'],
-        billing_date:   ['청구일자'],
-        card_alias:     ['카드 별칭', '카드별칭'],
+        use_date:       ['이용일자', '사용일자', '승인일자'],
+        card_alias:     ['카드 별칭', '카드별칭', '사용자', '카드명의'],
         card_no:        ['이용 카드', '카드번호', '이용카드', '카드 번호', '카드No', '카드 NO'],
         merchant:       ['가맹점명', '가맹점 명'],
-        billing_amount: ['청구금액', '청구 금액'],
-        memo:           ['메모'],
+        billing_amount: ['청구금액', '청구 금액', '승인금액'],
+        memo:           ['메모', '계정과목', '구분'],
       };
       const mapped = {};
       for (const [field, cands] of Object.entries(colCandidates)) {
@@ -7888,7 +7923,6 @@ function handleCCTxFileSelect(e) {
       const newRows = raw.map((row, i) => ({
         _id:            `corp_card_${now}_${i}_${Math.random().toString(36).slice(2)}`,
         use_date:       normalizeCCDate(row[mapped.use_date]),
-        billing_date:   normalizeCCDate(row[mapped.billing_date]),
         card_alias:     String(row[mapped.card_alias] || '').trim(),
         card_no:        String(row[mapped.card_no]    || '').trim(),
         merchant:       String(row[mapped.merchant]   || '').trim(),
@@ -7896,9 +7930,9 @@ function handleCCTxFileSelect(e) {
         memo:           String(row[mapped.memo]       || '').trim(),
       }));
 
-      // 중복 예상 건수 (이용일자+청구일자+카드번호+가맹점+금액 기준)
-      const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`));
-      const dupeCount = newRows.filter(r => existingKeys.has(`${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`)).length;
+      // 중복 예상 건수 (사용일자+카드번호+사용자+가맹점명+금액 기준)
+      const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`));
+      const dupeCount = newRows.filter(r => existingKeys.has(`${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`)).length;
 
       _pendingCCTxRows = newRows;
       showCCTxUploadModal(newRows.length, dupeCount, sheetName);
@@ -7916,7 +7950,7 @@ function showCCTxUploadModal(total, dupeCount, sheetName) {
       `<div><b>시트:</b> ${sheetName}</div>` +
       `<div><b>읽은 행:</b> ${total.toLocaleString()}건</div>` +
       `<div><b>현재 데이터:</b> ${corpCardTxData.length.toLocaleString()}건</div>` +
-      (dupeCount > 0 ? `<div style="color:var(--amber)"><b>중복 예상:</b> ${dupeCount.toLocaleString()}건 (이용일자+청구일자+카드번호+가맹점+금액 기준)</div>` : '') +
+      (dupeCount > 0 ? `<div style="color:var(--amber)"><b>중복 예상:</b> ${dupeCount.toLocaleString()}건 (사용일자+카드번호+사용자+가맹점명+금액 기준)</div>` : '') +
     `</div>` +
     `<div style="font-size:12px;font-weight:600;margin-bottom:10px">업로드 방식</div>` +
     `<label style="display:block;margin-bottom:8px;font-size:12px;cursor:pointer">` +
@@ -7947,8 +7981,8 @@ async function applyCCTxUpload() {
     corpCardTxData = rows;
     successMsg = `✅ ${corpCardTxData.length.toLocaleString()}건으로 전체 교체`;
   } else {
-    const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`));
-    const newOnly = rows.filter(r => !existingKeys.has(`${r.use_date}|${r.billing_date}|${r.card_no}|${r.merchant}|${r.billing_amount}`));
+    const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`));
+    const newOnly = rows.filter(r => !existingKeys.has(`${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`));
     corpCardTxData = [...corpCardTxData, ...newOnly];
     const added = newOnly.length;
     const skipped = rows.length - added;
@@ -8092,14 +8126,7 @@ function renderCCTxTable() {
   const container = document.getElementById('cctx-table-container');
   if (!container) return;
 
-  if (!total) {
-    container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px">` +
-      (corpCardTxData.length ? '검색 결과가 없습니다.' : '업로드된 사용내역이 없습니다. 엑셀 파일을 업로드해 주세요.') +
-      `</div>`;
-    updateCCTxSelectionBar();
-    return;
-  }
-
+  // [헤더 고정] 데이터 0건이어도 thead 항상 렌더링 — early return 없음
   const sic = col => {
     if (cctxSortCol !== col) return `<span class="cctx-sort-ic">↕</span>`;
     return `<span class="cctx-sort-ic">${cctxSortDir === 'asc' ? '↑' : '↓'}</span>`;
@@ -8128,7 +8155,12 @@ function renderCCTxTable() {
   const allChk   = filtIds.length > 0 && selPage.length === filtIds.length ? 'checked' : '';
   const allIndet = selPage.length > 0 && selPage.length < filtIds.length;
 
-  const tbRows = rows.map(r => {
+  const _emptyMsg = !total
+    ? (corpCardTxData.length ? '조건에 맞는 사용내역이 없습니다.' : '업로드된 사용내역이 없습니다. 엑셀 파일을 업로드해 주세요.')
+    : '';
+  const tbRows = _emptyMsg
+    ? `<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--text2);font-size:13px">${_emptyMsg}</td></tr>`
+    : rows.map(r => {
     const chk = corpCardTxSelectedIds.has(r._id) ? 'checked' : '';
     return `<tr>` +
       `<td style="width:32px;padding:4px 8px"><input type="checkbox" class="cctx-row-check" data-id="${r._id}" ${chk} style="cursor:pointer"></td>` +
@@ -8238,7 +8270,7 @@ function _parseCCTxFilterAmount(raw) {
 
 // 단일 행에 컬럼 필터 적용
 function _matchCCTxColumnFilter(row, field, f) {
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     const d = row[field] || '';
     if (f.type === 'empty')    return d === '';
     if (f.type === 'nonempty') return d !== '';
@@ -8295,11 +8327,11 @@ function _matchCCTxColumnFilter(row, field, f) {
 
 // 필터 상태를 사람이 읽을 수 있는 설명으로 변환
 function _describeCCTxFilter(field, f) {
-  const labels = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
+  const labels = { use_date:'사용일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const lbl = labels[field] || field;
   const type = f.type;
   let desc = '';
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     if (type === 'empty')        desc = '비어 있음';
     else if (type === 'nonempty') desc = '비어 있지 않음';
     else if (type === 'exact')    desc = f.date1;
@@ -8376,10 +8408,10 @@ function closeAllCCTxPopovers() {
 
 // 팝오버 내부 HTML 생성 (날짜 / 텍스트 / 금액 타입)
 function _buildCCTxPopoverHtml(field) {
-  const labels = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
+  const labels = { use_date:'사용일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const title  = labels[field] || field;
   let body = '';
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     body =
       `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
         `<option value="range">기간</option>` +
@@ -8458,7 +8490,7 @@ function _buildCCTxPopoverHtml(field) {
 function _onCCTxPopoverModeChange(field) {
   const mode = document.getElementById(`cctx-pop-mode-${field}`)?.value;
   if (!mode) return;
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     const exact = document.getElementById(`cctx-pop-exact-${field}`);
     const range = document.getElementById(`cctx-pop-range-${field}`);
     if (exact) exact.style.display = mode === 'exact' ? 'block' : 'none';
@@ -8516,7 +8548,7 @@ function _restoreCCTxPopoverState(field) {
   const modeEl = document.getElementById(`cctx-pop-mode-${field}`);
   if (!f) { if (modeEl) { modeEl.value = modeEl.options[0]?.value || ''; _onCCTxPopoverModeChange(field); } return; }
   if (modeEl) { modeEl.value = f.type; _onCCTxPopoverModeChange(field); }
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     if (f.type === 'exact') {
       const el = document.getElementById(`cctx-pop-d1-${field}`); if (el) el.value = f.date1 || '';
     } else if (f.type === 'range') {
@@ -8564,7 +8596,7 @@ function applyCCTxColumnFilter(field) {
   }
   const mode = document.getElementById(`cctx-pop-mode-${field}`)?.value;
   let filter = null;
-  if (field === 'use_date' || field === 'billing_date') {
+  if (field === 'use_date') {
     if (mode === 'empty' || mode === 'nonempty') {
       filter = { type: mode };
     } else if (mode === 'exact') {
@@ -8662,7 +8694,6 @@ function openCCTxEditModal(id) {
   if (!row) { alert('항목을 찾을 수 없습니다.'); return; }
   document.getElementById('cctx-edit-id').value             = row._id;
   document.getElementById('cctx-edit-use-date').value       = row.use_date     || '';
-  document.getElementById('cctx-edit-billing-date').value   = row.billing_date || '';
   document.getElementById('cctx-edit-card-alias').value     = row.card_alias   || '';
   document.getElementById('cctx-edit-card-no').value        = row.card_no      || '';
   document.getElementById('cctx-edit-merchant').value       = row.merchant     || '';
@@ -8680,7 +8711,6 @@ async function saveCCTxEdit() {
   const newRow = normalizeCorpCardTxRow({
     ...oldRow,
     use_date:       document.getElementById('cctx-edit-use-date').value,
-    billing_date:   document.getElementById('cctx-edit-billing-date').value,
     card_alias:     document.getElementById('cctx-edit-card-alias').value,
     card_no:        document.getElementById('cctx-edit-card-no').value,
     billing_amount: document.getElementById('cctx-edit-amount').value,
@@ -8799,7 +8829,6 @@ function _buildCCTxBulkEditForm(scope, count) {
   };
   let html = `<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:7px;font-size:12px;color:var(--text2)">수정 범위: <b style="color:var(--text)">${scopeLabel}</b></div>`;
   html += brow('use-date',     '사용일자',  'date',   textOpts);
-  html += brow('billing-date', '청구일자',  'date',   textOpts);
   html += brow('card-alias',   '사용자',    'text',   textOpts);
   html += brow('card-no',      '카드번호',  'text',   textOpts);
   html += brow('merchant',     '가맹점명',  'text',   textOpts);
@@ -8838,7 +8867,7 @@ function onCCTxBulkModeChange(sel) {
 }
 
 function _getCCTxBulkChangeDef() {
-  const fmap = { 'use-date':'use_date','billing-date':'billing_date','card-alias':'card_alias','card-no':'card_no','merchant':'merchant','amount':'billing_amount','memo':'memo' };
+  const fmap = { 'use-date':'use_date','card-alias':'card_alias','card-no':'card_no','merchant':'merchant','amount':'billing_amount','memo':'memo' };
   return Object.entries(fmap).map(([fid, field]) => {
     const modeEl = document.getElementById(`cctx-bm-${fid}`);
     if (!modeEl) return null;
@@ -8854,7 +8883,7 @@ function _applyCCTxChangesToRow(row, defs) {
     if (d.mode === 'set_empty') {
       r[d.field] = '';
     } else if (d.mode === 'set_value') {
-      if (d.field === 'use_date' || d.field === 'billing_date') r[d.field] = normalizeCCDate(d.rawVal);
+      if (d.field === 'use_date') r[d.field] = normalizeCCDate(d.rawVal);
       else if (d.field === 'billing_amount') r[d.field] = normalizeCCAmount(d.rawVal);
       else r[d.field] = d.rawVal;
     } else if (d.mode === 'add_value') {
@@ -8873,7 +8902,7 @@ function previewCCTxBulkEdit() {
   const targets   = _getCCTxBulkTargets(_cctxBulkScope);
   const changed   = targets.filter(r => JSON.stringify(r) !== JSON.stringify(_applyCCTxChangesToRow(r, defs)));
   const unchanged = targets.length - changed.length;
-  const fnames    = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
+  const fnames    = { use_date:'사용일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const fieldSummary = defs.map(d => {
     const fn = fnames[d.field] || d.field;
     const ml = d.mode === 'set_value' ? `→ "${d.rawVal}"` : d.mode === 'set_empty' ? '→ (빈 값)' : d.mode === 'add_value' ? `+${d.rawVal}` : `-${d.rawVal}`;
