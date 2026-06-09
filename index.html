@@ -1285,12 +1285,12 @@
     </div>
     <div class="cctx-modal-body" style="padding:8px 0 4px">
       <input type="hidden" id="cctx-edit-id">
-      <div class="cctx-frow"><label>이용일자</label><input type="date" id="cctx-edit-use-date"></div>
+      <div class="cctx-frow"><label>사용일자</label><input type="date" id="cctx-edit-use-date"></div>
       <div class="cctx-frow"><label>청구일자</label><input type="date" id="cctx-edit-billing-date"></div>
-      <div class="cctx-frow"><label>카드 별칭</label><input type="text" id="cctx-edit-card-alias" placeholder="카드 별칭"></div>
+      <div class="cctx-frow"><label>사용자</label><input type="text" id="cctx-edit-card-alias" placeholder="사용자"></div>
       <div class="cctx-frow"><label>카드번호</label><input type="text" id="cctx-edit-card-no" placeholder="카드번호" style="font-family:var(--mono)"></div>
       <div class="cctx-frow"><label>가맹점명</label><input type="text" id="cctx-edit-merchant" placeholder="가맹점명"></div>
-      <div class="cctx-frow"><label>청구금액</label><input type="number" id="cctx-edit-amount" placeholder="청구금액" style="font-family:var(--mono)"></div>
+      <div class="cctx-frow"><label>금액</label><input type="number" id="cctx-edit-amount" placeholder="금액" style="font-family:var(--mono)"></div>
       <div class="cctx-frow"><label>계정과목</label><input type="text" id="cctx-edit-memo" placeholder="계정과목"></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid var(--border2);margin-top:6px">
@@ -8133,12 +8133,11 @@ function renderCCTxTable() {
     return `<tr>` +
       `<td style="width:32px;padding:4px 8px"><input type="checkbox" class="cctx-row-check" data-id="${r._id}" ${chk} style="cursor:pointer"></td>` +
       `<td>${r.use_date || ''}</td>` +
-      `<td>${r.billing_date || ''}</td>` +
-      `<td>${r.card_alias || ''}</td>` +
       `<td style="font-family:var(--mono);font-size:11px">${r.card_no || ''}</td>` +
-      `<td>${r.merchant || ''}</td>` +
+      `<td>${r.card_alias || '—'}</td>` +
+      `<td>${r.merchant || '—'}</td>` +
       `<td class="num">${fmt(r.billing_amount || 0)}</td>` +
-      `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.memo || ''}</td>` +
+      `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.memo || '—'}</td>` +
       `<td style="padding:3px 6px;white-space:nowrap">` +
         `<button class="cctx-ract" title="수정" data-editid="${r._id}">✏</button>` +
         `<button class="cctx-ract del" title="삭제" data-delid="${r._id}">🗑</button>` +
@@ -8150,12 +8149,11 @@ function renderCCTxTable() {
     `<table class="cctx-table">` +
       `<thead><tr>` +
         `<th style="width:32px;padding:4px 8px"><input type="checkbox" id="cctx-check-all" ${allChk}></th>` +
-        th('use_date',       '이용일자') +
-        th('billing_date',   '청구일자') +
-        th('card_alias',     '카드 별칭') +
+        th('use_date',       '사용일자') +
         th('card_no',        '카드번호') +
+        th('card_alias',     '사용자') +
         th('merchant',       '가맹점명') +
-        th('billing_amount', '청구금액', 'right') +
+        th('billing_amount', '금액', 'right') +
         th('memo',           '계정과목') +
         `<th style="width:56px">작업</th>` +
       `</tr></thead>` +
@@ -8297,7 +8295,7 @@ function _matchCCTxColumnFilter(row, field, f) {
 
 // 필터 상태를 사람이 읽을 수 있는 설명으로 변환
 function _describeCCTxFilter(field, f) {
-  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'계정과목' };
+  const labels = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const lbl = labels[field] || field;
   const type = f.type;
   let desc = '';
@@ -8378,7 +8376,7 @@ function closeAllCCTxPopovers() {
 
 // 팝오버 내부 HTML 생성 (날짜 / 텍스트 / 금액 타입)
 function _buildCCTxPopoverHtml(field) {
-  const labels = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'계정과목' };
+  const labels = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const title  = labels[field] || field;
   let body = '';
   if (field === 'use_date' || field === 'billing_date') {
@@ -8800,12 +8798,12 @@ function _buildCCTxBulkEditForm(scope, count) {
       inp + `</div>`;
   };
   let html = `<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:7px;font-size:12px;color:var(--text2)">수정 범위: <b style="color:var(--text)">${scopeLabel}</b></div>`;
-  html += brow('use-date',     '이용일자',  'date',   textOpts);
+  html += brow('use-date',     '사용일자',  'date',   textOpts);
   html += brow('billing-date', '청구일자',  'date',   textOpts);
-  html += brow('card-alias',   '카드 별칭', 'text',   textOpts);
+  html += brow('card-alias',   '사용자',    'text',   textOpts);
   html += brow('card-no',      '카드번호',  'text',   textOpts);
   html += brow('merchant',     '가맹점명',  'text',   textOpts);
-  html += brow('amount',       '청구금액',  'number', amtOpts);
+  html += brow('amount',       '금액',      'number', amtOpts);
   html += brow('memo',         '계정과목',  'text',   textOpts);
   if (isAll) {
     html += `<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
@@ -8875,7 +8873,7 @@ function previewCCTxBulkEdit() {
   const targets   = _getCCTxBulkTargets(_cctxBulkScope);
   const changed   = targets.filter(r => JSON.stringify(r) !== JSON.stringify(_applyCCTxChangesToRow(r, defs)));
   const unchanged = targets.length - changed.length;
-  const fnames    = { use_date:'이용일자', billing_date:'청구일자', card_alias:'카드 별칭', card_no:'카드번호', merchant:'가맹점명', billing_amount:'청구금액', memo:'메모' };
+  const fnames    = { use_date:'사용일자', billing_date:'청구일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const fieldSummary = defs.map(d => {
     const fn = fnames[d.field] || d.field;
     const ml = d.mode === 'set_value' ? `→ "${d.rawVal}"` : d.mode === 'set_empty' ? '→ (빈 값)' : d.mode === 'add_value' ? `+${d.rawVal}` : `-${d.rawVal}`;
