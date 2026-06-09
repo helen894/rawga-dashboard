@@ -2318,18 +2318,56 @@ async function loadDataFromSupabase() {
         if (row.key === 'corp_card_tx_data') {
           // 방어적 파싱: JSONB 배열 또는 JSON 문자열 모두 처리
           let raw = row.data;
-          if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
+          if (typeof raw === 'string') {
+            try { raw = JSON.parse(raw); }
+            catch { console.warn('[corp-card] corp_card_tx_data JSON 파싱 실패 — 로드 건너뜀'); continue; }
+          }
+          // 유효 배열이 아니면 기존 데이터 보호 (빈 응답·null 방어)
           if (!Array.isArray(raw)) continue;
+          // ── Supabase가 0건인데 메모리(localStorage 복원)에 데이터가 있는 경우 ──
+          // 빈 배열로 덮어쓰지 않고 메모리 데이터를 Supabase에 복원 후 계속 진행
+          if (raw.length === 0 && corpCardTxData.length > 0) {
+            console.warn('[corp-card] Supabase 0건 — 메모리', corpCardTxData.length,
+              '건으로 Supabase 복원 시작 (billing_date 제거 포함)');
+            // billing_date 혹시 localStorage에 잔류하면 제거 후 복원
+            corpCardTxData = corpCardTxData.map(r => {
+              const { billing_date: _bd, ...rest } = r; return rest;
+            });
+            localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
+            _supa.from('cat_data').upsert(
+              [{ key: 'corp_card_tx_data', data: corpCardTxData }],
+              { onConflict: 'key' }
+            ).then(({ error }) => {
+              if (error) console.warn('[corp-card] Supabase 복원 실패 (다음 로드 시 재시도):', error.message);
+              else       console.info('[corp-card] Supabase 복원 완료 —', corpCardTxData.length, '건');
+            });
+            // 메모리 데이터로 렌더링 계속 진행 (continue 없음)
+            const validCCTxIdsR = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
+            for (const id of corpCardTxSelectedIds) { if (!validCCTxIdsR.has(id)) corpCardTxSelectedIds.delete(id); }
+            syncCorpCardColumnsFromTx();
+            syncCorpCardAccountsFromTx();
+            pruneEmptyCorpCardAccountsFromTx(true);
+            updateCCTxAliasFilter();
+            renderCorpCardTab();
+            renderCCTxTable();
+            continue;
+          }
+          // ── 일반 경로: Supabase 데이터로 갱신 ──
           // billing_date 자동 제거 (마이그레이션)
-          const needsMigration = raw.some(r => 'billing_date' in r);
+          const needsMigration = raw.length > 0 && raw.some(r => 'billing_date' in r);
           corpCardTxData = raw.map(r => { const { billing_date: _bd, ...rest } = r; return rest; });
           localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
           if (needsMigration) {
-            // 마이그레이션: billing_date 제거 후 Supabase에 저장
-            console.info('[corp-card] billing_date 마이그레이션 시작 —', raw.length, '건');
-            saveCorpCardTxToSupabase().then(({ error }) => {
-              if (error) console.warn('[corp-card] 마이그레이션 저장 실패:', error.message);
-              else       console.info('[corp-card] billing_date 마이그레이션 완료');
+            // 마이그레이션: billing_date 제거 후 Supabase 직접 저장
+            // ※ saveCorpCardTxToSupabase()는 _isInitialized=false 시 localStorage만 씀 →
+            //   _supa.from().upsert() 직접 호출로 실제 저장 보장
+            console.info('[corp-card] billing_date 마이그레이션 시작 —', corpCardTxData.length, '건');
+            _supa.from('cat_data').upsert(
+              [{ key: 'corp_card_tx_data', data: corpCardTxData }],
+              { onConflict: 'key' }
+            ).then(({ error }) => {
+              if (error) console.warn('[corp-card] 마이그레이션 저장 실패 (다음 로드 시 재시도):', error.message);
+              else       console.info('[corp-card] billing_date 마이그레이션 완료 —', corpCardTxData.length, '건');
             });
           }
           // Fix #8: 존재하지 않는 선택 ID 제거
@@ -2536,15 +2574,19 @@ function subscribeRealtime() {
             }
             if (row.key === 'corp_card_tx_data') {
               let raw = row.data;
-              if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch { raw = []; } }
-              if (Array.isArray(raw)) {
+              if (typeof raw === 'string') {
+                try { raw = JSON.parse(raw); } catch { raw = null; }
+              }
+              // 유효 배열이고 기존 데이터보다 많거나 기존 데이터가 없을 때만 반영
+              // (빈 배열 수신으로 기존 데이터 오염 방지 — 저장 없음 → Realtime 루프 없음)
+              if (Array.isArray(raw) && (raw.length > 0 || corpCardTxData.length === 0)) {
                 corpCardTxData = raw.map(r => { const { billing_date: _bd, ...rest } = r; return rest; });
                 localStorage.setItem('corp_card_tx_data', JSON.stringify(corpCardTxData));
                 const validCCIds = new Set(corpCardTxData.map(r => r._id).filter(Boolean));
                 for (const id of corpCardTxSelectedIds) { if (!validCCIds.has(id)) corpCardTxSelectedIds.delete(id); }
                 syncCorpCardColumnsFromTx();
                 syncCorpCardAccountsFromTx();
-                pruneEmptyCorpCardAccountsFromTx(true);
+                pruneEmptyCorpCardAccountsFromTx(true); // skipSave=true → 저장 없음 → Realtime 루프 없음
                 updateCCTxAliasFilter();
                 renderCorpCardTab();
                 renderCCTxTable();
