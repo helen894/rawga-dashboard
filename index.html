@@ -57,6 +57,37 @@
   .panel { display: none; }
   .panel.active { display: block; }
 
+  /* LOGIN OVERLAY */
+  .login-overlay { position: fixed; inset: 0; z-index: 9999; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+  .login-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 36px 32px; width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,0.10); }
+  .login-card .login-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; text-align: center; margin-bottom: 4px; }
+  .login-card .login-logo span { color: var(--blue); }
+  .login-card .login-sub { font-size: 12px; color: var(--text3); text-align: center; margin-bottom: 24px; }
+  .login-card label { display: block; font-size: 12px; color: var(--text2); margin: 14px 0 6px; }
+  .login-card input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 14px; font-family: var(--font); padding: 10px 12px; border-radius: 8px; }
+  .login-card input:focus { outline: none; border-color: var(--blue); }
+  .login-card .login-btn { width: 100%; margin-top: 22px; background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 14px; font-weight: 600; font-family: var(--font); cursor: pointer; }
+  .login-card .login-btn:disabled { opacity: 0.6; cursor: default; }
+  .login-card .login-err { color: var(--red); font-size: 12px; margin-top: 12px; min-height: 16px; text-align: center; }
+  body.auth-pending .header, body.auth-pending .tabs, body.auth-pending .main { display: none; }
+
+  /* HEADER USER / LOGOUT */
+  .user-badge { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  .user-badge .user-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .logout-btn { background: none; border: 1px solid var(--border2); border-radius: 5px; padding: 4px 10px; font-size: 11px; color: var(--text2); cursor: pointer; font-family: var(--font); }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  /* ADMIN / AUDIT LOG */
+  .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .audit-table th { text-align: left; padding: 9px 12px; background: var(--bg3); color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .audit-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  .audit-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; white-space: nowrap; }
+  .audit-login    { background: var(--green2); color: #2ec77a; }
+  .audit-logout   { background: var(--bg3);   color: var(--text2); }
+  .audit-modify   { background: var(--amber2); color: var(--amber); }
+  .audit-upload   { background: var(--blue2);  color: var(--blue); }
+  .audit-download  { background: #ede5ff; color: var(--purple); }
+
   /* KPI GRID */
   .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
   .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
@@ -336,11 +367,29 @@
   }
 </style>
 </head>
-<body>
+<body class="auth-pending">
+
+<!-- 로그인 오버레이 -->
+<div class="login-overlay" id="login-overlay" style="display:none">
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="login-logo"><span>RAWGA</span> 자금 대시보드</div>
+    <div class="login-sub">로그인 후 이용하실 수 있습니다</div>
+    <label for="login-email">이메일</label>
+    <input type="email" id="login-email" autocomplete="username" required>
+    <label for="login-password">비밀번호</label>
+    <input type="password" id="login-password" autocomplete="current-password" required>
+    <button type="submit" class="login-btn" id="login-submit">로그인</button>
+    <div class="login-err" id="login-err"></div>
+  </form>
+</div>
 
 <div class="header">
   <div class="logo"><span>RAWGA</span> 자금 대시보드</div>
   <div class="header-right">
+    <div class="user-badge" id="user-badge" style="display:none">
+      <span class="user-dot"></span><span id="user-email-label"></span>
+      <button class="logout-btn" id="logout-btn">로그아웃</button>
+    </div>
     <div id="sync-status" style="font-size:12px;color:var(--text3);margin-right:12px">연결 중...</div>
     <div class="ref-date-wrap">
       <span id="init-cash-info-wrap" style="display:flex;align-items:center;gap:6px">
@@ -391,6 +440,7 @@
   <div class="tab" data-tab="cashflow">입출금 내역</div>
   <div class="tab" data-tab="recurring">반복 거래</div>
   <div class="tab" data-tab="category">카테고리 관리</div>
+  <div class="tab" data-tab="admin">관리자</div>
 </div>
 
 <div class="main">
@@ -2103,6 +2153,46 @@
   </div>
 </div>
 
+<!-- ======== ADMIN TAB ======== -->
+<div class="panel" id="panel-admin">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="font-size:16px;font-weight:700">감사 로그</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:2px">로그인·데이터 수정·엑셀 업로드/다운로드 활동 기록</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <select id="audit-filter-action" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
+        <option value="">전체 액션</option>
+        <option value="login">로그인</option>
+        <option value="logout">로그아웃</option>
+        <option value="data_modify">데이터 수정</option>
+        <option value="excel_upload">엑셀 업로드</option>
+        <option value="excel_download">엑셀 다운로드</option>
+      </select>
+      <button class="btn" id="audit-refresh-btn" style="display:flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        새로고침
+      </button>
+    </div>
+  </div>
+  <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th style="width:150px">시각</th>
+          <th style="width:180px">사용자</th>
+          <th style="width:110px">액션</th>
+          <th>상세</th>
+        </tr>
+      </thead>
+      <tbody id="audit-log-tbody">
+        <tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">로그를 불러오는 중...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="audit-log-count" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
+</div>
+
 </div><!-- /main -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2179,6 +2269,167 @@ function initSupabase() {
   const { createClient } = window.supabase;
   _supa = createClient(SUPA_URL, SUPA_KEY);
 }
+
+/* ============================================================
+   인증(로그인) + 감사 로그
+   ============================================================ */
+let currentUserEmail = null;          // 로그인한 사용자 이메일 — 감사 로그 user_email
+let _onLoginSuccess  = null;          // 로그인 게이트 Promise resolve 콜백
+
+/* 감사 로그 기록 — fire-and-forget (audit_log 테이블 필요) */
+async function logAudit(action, detail, meta) {
+  try {
+    if (!_supa) return;
+    await _supa.from('audit_log').insert([{
+      user_email: currentUserEmail || null,
+      action,
+      detail: detail != null ? String(detail).slice(0, 500) : null,
+      meta: meta || null,
+    }]);
+    // 관리자 탭이 열려 있으면 즉시 갱신
+    const panel = document.getElementById('panel-admin');
+    if (panel && panel.classList.contains('active')) renderAuditLog();
+  } catch (e) {
+    console.warn('[audit] 기록 실패:', e?.message || e);
+  }
+}
+
+/* 로그인 화면 표시 */
+function showLoginOverlay() {
+  const ov = document.getElementById('login-overlay');
+  if (ov) ov.style.display = 'flex';
+  document.body.classList.add('auth-pending');
+  setTimeout(() => { const el = document.getElementById('login-email'); if (el) el.focus(); }, 50);
+}
+
+/* 앱 본체 표시 (로그인 성공/세션 복원 후) */
+function showAppChrome() {
+  const ov = document.getElementById('login-overlay');
+  if (ov) ov.style.display = 'none';
+  document.body.classList.remove('auth-pending');
+  const badge = document.getElementById('user-badge');
+  const label = document.getElementById('user-email-label');
+  if (label) label.textContent = currentUserEmail || '';
+  if (badge) badge.style.display = 'flex';
+}
+
+/* 인증 게이트 — 세션 있으면 즉시 통과, 없으면 로그인 대기 (Promise) */
+async function ensureAuthenticated() {
+  let session = null;
+  try {
+    const { data } = await _supa.auth.getSession();
+    session = data?.session || null;
+  } catch (e) {
+    console.warn('[auth] 세션 조회 실패:', e?.message || e);
+  }
+  if (session) {
+    currentUserEmail = session.user?.email || null;
+    showAppChrome();
+    return true;
+  }
+  showLoginOverlay();
+  return new Promise(resolve => { _onLoginSuccess = resolve; });
+}
+
+/* 로그인 폼 제출 */
+function wireAuthHandlers() {
+  const form = document.getElementById('login-form');
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const emailEl = document.getElementById('login-email');
+      const pwEl    = document.getElementById('login-password');
+      const btn     = document.getElementById('login-submit');
+      const errEl   = document.getElementById('login-err');
+      const email = (emailEl.value || '').trim();
+      const password = pwEl.value || '';
+      if (!email || !password) { errEl.textContent = '이메일과 비밀번호를 입력하세요.'; return; }
+      btn.disabled = true; btn.textContent = '로그인 중...'; errEl.textContent = '';
+      try {
+        const { data, error } = await _supa.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        currentUserEmail = data.user?.email || email;
+        pwEl.value = '';
+        showAppChrome();
+        logAudit('login', `로그인: ${currentUserEmail}`);
+        if (typeof _onLoginSuccess === 'function') { const cb = _onLoginSuccess; _onLoginSuccess = null; cb(true); }
+      } catch (err) {
+        errEl.textContent = '로그인 실패: ' + (err?.message || '이메일 또는 비밀번호를 확인하세요.');
+      } finally {
+        btn.disabled = false; btn.textContent = '로그인';
+      }
+    });
+  }
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try { await logAudit('logout', `로그아웃: ${currentUserEmail || ''}`); } catch {}
+      try { await _supa.auth.signOut(); } catch {}
+      location.reload();
+    });
+  }
+  const auditRefresh = document.getElementById('audit-refresh-btn');
+  if (auditRefresh) auditRefresh.addEventListener('click', renderAuditLog);
+  const auditFilter = document.getElementById('audit-filter-action');
+  if (auditFilter) auditFilter.addEventListener('change', renderAuditLog);
+}
+
+/* 감사 로그 렌더링 */
+async function renderAuditLog() {
+  const tbody = document.getElementById('audit-log-tbody');
+  const countEl = document.getElementById('audit-log-count');
+  if (!tbody || !_supa) return;
+  const filter = document.getElementById('audit-filter-action')?.value || '';
+
+  let q = _supa.from('audit_log').select('*').order('created_at', { ascending: false }).limit(200);
+  if (filter) q = q.eq('action', filter);
+  const { data, error } = await q;
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  if (!data || !data.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">기록된 로그가 없습니다.</td></tr>`;
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  const actionMeta = {
+    login:          ['로그인',     'audit-login'],
+    logout:         ['로그아웃',    'audit-logout'],
+    data_modify:    ['데이터 수정', 'audit-modify'],
+    excel_upload:   ['엑셀 업로드', 'audit-upload'],
+    excel_download: ['엑셀 다운로드','audit-download'],
+  };
+  const fmtDt = iso => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone:'Asia/Seoul', hour12:false }).slice(0,-3) : '—';
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  tbody.innerHTML = data.map(row => {
+    const [lbl, cls] = actionMeta[row.action] || [row.action, 'audit-logout'];
+    return `<tr>
+      <td style="white-space:nowrap;color:var(--text2)">${fmtDt(row.created_at)}</td>
+      <td>${esc(row.user_email) || '<span style="color:var(--text3)">—</span>'}</td>
+      <td><span class="audit-badge ${cls}">${lbl}</span></td>
+      <td>${esc(row.detail) || '<span style="color:var(--text3)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  if (countEl) countEl.textContent = `최근 ${data.length}건${data.length >= 200 ? ' (최대 200건 표시)' : ''}`;
+}
+
+/* 엑셀 다운로드 감사 로그 — XLSX.writeFile 래핑 (모든 내보내기 지점 자동 포착, 호출부 변경 없음) */
+(function patchXLSXDownloadAudit() {
+  if (typeof XLSX === 'undefined' || !XLSX.writeFile || XLSX.writeFile.__audited) return;
+  const _orig = XLSX.writeFile;
+  const wrapped = function(wb, filename, ...rest) {
+    const r = _orig.call(this, wb, filename, ...rest);
+    try { logAudit('excel_download', `엑셀 다운로드: ${filename || ''}`); } catch {}
+    return r;
+  };
+  wrapped.__audited = true;
+  XLSX.writeFile = wrapped;
+})();
 
 /* ---- 상태 표시 ---- */
 function setSyncStatus(status) {
@@ -3880,6 +4131,7 @@ function deleteCF(id) {
 
   cfData.splice(idx, 1);
   saveDataExplicit();
+  logAudit('data_modify', `입출금 삭제: [${row.date}] ${row.desc || ''} (${(row.in||0)>0 ? '입금 '+row.in : '출금 '+(row.out||0)})`);
   renderAll();
   showToast('삭제됐습니다.' + deleteMsg, 'red');
 }
@@ -4062,6 +4314,7 @@ function saveCFEdit() {
   }
 
   saveDataExplicit();
+  logAudit('data_modify', `입출금 수정: [${date}] ${desc} (${inAmt>0 ? '입금 '+inAmt : '출금 '+outAmt})`);
   closeCFEditModal();
   renderAll();
   showToast('✅ 수정됐습니다.' + arMsg, 'green');
@@ -4147,6 +4400,7 @@ function cfAddSingleRow(row) {
   }
 
   saveDataExplicit();
+  logAudit('data_modify', `입출금 추가: [${row.date}] ${row.desc || ''} (${(row.in||0)>0 ? '입금 '+row.in : '출금 '+(row.out||0)})`);
   buildARPartnerSelect();
   document.getElementById('cf-date').value = '';
   document.getElementById('cf-desc').value = '';
@@ -4844,6 +5098,7 @@ function deleteAR(id) {
   if (!confirm(`삭제하시겠습니까?\n[${ar.partner}]`)) return;
   arData.splice(idx, 1);
   saveDataExplicit();
+  logAudit('data_modify', `매출채권 삭제: ${ar.partner || ''} (예상 ${ar.expected || 0})`);
   renderAll();
   showToast('삭제됐습니다.', 'red');
 }
@@ -4939,6 +5194,7 @@ document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
   arData[idx] = { ...arData[idx], partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note };
 
   saveDataExplicit();
+  logAudit('data_modify', `매출채권 수정: ${partner} (예상 ${expected} / 회수 ${collected})`);
   buildARPartnerSelect();
   closeAREditModal();
   // renderAll() 대신 AR 관련만 렌더링 → 필터 상태 유지
@@ -5132,6 +5388,7 @@ document.getElementById('ar-add-btn').addEventListener('click', () => {
   const _newArId = 'ar_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   arData.push({ _id: _newArId, partner, start, expected, collected, remaining, due_date: due, collect_date: collectDate, status, elapsed, note });
   saveDataExplicit();
+  logAudit('data_modify', `매출채권 추가: ${partner} (예상 ${expected})`);
   buildARPartnerSelect();
   renderARTable();
   renderARBarChart();
@@ -7605,6 +7862,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (tab.dataset.tab === 'corp-card')      renderCorporateCardTab();
     if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
     if (tab.dataset.tab === 'recurring')      renderRecurringTab();
+    if (tab.dataset.tab === 'admin')          renderAuditLog();
 
     // 탭 전환 시 필터 초기화 — 입출금 내역
     if (tab.dataset.tab === 'cashflow') {
@@ -7928,6 +8186,7 @@ let _pendingCCTxRows = [];
 function handleCCTxFileSelect(e) {
   const file = e.target.files[0];
   if (!file) return;
+  logAudit('excel_upload', `법인카드 엑셀 업로드: ${file?.name || ''}`);
   e.target.value = ''; // 같은 파일 재선택 허용
   const reader = new FileReader();
   reader.onload = evt => {
@@ -8779,6 +9038,7 @@ async function saveCCTxEdit() {
     return;
   }
   document.getElementById('cctx-edit-modal').classList.add('hidden');
+  logAudit('data_modify', `법인카드 수정: ${newRow.use_date || '-'} / ${newRow.card_alias || '-'} / ${newRow.merchant || '-'} / ${(newRow.billing_amount||0).toLocaleString()}원`);
   syncCorpCardColumnsFromTx();                                   // 신규 카드 열 자동 추가
   syncCorpCardAccountsFromTx();                                  // 신규 계정과목 자동 추가
   const prunedEdit = pruneEmptyCorpCardAccountsFromTx();         // 빈 계정과목 삭제
@@ -8809,6 +9069,7 @@ async function deleteCCTxRow(id) {
     return;
   }
   corpCardTxSelectedIds.delete(id);
+  logAudit('data_modify', `법인카드 삭제: ${info}`);
   const prunedDel = pruneEmptyCorpCardAccountsFromTx();          // 빈 계정과목 삭제
   updateCCTxAliasFilter();
   renderCorpCardTab();
@@ -8839,6 +9100,7 @@ async function deleteSelectedCCTx() {
     return;
   }
   corpCardTxSelectedIds.clear();
+  logAudit('data_modify', `법인카드 선택 삭제: ${ids.length.toLocaleString()}건 (합계 ${totalAmt.toLocaleString()}원)`);
   const prunedSel = pruneEmptyCorpCardAccountsFromTx();           // 빈 계정과목 삭제
   updateCCTxAliasFilter();
   renderCorpCardTab();
@@ -10174,6 +10436,7 @@ function resetCatSteps(step) {
 // 파일 읽기
 async function handleCatFile(file) {
   try {
+    logAudit('excel_upload', `카테고리 엑셀 업로드: ${file?.name || ''}`);
     catWB = await readWorkbook(file);
     buildCatSheetOptions();
     resetCatSteps(2);
@@ -10422,6 +10685,12 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
 (async function boot() {
   // 1. Supabase 초기화
   initSupabase();
+
+  // 1-b. 인증 게이트 — 로그인 핸들러 연결 후, 로그인(또는 세션 복원)될 때까지 대기
+  //   세션이 없으면 ensureAuthenticated()가 로그인 오버레이를 띄우고 Promise를 보류 →
+  //   아래 데이터 로딩/렌더는 로그인 성공 후에만 실행됨 (미인증 상태에서 데이터 노출 방지)
+  wireAuthHandlers();
+  await ensureAuthenticated();
 
   // 2. 카테고리 기본값 먼저 설정 (getMidCat/getBigCat 사용 가능하게)
   loadCatData();
@@ -10718,6 +10987,7 @@ function resetCFSteps(step) {
 
 async function handleCFFile(file) {
   try {
+    logAudit('excel_upload', `입출금 엑셀 업로드: ${file?.name || ''}`);
     cfWB = await readWorkbook(file);
     cfSheetName = cfWB.SheetNames[0];
     cfRows = sheetToRows(cfWB, cfSheetName);
@@ -11080,6 +11350,7 @@ function renderARPreview(parsed) {
 
 async function handleARFile(file) {
   try {
+    logAudit('excel_upload', `매출채권 엑셀 업로드: ${file?.name || ''}`);
     arWB = await readWorkbook(file);
     arSheetName = arWB.SheetNames[0];
     arRows = sheetToRows(arWB, arSheetName);
