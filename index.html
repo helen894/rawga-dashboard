@@ -578,14 +578,10 @@
     </div>
   </div>
 
-  <div class="chart-row">
+  <div class="chart-row" style="grid-template-columns:1fr">
     <div class="chart-box">
       <div class="chart-title">일별 현금 잔액 추이 <small id="chart-date-range"></small></div>
       <div class="chart-wrap" style="height:240px"><canvas id="cashChart" role="img" aria-label="일별 현금잔액 추이 차트">현금잔액 추이</canvas></div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">월별 매출 추이</div>
-      <div class="chart-wrap" style="height:240px"><canvas id="monthlyRevenueChart" role="img" aria-label="월별 매출 추이">월별 매출</canvas></div>
     </div>
   </div>
 
@@ -3602,7 +3598,7 @@ function renderCharts() {
   renderWeeklyChart();
   renderARBarChart();
   renderARDonutChart();
-  renderMonthlyRevenueChart();
+  // 월별 매출 추이 영역 삭제 — 호출 제거 (함수 정의는 유지)
   renderUpcomingPayments();
   // renderBudgetVsActual() — 당월 예정 대비 실적 카드 제거로 호출 중단 (함수 정의는 유지)
 }
