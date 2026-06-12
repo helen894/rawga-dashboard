@@ -999,17 +999,15 @@
       <div style="max-height:300px;overflow-y:auto;overflow-x:auto">
         <table style="width:100%;min-width:480px;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <colgroup>
-            <col style="width:32%">
-            <col style="width:22%">
-            <col style="width:22%">
-            <col style="width:24%">
+            <col style="width:44%">
+            <col style="width:28%">
+            <col style="width:28%">
           </colgroup>
           <thead>
             <tr>
               <th style="text-align:left;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">거래처(중분류)</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">입금</th>
               <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">출금</th>
-              <th style="text-align:right;padding:5px 6px;font-weight:500;color:var(--text3);white-space:nowrap;position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border)">미회수잔액</th>
             </tr>
           </thead>
           <tbody id="wkrpt-partner-tbody"></tbody>
@@ -6679,11 +6677,14 @@ function renderWeeklyReport() {
   const wCF  = cfData.filter(r => r.date >= wStart && r.date <= wEnd);
   const pwCF = cfData.filter(r => r.date >= pwStart && r.date <= pwEnd);
 
-  const wIn   = wCF.filter(r => r.status === '실제 입금').reduce((s, r) => s + (r.in  || 0), 0);
-  const wOut  = wCF.filter(r => r.status === '실제 지출').reduce((s, r) => s + (r.out || 0), 0);
+  // 계좌간이체(내부 자금이동)는 주간 입금/지출 합계·내역·거래처별 현황에서 제외
+  const isInterAccount = r => (r.mid_cat || '').trim() === '계좌간이체';
+
+  const wIn   = wCF.filter(r => r.status === '실제 입금' && !isInterAccount(r)).reduce((s, r) => s + (r.in  || 0), 0);
+  const wOut  = wCF.filter(r => r.status === '실제 지출' && !isInterAccount(r)).reduce((s, r) => s + (r.out || 0), 0);
   const wNet  = wIn - wOut;
-  const pwIn  = pwCF.filter(r => r.status === '실제 입금').reduce((s, r) => s + (r.in  || 0), 0);
-  const pwOut = pwCF.filter(r => r.status === '실제 지출').reduce((s, r) => s + (r.out || 0), 0);
+  const pwIn  = pwCF.filter(r => r.status === '실제 입금' && !isInterAccount(r)).reduce((s, r) => s + (r.in  || 0), 0);
+  const pwOut = pwCF.filter(r => r.status === '실제 지출' && !isInterAccount(r)).reduce((s, r) => s + (r.out || 0), 0);
   const pwNet = pwIn - pwOut;
   const wow   = wNet - pwNet;
 
@@ -6713,9 +6714,7 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-wk-end-sub').textContent = `기준일: ${wEnd} (일)`;
 
   // ── 입금 내역 테이블 ──────────────────────────────────
-  // KPI와 동일 기준: 실제 거래만 표시 (예정 거래 제외)
-  // 계좌간이체(내부 자금이동)는 주간 입출금 내역/거래처별 현황에서 제외
-  const isInterAccount = r => (r.mid_cat || '').trim() === '계좌간이체';
+  // KPI와 동일 기준: 실제 거래만 표시 (예정 거래 제외) — 계좌간이체 제외
   const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.in  - a.in);
   const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.out - a.out);
   const empty = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>`;
@@ -6756,17 +6755,10 @@ function renderWeeklyReport() {
     partnerMap[key].in  += r.in  || 0;
     partnerMap[key].out += r.out || 0;
   });
-  // AR 미회수 잔액 병합
-  const arRemMap = {};
-  arData.filter(a => (a.remaining || 0) > 0).forEach(a => {
-    const key = (a.partner || '').trim() || '(미분류)';
-    arRemMap[key] = (arRemMap[key] || 0) + (a.remaining || 0);
-  });
-  // 모든 파트너 통합 (CF에 없고 AR만 있는 거래처도 포함)
-  const allPartners = new Set([...Object.keys(partnerMap), ...Object.keys(arRemMap)]);
-  const partnerRows = [...allPartners]
-    .map(p => ({ p, in: (partnerMap[p] || {}).in || 0, out: (partnerMap[p] || {}).out || 0, rem: arRemMap[p] || 0 }))
-    .filter(x => x.in > 0 || x.out > 0 || x.rem > 0)
+  // 미회수 잔액(AR) 열 제거 — CF(중분류) 입금/출금만 표시
+  const partnerRows = Object.entries(partnerMap)
+    .map(([p, v]) => ({ p, in: v.in, out: v.out }))
+    .filter(x => x.in > 0 || x.out > 0)
     .sort((a, b) => (b.in + b.out) - (a.in + a.out));
 
   const partnerTbody = document.getElementById('wkrpt-partner-tbody');
@@ -6775,8 +6767,7 @@ function renderWeeklyReport() {
       <td style="${tdEll}font-weight:500" title="${x.p}">${x.p}</td>
       <td style="${tdBase}text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
       <td style="${tdBase}text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono)">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
-      <td style="${tdBase}text-align:right;color:${x.rem > 0 ? 'var(--amber)' : 'var(--text3)'};font-family:var(--mono)">${x.rem > 0 ? fmt(x.rem) : '—'}</td>
-    </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">이번 주 거래 없음</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:18px">이번 주 거래 없음</td></tr>`;
 
   // ── 매출채권 요약 ─────────────────────────────────────
   // elapsed 실시간 재계산: arData 원본 불변, 렌더링 전용 복사본에 경과일만 덮어씀
