@@ -8239,16 +8239,27 @@ function renderCorpCardTab() {
   corpCardColumns.forEach(c => { colTotals[c] = 0; });
   let grandTotal = 0;
 
+  // 계정과목(행)별 합계 — 정렬 기준
+  const accRowTotal = {};
+  corpCardAccounts.forEach(acc => {
+    let t = 0;
+    corpCardColumns.forEach(col => { t += (aliasAmounts[col] && aliasAmounts[col][acc]) || 0; });
+    accRowTotal[acc] = t;
+  });
+  // 금액(행 합계) 내림차순 표시 순서 — 원래 인덱스 i 보존(수정/삭제 버튼용)
+  const orderedAccts = corpCardAccounts
+    .map((acc, i) => ({ acc, i }))
+    .sort((a, b) => accRowTotal[b.acc] - accRowTotal[a.acc]);
+
   // 본문 행 (계정과목 + 집계 금액 셀 + 계정과목별 합계)
-  const rows = corpCardAccounts.map((acc, i) => {
-    let rowTotal = 0;
+  const rows = orderedAccts.map(({ acc, i }) => {
+    const rowTotal = accRowTotal[acc];
+    grandTotal += rowTotal;
     const cells = corpCardColumns.map(col => {
       const amt = (aliasAmounts[col] && aliasAmounts[col][acc]) || 0;
-      rowTotal += amt;
       colTotals[col] += amt;
       return `<td class="num">${amt ? amt.toLocaleString() : ''}</td>`;
     }).join('');
-    grandTotal += rowTotal;
     const rowTotalCell = `<td class="num corp-total-cell">${rowTotal ? rowTotal.toLocaleString() : ''}</td>`;
     return `<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span>` +
       `<button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button>` +
