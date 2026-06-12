@@ -147,6 +147,12 @@
   .corp-usage-table thead .corp-account-col { z-index: 4; background: var(--bg3); color: var(--text2); text-align: left; }
   .corp-usage-table td { text-align: right; font-family: var(--mono); color: var(--text); min-width: 68px; }
   .corp-usage-table tbody tr:hover td, .corp-usage-table tbody tr:hover .corp-account-col { background: var(--bg3); }
+  /* 합계 셀/행 강조 */
+  .corp-usage-table .corp-total-cell { font-weight: 700; background: var(--blue2); color: var(--blue); }
+  .corp-usage-table tr.corp-total-row th.corp-account-col,
+  .corp-usage-table tr.corp-total-row td { background: var(--blue2); color: var(--blue); font-weight: 700; border-top: 2px solid var(--blue); }
+  .corp-usage-table .corp-grand-total { background: var(--blue); color: #fff; }
+  .corp-usage-table tbody tr.corp-total-row:hover td, .corp-usage-table tbody tr.corp-total-row:hover .corp-account-col { background: var(--blue2); }
   .corp-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
   .corp-cell-hd { display: flex; align-items: center; gap: 3px; justify-content: center; }
   .corp-account-cell { display: flex; align-items: center; gap: 3px; }
@@ -8228,23 +8234,40 @@ function renderCorpCardTab() {
     `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardColumn(${i})">×</button></div></th>`
   ).join('');
 
-  // 본문 행 (계정과목 + 집계 금액 셀)
+  // 사용자별(열) 합계 누적용
+  const colTotals = {};
+  corpCardColumns.forEach(c => { colTotals[c] = 0; });
+  let grandTotal = 0;
+
+  // 본문 행 (계정과목 + 집계 금액 셀 + 계정과목별 합계)
   const rows = corpCardAccounts.map((acc, i) => {
+    let rowTotal = 0;
     const cells = corpCardColumns.map(col => {
       const amt = (aliasAmounts[col] && aliasAmounts[col][acc]) || 0;
-      const display = amt ? amt.toLocaleString() : '';
-      return `<td class="num">${display}</td>`;
+      rowTotal += amt;
+      colTotals[col] += amt;
+      return `<td class="num">${amt ? amt.toLocaleString() : ''}</td>`;
     }).join('');
+    grandTotal += rowTotal;
+    const rowTotalCell = `<td class="num corp-total-cell">${rowTotal ? rowTotal.toLocaleString() : ''}</td>`;
     return `<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span>` +
       `<button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button>` +
-      `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}</tr>`;
+      `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}${rowTotalCell}</tr>`;
   }).join('');
+
+  // 사용자별(열) 합계 행 + 총합
+  const totalCells = corpCardColumns.map(col =>
+    `<td class="num corp-total-cell">${colTotals[col] ? colTotals[col].toLocaleString() : ''}</td>`
+  ).join('');
+  const totalRow =
+    `<tr class="corp-total-row"><th class="corp-account-col corp-total-cell">합계</th>` +
+    `${totalCells}<td class="num corp-total-cell corp-grand-total">${grandTotal ? grandTotal.toLocaleString() : ''}</td></tr>`;
 
   container.innerHTML =
     `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> (보고 기준일 귀속월)</div>` +
     `<table class="corp-usage-table"><thead><tr>` +
-    `<th class="corp-account-col">계정과목</th>${colThs}</tr></thead>` +
-    `<tbody>${rows}</tbody></table>`;
+    `<th class="corp-account-col">계정과목</th>${colThs}<th class="corp-total-cell">합계</th></tr></thead>` +
+    `<tbody>${rows}${totalRow}</tbody></table>`;
 }
 
 // 탭 클릭 진입점 (기존 호출 유지)
