@@ -97,6 +97,9 @@
   .audit-upload   { background: var(--blue2);  color: var(--blue); }
   .audit-download  { background: #ede5ff; color: var(--purple); }
 
+  /* 매출채권 읽기 전용 — 입력폼/일괄바 숨김 */
+  body.ar-ro #ar-add-form, body.ar-ro #ar-bulk-bar { display: none !important; }
+
   /* KPI GRID */
   .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
   .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
@@ -550,7 +553,7 @@
 
   <!-- 법인카드 -->
   <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
-    <div class="chart-title" style="margin-bottom:12px">💳 법인카드</div>
+    <div class="chart-title" style="margin-bottom:12px">💳 법인카드 <span id="corp-card-period" style="font-size:12px;color:var(--text2);font-weight:400"></span></div>
     <div class="corp-card-grid">
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
@@ -2276,6 +2279,16 @@ const MID_CATS = Object.keys(MID_TO_BIG);
 let cfData = [];
 let arData = [];
 
+// 매출채권 자동화 스위치: 구글시트가 AR 진실원천이 되면서 CF→AR 자동 생성·차감·원복을 끔.
+// false면 addARFromCF/InorganicIncome/IncomeToPartner, deductARByIncome, revertARCreation/Deduction, syncInorganicAR가 모두 no-op.
+// (되돌리려면 true) — 기존에 저장된 ar_created_log/ar_deduct_log는 보존되나 사용 안 함.
+// ⚠ 시트 동기화 준비 완료 후 false로 바꾸면 CF→AR 자동화가 꺼짐 (현재는 현행 유지: true)
+const AR_AUTOMATION_ENABLED = true;
+
+// ⚠ 시트 동기화 준비 완료 후 true로 바꾸면 AR 탭 읽기전용 (현재는 현행 유지: false)
+// 매출채권 탭 읽기 전용: 구글시트가 진실원천이므로 대시보드에서 AR 추가/수정/삭제 차단.
+const AR_READONLY = false;
+
 /* 이메일 자동 발송 설정 — 기본값 */
 let emailSettings = {
   enabled:            false,
@@ -2864,10 +2877,14 @@ async function saveDataToSupabase(opts = {}) {
       _supa.from('ar_data').select('id').limit(1).single(),
     ]);
 
-    await Promise.all([
+    const _updates = [
       _supa.from('cf_data').update({ data: cfSnap, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id),
-      _supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id),
-    ]);
+    ];
+    // AR이 구글시트 관리(읽기전용)면 브라우저는 ar_data를 저장하지 않음 — 시트 동기화(push)와 충돌·덮어쓰기 방지
+    if (!AR_READONLY) {
+      _updates.push(_supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id));
+    }
+    await Promise.all(_updates);
 
     // Supabase 저장 완료 후 localStorage 재갱신
     // → SELECT 대기 중 Realtime 에코가 localStorage를 덮어쓴 경우를 복원
@@ -5185,7 +5202,7 @@ function renderARTable() {
       : `${arRisk.basisDays}일 <span class="ar-risk-badge ${arRisk.riskLevel === '위험' ? 'danger' : 'normal'}">${arRisk.riskLevel}</span>`;
     return `<tr>
       <td style="text-align:center">
-        <input type="checkbox" class="ar-row-check" data-id="${r._id}" ${arSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
+        ${AR_READONLY ? '' : `<input type="checkbox" class="ar-row-check" data-id="${r._id}" ${arSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">`}
       </td>
       <td style="font-weight:500">${r.partner}</td>
       <td class="date-cell">${r.start}</td>
@@ -5200,8 +5217,10 @@ function renderARTable() {
       <td class="num">${elapsedHtml}</td>
       <td style="font-size:11px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</td>
       <td style="white-space:nowrap">
-        <button class="btn sm ar-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
-        <button class="btn sm red ar-del-btn" data-id="${r._id}">삭제</button>
+        ${AR_READONLY
+          ? '<span style="color:var(--text3);font-size:11px">시트 관리</span>'
+          : `<button class="btn sm ar-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
+        <button class="btn sm red ar-del-btn" data-id="${r._id}">삭제</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -5238,6 +5257,7 @@ function renderARTable() {
 }
 
 function deleteAR(id) {
+  if (AR_READONLY) return; // 시트 동기화 모드 — AR 편집 차단
   if (blockIfOffline('매출채권 삭제')) return;
   const idx = arData.findIndex(r => r._id === id);
   if (idx === -1) return;
@@ -5320,6 +5340,7 @@ document.getElementById('ar-edit-modal').addEventListener('click', e => {
 });
 
 document.getElementById('ar-edit-save-btn').addEventListener('click', () => {
+  if (AR_READONLY) { closeAREditModal(); return; } // 시트 동기화 모드 — AR 편집 차단
   const idx = arData.findIndex(r => r._id === arEditId);
   if (idx === -1) { closeAREditModal(); return; }
 
@@ -5520,6 +5541,7 @@ document.getElementById('ar-delete-all-btn').addEventListener('click', () => {
 });
 
 document.getElementById('ar-add-btn').addEventListener('click', () => {
+  if (AR_READONLY) return; // 시트 동기화 모드 — AR 편집 차단
   const partner = document.getElementById('ar-partner').value.trim();
   const start = document.getElementById('ar-start').value;
   const expected = parseFloat(document.getElementById('ar-expected').value) || 0;
@@ -5897,6 +5919,7 @@ document.getElementById('ar-bulk-edit-modal').addEventListener('click', e => {
  * @returns {{ ok, reason, totalCut, leftover, log }}
  */
 function deductARByIncome(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return { ok: false, reason: '자동차감 비활성 (시트 동기화)', log: [] }; // 자동화 OFF
   if (cfRow.type !== '입금' || !cfRow.mid_cat || (cfRow.in || 0) <= 0)
     return { ok: false, reason: '입금 건이 아니거나 중분류/금액 없음', log: [] };
 
@@ -5979,6 +6002,7 @@ function deductARByIncome(cfRow) {
  * @returns {{ ok: boolean, reason: string, reverted: number }}
  */
 function revertARDeduction(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return { ok: true, reason: '자동화 비활성 (시트 동기화)', reverted: 0 }; // 자동화 OFF
   if (cfRow.ar_applied !== '완료')
     return { ok: false, reason: 'AR 차감 이력 없음', reverted: 0 };
 
@@ -6035,6 +6059,7 @@ function revertARDeduction(cfRow) {
  * @returns {boolean} 추가됐으면 true, 중복/미해당이면 false
  */
 function addARFromCF(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return false; // 자동화 OFF (시트 동기화 사용)
   if (cfRow.type !== '지출' || !cfRow.mid_cat || cfRow.out <= 0) return false;
 
   const partner = normalizePartnerName(cfRow.mid_cat);
@@ -6094,6 +6119,7 @@ function addARFromCF(cfRow) {
  * @returns {true | string} 생성됐으면 true, 조건 불충족 시 실패 이유 문자열
  */
 function addARFromInorganicIncome(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return '자동생성 비활성'; // 자동화 OFF (시트 동기화 사용)
   // 각 조건 실패 시 이유 문자열 반환 (진단용)
   if (cfRow.type !== '지출')          return '구분='+cfRow.type;
   if (cfRow.big_cat !== '인오가닉')   return '대분류='+cfRow.big_cat;
@@ -6150,6 +6176,7 @@ function addARFromInorganicIncome(cfRow) {
  * @returns {{ ok, reverted, protected, notFound }}
  */
 function revertARCreation(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return { ok: true, reverted: 0, protected: 0, notFound: 0 }; // 자동화 OFF
   const log = cfRow.ar_created_log || [];
   const active = log.filter(e => !e.reverted);
   if (!active.length) return { ok: true, reverted: 0, protected: 0, notFound: 0 };
@@ -6200,6 +6227,7 @@ function revertARCreation(cfRow) {
  * @returns {{ synced: number, warnings: string[] }}
  */
 function syncInorganicAR(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return { synced: 0, warnings: [] }; // 자동화 OFF (시트 동기화 사용)
   const today = new Date().toISOString().slice(0, 10);
   let synced = 0;
   const warnings = [];
@@ -6254,6 +6282,7 @@ function syncInorganicAR(cfRow) {
  * @returns {boolean} 추가됐으면 true
  */
 function addARFromIncomeToPartner(cfRow) {
+  if (!AR_AUTOMATION_ENABLED) return false; // 자동화 OFF (시트 동기화 사용)
   if (cfRow.type !== '입금' || !cfRow.mid_cat || (cfRow.in || 0) <= 0) return false;
 
   const partner = cfRow.mid_cat;
@@ -9690,6 +9719,7 @@ function getDefaultAR() {
 
 function renderAll() {
   renderKPIs();
+  renderCorpCardDashboard();
   renderCharts();
   buildCFFilterSelects();
   renderCFTable();
@@ -9697,6 +9727,31 @@ function renderAll() {
   if (document.getElementById('panel-reporting').classList.contains('active')) {
     renderActiveReportingSubTab();
   }
+}
+
+/* 대시보드 법인카드 카드 — 당월(보고 기준일이 속한 달) 사용금액을 사람/카드별로 표시.
+ * 집계 기준은 법인카드 탭과 동일(normalizeCCTxAlias). 데이터 없는 달은 0으로 표시됨. */
+function renderCorpCardDashboard() {
+  const ym = String(refDate || todayKST()).slice(0, 7); // 'YYYY-MM'
+  const totals = {};
+  for (const row of corpCardTxData) {
+    if (String(row.use_date || '').slice(0, 7) !== ym) continue; // 당월만
+    const col = normalizeCCTxAlias(row.card_alias);
+    if (!col) continue;
+    totals[col] = (totals[col] || 0) + (Number(row.billing_amount) || 0);
+  }
+  const idMap = {
+    '하경수': 'corp-card-ha', '김현민': 'corp-card-kim',
+    'M01': 'corp-card-m01', 'M02': 'corp-card-m02', 'M03': 'corp-card-m03',
+    '박우현': 'corp-card-park', '문성삼': 'corp-card-moon',
+    'IL': 'corp-card-il', 'BX': 'corp-card-bx', 'SO': 'corp-card-so',
+  };
+  Object.keys(idMap).forEach(col => {
+    const el = document.getElementById(idMap[col]);
+    if (el) el.textContent = (totals[col] || 0).toLocaleString();
+  });
+  const periodEl = document.getElementById('corp-card-period');
+  if (periodEl) periodEl.textContent = `(${ym} 사용액)`;
 }
 
 /* =============================================
@@ -10835,6 +10890,9 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
 
 /* ===== BOOT ===== */
 (async function boot() {
+  // 매출채권 읽기 전용 클래스 적용 (입력폼/일괄바 숨김)
+  if (AR_READONLY) document.body.classList.add('ar-ro');
+
   // 1. Supabase 초기화
   initSupabase();
 
