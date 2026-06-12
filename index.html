@@ -123,7 +123,8 @@
 
   /* 법인카드 미니 카드 그리드 */
   .corp-card-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-  .corp-mini-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 8px; min-width: 0; }
+  .corp-mini-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 8px; min-width: 0; cursor: pointer; transition: filter 0.12s, box-shadow 0.12s; }
+  .corp-mini-card:hover { filter: brightness(1.06); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
   .corp-card-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; white-space: nowrap; }
   .corp-card-value { font-size: 15px; font-weight: 700; color: var(--text); font-family: var(--mono); word-break: break-all; }
   .corp-mini-card.corp-person-card { background: #2D7059; border-color: #2D7059; }
@@ -2271,6 +2272,8 @@ const cctxColumnFilters = {
   use_date: null, card_alias: null,
   card_no: null, merchant: null, billing_amount: null, memo: null,
 };
+// 사용자(카드열) 필터 — 대시보드 법인카드 카드 클릭 시 설정. normalizeCCTxAlias 기준(별칭 여러 개를 한 사람으로).
+let cctxPersonFilter = null;
 let _cctxOpenPopover = null; // 현재 열린 팝오버 컬럼명
 const DESC_TO_MID = {"Npay정산":"매출","스마트스토어정":"매출","카카오페이정산":"매출","Toss정산0330":"매출","한국정보통신(주)":"매출","오늘의집정산":"매출","Toss정산0331":"매출","Toss정산0401":"매출","Toss정산0402":"매출","Toss정산0403":"매출","쿠팡(주)":"매출","(주)씨제이이엔엠":"매출","엔에이치엔페이":"매출","(유)동이식품_매출":"매출","분당（１４４）　　　":"세금과공과금","성남시지방소":"세금과공과금","쿠팡페이주식회":"매출","씨엔에이바이오":"매입대금","태성수산 영어":"매입대금","기업주식회사　월드씨푸드":"매입대금","하나(주)모락스":"운반비","(주)디앤비푸드_매출":"매출","(주)제이에스푸":"매입대금","우리대주회계법인":"지급수수료","신한동백로지스주식회사":"운반비","하나(사)한국건강기능식":"지급수수료","기업(주)옥수":"매입대금","AMAZON":"매출","tosspaymen":"매출","(주)다날":"매출","(주)씨제이이엔":"매출","신한미디어브릿지그룹(주":"지급수수료","기업RC주식회사　로가":"연구개발비","신한(주)지앤원":"매입대금","신한유한회사　위써트인증":"지급수수료","신한카드":"법인카드 대금","롯데카드(주)":"법인카드 대금","Toss정산0406":"매출","급여":"급여","4대보험":"보험료","원천세":"세금과공과금","이자-32-00039 다음납입예정일-20260329":"이자비용","이자-32-00035 다음납입예정일-20260328":"이자비용","이자-32-00042 다음납입예정일-20260329":"이자비용","신솔민":"광고선전비","임형규":"광고선전비","우미연":"광고선전비","신병철":"광고선전비","방군석":"광고선전비","(유)바다향":"매출","신동섭":"매입대금","(주)로가제이에":"대여금 지급","아난티 오시리":"매출","jht코스메틱":"매출","황건숙":"광고선전비","홍지민":"광고선전비","박민아":"광고선전비","유나윤":"광고선전비","김선영":"광고선전비","이상훈(페퍼스":"광고선전비","휴온스엔":"매출","(주)프라임카고":"운반비","(유)동이식품_매출":"매출","주)로릭코리아":"운반비","김대영(이성국":"지급수수료","중진공대출":"이자비용","tosspaymen":"매출","하경수_회수":"대여금 수취","주식회사에이치이공일":"대여금 수취","(주)로가제이에_회수":"대여금 수취","신한(주)지앤원":"매입대금","농협(주)우앤파트너스":"지급수수료","주식회사로가":"계좌간이체","신한주식회사　로가":"계좌간이체","주식회사 호마":"매입대금","주식회사 코코":"매입대금","(주)루리인터내":"매입대금","이아인":"광고선전비","박미영":"광고선전비","김세라":"광고선전비","황귀순":"광고선전비","이태호":"광고선전비","안나근":"광고선전비","장혜진":"광고선전비","이솔":"광고선전비","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","RAWGA USA":"대여금 지급","Toss정산0309":"매출","중진공대출원리":"이자비용","SMS140***24316":"지급수수료","이성국제특허법_반환":"기타 입금","주식회사무신사":"매출","SSG상품대":"매출","안성환":"광고선전비","모은지":"광고선전비","고재경":"광고선전비","허영식":"광고선전비","조영현":"광고선전비","주식회사　로가":"계좌간이체","주식회사 로가":"계좌간이체","타행급여15건":"급여","당행급여9건":"급여","(주)로가제이에":"대여금 지급","(주)더블유컨셉":"매출","(주)씨제이이엔":"매출","허진관":"광고선전비","이상희":"광고선전비","방군석":"광고선전비","서지은":"광고선전비","이윤서":"광고선전비","허진숙":"광고선전비","우미연":"광고선전비","문현주":"광고선전비","(주)에이치이공":"대여금 수취","성남시등록면":"세금과공과금","장부식_수취":"대여금 수취","미쓰이소꼬코리":"운반비","(주)로가":"소모품비","(유)바다향":"매출","이준영":"광고선전비","방군석":"광고선전비","유도연":"광고선전비","김한나":"광고선전비","김미아":"광고선전비","주식회사　로가_투자":"투자금","주식회사로가_투자":"투자금"};
 const MID_TO_BIG = {"세금과공과금":"세금과공과금","매입대금":"재고/상품매입","운반비":"판매관리비","지급수수료":"판매관리비","연구개발비":"연구개발비","법인카드 대금":"자금이동/제외","급여":"판매관리비","보험료":"보험료","이자비용":"금융비용","광고선전비":"판매관리비","대여금 지급":"자금이동/제외","소모품비":"판매관리비","통신비":"판매관리비","대여금 상환":"자금이동/제외","기타 지출":"기타 지출","판매수수료":"판매관리비","보증금":"보증금","설비 대금":"세종시","임차료":"판매관리비","여비교통비":"판매관리비","매출":"기타","대여금 수취":"기타","투자금":"자금이동/제외","이자수익":"기타","기타 입금":"기타","인오가닉":"인오가닉","계좌간이체":"자금이동/제외"};
@@ -8525,6 +8528,8 @@ function getCCTxFilteredRows() {
   if (to)       rows = rows.filter(r => (r.use_date || '') <= to);
   if (alias)    rows = rows.filter(r => r.card_alias === alias);
   if (merchant) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(merchant));
+  // 사용자(카드열) 필터 — 별칭 여러 개를 normalizeCCTxAlias로 한 사람에 묶어 매칭
+  if (cctxPersonFilter) rows = rows.filter(r => normalizeCCTxAlias(r.card_alias) === cctxPersonFilter);
   // Step 2: 헤더별 컬럼 필터 (한 번의 파이프라인으로 처리, 원본 배열 미변경)
   for (const [field, f] of Object.entries(cctxColumnFilters)) {
     if (!f) continue;
@@ -8865,14 +8870,47 @@ function renderCCTxFilterTags() {
   const area = document.getElementById('cctx-active-filter-tags');
   if (!area) return;
   const active = Object.entries(cctxColumnFilters).filter(([, f]) => f != null);
-  const cnt = active.length;
+  const cnt = active.length + (cctxPersonFilter ? 1 : 0);
   const resetBtn = document.getElementById('cctx-filter-reset');
   if (resetBtn) resetBtn.textContent = cnt > 0 ? `필터 초기화 (${cnt})` : '필터 초기화';
   if (!cnt) { area.style.display = 'none'; return; }
   area.style.display = 'flex';
-  area.innerHTML = active.map(([field, f]) =>
+  let html = '';
+  if (cctxPersonFilter) {
+    html += `<span class="cctx-filter-tag">사용자: ${cctxPersonFilter}<button class="cctx-filter-tag-x" onclick="clearCCTxPersonFilter()" title="필터 제거">×</button></span>`;
+  }
+  html += active.map(([field, f]) =>
     `<span class="cctx-filter-tag">${_describeCCTxFilter(field, f)}<button class="cctx-filter-tag-x" onclick="clearCCTxColumnFilter('${field}')" title="필터 제거">×</button></span>`
   ).join('');
+  area.innerHTML = html;
+}
+
+function clearCCTxPersonFilter() {
+  cctxPersonFilter = null;
+  renderCCTxFilterTags();
+  renderCCTxTable();
+}
+
+/* 대시보드 법인카드 카드 클릭 → 법인카드 탭으로 이동 + 해당 사용자/해당월 사용내역 필터 */
+function goToCorpCardForPerson(col) {
+  if (!col) return;
+  cctxPersonFilter = col;
+  const fromEl = document.getElementById('cctx-from');
+  const toEl   = document.getElementById('cctx-to');
+  if (fromEl) fromEl.value = monthStart(refDate);
+  if (toEl)   toEl.value   = monthEnd(refDate);
+  // 카드 전체/가맹점/별칭 단일필터는 초기화(사용자 필터와 혼선 방지)
+  const aliasSel = document.getElementById('cctx-alias'); if (aliasSel) aliasSel.value = '';
+  const mEl = document.getElementById('cctx-merchant');   if (mEl) mEl.value = '';
+  // 탭 전환
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const tab = document.querySelector('.tab[data-tab="corp-card"]');
+  const panel = document.getElementById('panel-corp-card');
+  if (tab) tab.classList.add('active');
+  if (panel) panel.classList.add('active');
+  renderCorporateCardTab();
+  renderCCTxTable();
 }
 
 function clearCCTxColumnFilter(field) {
@@ -9547,6 +9585,7 @@ document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxU
 document.getElementById('cctx-filter-reset').addEventListener('click', () => {
   ['cctx-from', 'cctx-to', 'cctx-merchant'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const sel = document.getElementById('cctx-alias'); if (sel) sel.value = '';
+  cctxPersonFilter = null; // 사용자 필터 초기화
   // 헤더 컬럼 필터 전체 초기화
   Object.keys(cctxColumnFilters).forEach(k => { cctxColumnFilters[k] = null; });
   closeAllCCTxPopovers();
@@ -9753,6 +9792,18 @@ function renderCorpCardDashboard() {
   const periodEl = document.getElementById('corp-card-period');
   if (periodEl) periodEl.textContent = `(${ym} 사용액)`;
 }
+
+// 대시보드 법인카드 카드 클릭 → 법인카드 탭 + 해당 사용자/해당월 필터 (카드 라벨 텍스트 = 카드열명)
+(function wireCorpCardClicks() {
+  const box = document.getElementById('corp-card-box');
+  if (!box) return;
+  box.addEventListener('click', e => {
+    const card = e.target.closest('.corp-mini-card');
+    if (!card) return;
+    const label = card.querySelector('.corp-card-label');
+    if (label) goToCorpCardForPerson(label.textContent.trim());
+  });
+})();
 
 /* =============================================
    CATEGORY MANAGEMENT
