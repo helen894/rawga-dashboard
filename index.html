@@ -6714,8 +6714,10 @@ function renderWeeklyReport() {
 
   // ── 입금 내역 테이블 ──────────────────────────────────
   // KPI와 동일 기준: 실제 거래만 표시 (예정 거래 제외)
-  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
-  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
+  // 계좌간이체(내부 자금이동)는 주간 입출금 내역/거래처별 현황에서 제외
+  const isInterAccount = r => (r.mid_cat || '').trim() === '계좌간이체';
+  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.in  - a.in);
+  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.out - a.out);
   const empty = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">내역 없음</td></tr>`;
 
   const groupedIn  = groupWeeklyRowsByMid(inRows,  'in');
@@ -6748,6 +6750,7 @@ function renderWeeklyReport() {
   // 두 키가 다른 필드여서 자동 매칭은 오매칭 위험 → 구조 변경 없이 trim만 적용
   const partnerMap = {};
   wCF.forEach(r => {
+    if (isInterAccount(r)) return; // 계좌간이체 제외
     const key = (r.mid_cat || '').trim() || '(미분류)';
     if (!partnerMap[key]) partnerMap[key] = { in: 0, out: 0 };
     partnerMap[key].in  += r.in  || 0;
@@ -7051,15 +7054,17 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   const nextCash = cash + nwIn - nwOut; // cash = wEnd 기준 → 차주 예상기말도 wEnd 기준
 
   // ── 입금/지출 내역 (KPI와 동일 기준: 실제 거래만) ──
-  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0).sort((a, b) => b.in  - a.in);
-  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0).sort((a, b) => b.out - a.out);
+  // 계좌간이체(내부 자금이동)는 주간 입출금 내역/대분류별 집계에서 제외
+  const isInterAccount = r => (r.mid_cat || '').trim() === '계좌간이체';
+  const inRows  = wCF.filter(r => r.status === '실제 입금' && (r.in  || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.in  - a.in);
+  const outRows = wCF.filter(r => r.status === '실제 지출' && (r.out || 0) > 0 && !isInterAccount(r)).sort((a, b) => b.out - a.out);
   const groupedIn  = groupWeeklyRowsByMid(inRows,  'in');
   const groupedOut = groupWeeklyRowsByMid(outRows, 'out');
   const wkLabel = `${fmtMD(wStart)}~${fmtMD(wEnd)}`;
 
   // ── 대분류별 집계 (big_cat 기준, 입금+지출 합계 큰 순) ──
   const bigMap = {};
-  wCF.forEach(r => { const k = (r.big_cat||'').trim()||'(미분류)'; if (!bigMap[k]) bigMap[k]={in:0,out:0}; bigMap[k].in+=(r.in||0); bigMap[k].out+=(r.out||0); });
+  wCF.forEach(r => { if (isInterAccount(r)) return; const k = (r.big_cat||'').trim()||'(미분류)'; if (!bigMap[k]) bigMap[k]={in:0,out:0}; bigMap[k].in+=(r.in||0); bigMap[k].out+=(r.out||0); });
   const bigCatRows = Object.entries(bigMap)
     .map(([cat, v]) => ({ cat, in: v.in, out: v.out }))
     .filter(x => x.in > 0 || x.out > 0)
