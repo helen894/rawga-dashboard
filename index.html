@@ -8199,11 +8199,13 @@ function renderCorpCardTab() {
   const container = document.getElementById('corp-table-container');
   if (!container) return;
 
-  // ── 사용내역 기준 카드×계정과목 금액 집계 ─────────────────────────
+  // ── 사용내역 기준 카드×계정과목 금액 집계 (보고기준일 귀속월만) ──────
   // aliasAmounts[colName][accountName] = 청구금액 합계
+  const ym = String(refDate || todayKST()).slice(0, 7); // 'YYYY-MM' — 보고기준일 귀속월
   const aliasAmounts = {};
   const unmapped = new Set();
   for (const row of corpCardTxData) {
+    if (String(row.use_date || '').slice(0, 7) !== ym) continue; // 귀속월만 집계
     const col = normalizeCCTxAlias(row.card_alias);
     const acc = String(row.memo ?? '').trim();
     const amt = Number(row.billing_amount) || 0;
@@ -8239,6 +8241,7 @@ function renderCorpCardTab() {
   }).join('');
 
   container.innerHTML =
+    `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> (보고 기준일 귀속월)</div>` +
     `<table class="corp-usage-table"><thead><tr>` +
     `<th class="corp-account-col">계정과목</th>${colThs}</tr></thead>` +
     `<tbody>${rows}</tbody></table>`;
@@ -9765,6 +9768,10 @@ function renderAll() {
   renderARTable();
   if (document.getElementById('panel-reporting').classList.contains('active')) {
     renderActiveReportingSubTab();
+  }
+  // 법인카드 탭이 열려 있으면 상단 표(귀속월 집계)도 보고기준일에 맞춰 갱신
+  if (document.getElementById('panel-corp-card')?.classList.contains('active')) {
+    renderCorpCardTab();
   }
 }
 
