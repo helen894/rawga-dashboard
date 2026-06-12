@@ -2214,13 +2214,14 @@
       <thead>
         <tr>
           <th style="width:150px">시각</th>
-          <th style="width:180px">사용자</th>
+          <th style="width:170px">사용자</th>
+          <th style="width:120px">IP</th>
           <th style="width:110px">액션</th>
           <th>상세</th>
         </tr>
       </thead>
       <tbody id="audit-log-tbody">
-        <tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">로그를 불러오는 중...</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:var(--text3);padding:18px">로그를 불러오는 중...</td></tr>
       </tbody>
     </table>
   </div>
@@ -2535,12 +2536,12 @@ async function renderAuditLog() {
   const { data, error } = await q;
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
     if (countEl) countEl.textContent = '';
     return;
   }
   if (!data || !data.length) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:18px">기록된 로그가 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:18px">기록된 로그가 없습니다.</td></tr>`;
     if (countEl) countEl.textContent = '';
     return;
   }
@@ -2561,6 +2562,7 @@ async function renderAuditLog() {
     return `<tr>
       <td style="white-space:nowrap;color:var(--text2)">${fmtDt(row.created_at)}</td>
       <td>${esc(row.user_email) || '<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap">${esc(row.ip) || '<span style="color:var(--text3)">—</span>'}</td>
       <td><span class="audit-badge ${cls}">${lbl}</span></td>
       <td>${esc(row.detail) || '<span style="color:var(--text3)">—</span>'}</td>
     </tr>`;
