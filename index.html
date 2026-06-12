@@ -2291,11 +2291,11 @@ let arData = [];
 // false면 addARFromCF/InorganicIncome/IncomeToPartner, deductARByIncome, revertARCreation/Deduction, syncInorganicAR가 모두 no-op.
 // (되돌리려면 true) — 기존에 저장된 ar_created_log/ar_deduct_log는 보존되나 사용 안 함.
 // ⚠ 시트 동기화 준비 완료 후 false로 바꾸면 CF→AR 자동화가 꺼짐 (현재는 현행 유지: true)
-const AR_AUTOMATION_ENABLED = true;
+const AR_AUTOMATION_ENABLED = false;
 
 // ⚠ 시트 동기화 준비 완료 후 true로 바꾸면 AR 탭 읽기전용 (현재는 현행 유지: false)
 // 매출채권 탭 읽기 전용: 구글시트가 진실원천이므로 대시보드에서 AR 추가/수정/삭제 차단.
-const AR_READONLY = false;
+const AR_READONLY = true;
 
 /* 이메일 자동 발송 설정 — 기본값 */
 let emailSettings = {
