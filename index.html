@@ -2384,6 +2384,37 @@ function showAppChrome() {
   const label = document.getElementById('user-email-label');
   if (label) label.textContent = currentUserEmail || '';
   if (badge) badge.style.display = 'flex';
+  startAutoLogout();
+}
+
+/* ── 자동 로그아웃: 날짜(자정) 변경 시 ─────────────────────────
+   로그인한 로컬 날짜가 바뀌면(자정 통과) 즉시 로그아웃(경고 없음).
+   끄려면 AUTO_LOGOUT_ON_DATE_CHANGE = false. */
+const AUTO_LOGOUT_ON_DATE_CHANGE = true;
+let _autoLogoutStarted = false;
+let _loginDateStr = null;
+function _localDateStr() { return new Date().toLocaleDateString('sv-SE'); } // 'YYYY-MM-DD' (로컬)
+
+/* 수동/자동 공통 로그아웃 경로 */
+async function doLogout(reason) {
+  try { await logAudit('logout', reason); } catch {}
+  try { await _supa.auth.signOut(); } catch {}
+  location.reload();
+}
+
+function _checkDateRollover() {
+  if (!AUTO_LOGOUT_ON_DATE_CHANGE || !_loginDateStr) return;
+  const today = _localDateStr();
+  if (today !== _loginDateStr) doLogout(`자동 로그아웃 (날짜 변경 ${_loginDateStr}→${today})`);
+}
+
+function startAutoLogout() {
+  if (!AUTO_LOGOUT_ON_DATE_CHANGE || _autoLogoutStarted) return;
+  _autoLogoutStarted = true;
+  _loginDateStr = _localDateStr();                       // 로그인 시점 날짜 기준
+  setInterval(_checkDateRollover, 60 * 1000);            // 1분마다 자정 통과 검사
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _checkDateRollover(); });
+  window.addEventListener('focus', _checkDateRollover);  // 절전/백그라운드 후 복귀 시 즉시 검사
 }
 
 /* 인증 게이트 — 세션 있으면 즉시 통과, 없으면 로그인 대기 (Promise) */
@@ -2470,11 +2501,7 @@ function wireAuthHandlers() {
   }
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-      try { await logAudit('logout', `로그아웃: ${currentUserEmail || ''}`); } catch {}
-      try { await _supa.auth.signOut(); } catch {}
-      location.reload();
-    });
+    logoutBtn.addEventListener('click', () => doLogout(`로그아웃: ${currentUserEmail || ''}`));
   }
   const auditRefresh = document.getElementById('audit-refresh-btn');
   if (auditRefresh) auditRefresh.addEventListener('click', renderAuditLog);
