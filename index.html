@@ -708,6 +708,7 @@
     <input type="text" id="cf-search" placeholder="거래내용 검색..." style="min-width:160px">
     <button class="btn" id="cf-filter-btn">조회</button>
     <button class="btn" id="cf-unassigned-btn" style="white-space:nowrap;color:var(--text2)" title="중분류가 없는 항목만 표시">미분류만</button>
+    <button class="btn" id="cf-autoclass-btn" style="white-space:nowrap;color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)" title="중분류 미분류 행을 학습된 매핑으로 자동 추천 → 검토 후 적용">✨ 자동분류 추천</button>
     <button class="btn" id="cf-overdue-btn" style="white-space:nowrap;color:var(--amber);border-color:var(--amber)" title="보고기준일 또는 오늘 이하인 예정 거래 목록 확인 및 전환">⚠ 만기 예정 확인</button>
   </div>
 
@@ -1550,6 +1551,34 @@
 </div>
 
 <!-- ======== CF 선택 수정 모달 ======== -->
+<div class="modal-backdrop hidden" id="cf-autoclass-modal">
+  <div class="modal" style="width:760px;max-width:94vw">
+    <div class="modal-header">
+      <span class="modal-title">✨ 중분류 자동분류 추천</span>
+      <button class="modal-close" onclick="closeCFAutoClassModal()">×</button>
+    </div>
+    <div id="cf-autoclass-summary" style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.7"></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+      <span style="display:inline-block;padding:1px 7px;border-radius:10px;background:rgba(34,197,94,0.15);color:var(--green)">추천</span> 정규화 완전일치(고신뢰) ·
+      <span style="display:inline-block;padding:1px 7px;border-radius:10px;background:rgba(245,158,11,0.15);color:var(--amber)">검토</span> 부분일치(저신뢰, 직접 확인 권장).
+      체크된 행만 적용되며, <b>확정한 적요→중분류는 학습</b>되어 다음부터 자동 분류됩니다.
+    </div>
+    <div class="tbl-wrap" style="max-height:48vh;overflow:auto;border:1px solid var(--border2);border-radius:8px">
+      <table style="font-size:12px">
+        <thead><tr>
+          <th style="width:34px;text-align:center"><input type="checkbox" id="cf-autoclass-all" title="전체 선택/해제" style="cursor:pointer"></th>
+          <th>거래일</th><th>거래내용</th><th>구분</th><th style="width:180px">추천 중분류</th><th style="width:64px">신뢰도</th>
+        </tr></thead>
+        <tbody id="cf-autoclass-list"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn green" id="cf-autoclass-apply-btn">선택 항목 적용 (0건)</button>
+      <button class="btn" onclick="closeCFAutoClassModal()">취소</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="cf-bulk-edit-modal">
   <div class="modal" style="width:540px">
     <div class="modal-header">
@@ -4638,6 +4667,93 @@ document.getElementById('cf-unassigned-btn').addEventListener('click', () => {
   renderCFTable();
 });
 document.getElementById('cf-overdue-btn').addEventListener('click', openCFOverdueModal);
+
+// ── 중분류 자동분류 추천 (레벨1: 정규화/부분일치 → 검토 후 적용 + 학습) ──
+let _autoClassRows = [];
+function _acEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function openCFAutoClassify() {
+  _ciSig = ''; // 최신 학습/데이터 반영 위해 인덱스 강제 재빌드
+  const cands = (Array.isArray(cfData) ? cfData : []).filter(r => r && !String(r.mid_cat || '').trim());
+  _autoClassRows = cands.map(r => {
+    const c = classifyMid(r.desc, r.type);
+    return { id: r._id, desc: r.desc || '', type: r.type || '', date: r.date || '', suggested: c.mid, conf: c.conf };
+  });
+  const withSug = _autoClassRows.filter(r => r.suggested);
+  const high = withSug.filter(r => r.conf === 'exact' || r.conf === 'normalized').length;
+  const low  = withSug.filter(r => r.conf === 'partial').length;
+  const none = _autoClassRows.length - withSug.length;
+  document.getElementById('cf-autoclass-summary').innerHTML =
+    `미분류 <b style="color:var(--text)">${_autoClassRows.length}</b>건 중 추천 <b style="color:var(--text)">${withSug.length}</b>건 ` +
+    `(<span style="color:var(--green)">고신뢰 ${high}</span> / <span style="color:var(--amber)">검토 ${low}</span>) · 추천없음 ${none}건`;
+  renderCFAutoClassList();
+  const allChk = document.getElementById('cf-autoclass-all'); if (allChk) allChk.checked = false;
+  document.getElementById('cf-autoclass-modal').classList.remove('hidden');
+}
+function renderCFAutoClassList() {
+  const mids = getMidCats();
+  const body = document.getElementById('cf-autoclass-list');
+  const rows = _autoClassRows.filter(r => r.suggested); // 추천 있는 행만 표시
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:18px">추천 가능한 미분류 행이 없습니다. (학습된 매핑과 일치/유사한 적요가 없음)</td></tr>`;
+    updateAutoClassCount(); return;
+  }
+  body.innerHTML = rows.map(r => {
+    const hi = (r.conf === 'exact' || r.conf === 'normalized');
+    const badge = hi
+      ? `<span style="padding:1px 7px;border-radius:10px;background:rgba(34,197,94,0.15);color:var(--green)">추천</span>`
+      : `<span style="padding:1px 7px;border-radius:10px;background:rgba(245,158,11,0.15);color:var(--amber)">검토</span>`;
+    const opts = `<option value="">(선택 안 함)</option>` + mids.map(m => `<option value="${_acEsc(m)}"${m===r.suggested?' selected':''}>${_acEsc(m)}</option>`).join('');
+    return `<tr data-id="${_acEsc(r.id)}"${hi?'':' style="background:rgba(245,158,11,0.05)"'}>
+      <td style="text-align:center"><input type="checkbox" class="ac-chk" ${hi?'checked':''} style="cursor:pointer"></td>
+      <td style="white-space:nowrap">${_acEsc(r.date)}</td>
+      <td>${_acEsc(r.desc)}</td>
+      <td style="white-space:nowrap">${_acEsc(r.type)}</td>
+      <td><select class="ac-sel" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 6px;border-radius:6px;cursor:pointer">${opts}</select></td>
+      <td style="text-align:center">${badge}</td>
+    </tr>`;
+  }).join('');
+  body.querySelectorAll('.ac-chk').forEach(c => c.addEventListener('change', updateAutoClassCount));
+  updateAutoClassCount();
+}
+function updateAutoClassCount() {
+  const n = document.querySelectorAll('#cf-autoclass-list .ac-chk:checked').length;
+  const btn = document.getElementById('cf-autoclass-apply-btn');
+  if (btn) btn.textContent = `선택 항목 적용 (${n}건)`;
+}
+async function applyCFAutoClassify() {
+  const trs = [...document.querySelectorAll('#cf-autoclass-list tr[data-id]')];
+  let applied = 0;
+  trs.forEach(tr => {
+    const chk = tr.querySelector('.ac-chk');
+    if (!chk || !chk.checked) return;
+    const sel = tr.querySelector('.ac-sel'); const mid = sel ? sel.value : '';
+    if (!mid) return;
+    const r = cfData.find(x => x._id === tr.getAttribute('data-id'));
+    if (!r) return;
+    r.mid_cat = mid;
+    r.big_cat = getBigCat(mid);
+    if (r.desc) {                                   // 학습: 적요→중분류 (+ 적요::구분)
+      catDescToMid[r.desc] = mid;
+      if (r.type) catDescTypeToMid[makeComboKey(r.desc, r.type)] = mid;
+    }
+    applied++;
+  });
+  if (!applied) { showToast('적용할 항목을 선택하세요.', 'red'); return; }
+  _ciSig = '';
+  try { await saveDataExplicit(); await saveCatDataToSupabase(); }
+  catch(e) { console.warn('자동분류 저장 실패:', e); }
+  logAudit('data_modify', `중분류 자동분류 적용 ${applied}건`);
+  closeCFAutoClassModal();
+  renderAll();
+  showToast(`✨ ${applied}건 자동분류 적용 완료 (학습됨)`, 'green');
+}
+function closeCFAutoClassModal() { document.getElementById('cf-autoclass-modal').classList.add('hidden'); }
+document.getElementById('cf-autoclass-btn').addEventListener('click', openCFAutoClassify);
+document.getElementById('cf-autoclass-apply-btn').addEventListener('click', applyCFAutoClassify);
+document.getElementById('cf-autoclass-all').addEventListener('change', e => {
+  document.querySelectorAll('#cf-autoclass-list .ac-chk').forEach(c => { c.checked = e.target.checked; });
+  updateAutoClassCount();
+});
 document.getElementById('cf-prev').addEventListener('click', () => { if (cfPage > 1) { cfPage--; renderCFTable(); } });
 document.getElementById('cf-next').addEventListener('click', () => {
   const pages = Math.ceil(cfFiltered.length / cfPerPage);
@@ -9969,7 +10085,7 @@ function _ciEnsure() {
   }
   _ciMidFreq = {};
   if (typeof cfData !== 'undefined' && Array.isArray(cfData))
-    cfData.forEach(r => { if (r && r.mid) _ciMidFreq[r.mid] = (_ciMidFreq[r.mid] || 0) + 1; });
+    cfData.forEach(r => { const m = r && r.mid_cat; if (m) _ciMidFreq[m] = (_ciMidFreq[m] || 0) + 1; });
 }
 // 후보 {중분류:매핑수} 중 1개 선택: 과거 거래빈도 우선 → 동률 시 매핑수 → 그래도 동률 가나다
 function _ciPick(cands) {
