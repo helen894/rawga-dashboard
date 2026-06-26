@@ -667,6 +667,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         엑셀 업로드
       </button>
+      <button class="btn" id="cf-drive-pull-btn" title="구글 드라이브 업로드 폴더의 새 엑셀을 지금 즉시 가져옵니다 (10분 자동 적재를 기다리지 않고)" style="display:flex;align-items:center;gap:6px;color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        지금 가져오기
+      </button>
       <button class="btn" id="cf-download-btn" style="display:flex;align-items:center;gap:6px;color:var(--green)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         데이터 다운로드
@@ -11628,6 +11632,30 @@ function renderCFPreview(parsed) {
 }
 
 document.getElementById('cf-upload-btn').addEventListener('click', openCFModal);
+
+// ===== "지금 가져오기" — 구글 드라이브 업로드 폴더를 즉시 적재 (Apps Script 웹 앱 트리거) =====
+// Apps Script가 ingestNewFiles 실행 → cf_data 갱신 → Supabase 실시간으로 자동 반영.
+// no-cors라 응답은 못 읽지만(opaque) 적재는 실행됨. UX는 토스트 + 실시간 갱신.
+const CF_DRIVE_PULL_URL = 'https://script.google.com/macros/s/AKfycbwmjb8c24fwEl0HeonJAgXPj7IosJgC8VT0r9soyPq2Kv7SqJQyWCdHIoJAja9Yp64PRQ/exec';
+document.getElementById('cf-drive-pull-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('cf-drive-pull-btn');
+  if (btn.dataset.busy === '1') return;
+  btn.dataset.busy = '1';
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span style="opacity:.8">가져오는 중…</span>';
+  showToast('📥 구글 드라이브에서 가져오는 중… 잠시 후 자동 반영됩니다 (~15초)', 'green');
+  try {
+    await fetch(CF_DRIVE_PULL_URL, { method: 'POST', mode: 'no-cors' });
+  } catch (e) { /* no-cors: 응답 읽을 수 없음 — 정상 */ }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.dataset.busy = '0';
+    btn.innerHTML = orig;
+    showToast('✅ 가져오기 요청 완료. 새 내역이 자동 반영됩니다. (미반영 시 새로고침)', 'green');
+  }, 13000);
+});
+
 document.getElementById('cf-modal-close').addEventListener('click', () => document.getElementById('cf-modal').classList.add('hidden'));
 document.getElementById('cf-modal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 
