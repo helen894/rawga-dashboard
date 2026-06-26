@@ -11637,6 +11637,27 @@ document.getElementById('cf-upload-btn').addEventListener('click', openCFModal);
 // Apps Script가 ingestNewFiles 실행 → cf_data 갱신 → Supabase 실시간으로 자동 반영.
 // no-cors라 응답은 못 읽지만(opaque) 적재는 실행됨. UX는 토스트 + 실시간 갱신.
 const CF_DRIVE_PULL_URL = 'https://script.google.com/macros/s/AKfycbwmjb8c24fwEl0HeonJAgXPj7IosJgC8VT0r9soyPq2Kv7SqJQyWCdHIoJAja9Yp64PRQ/exec';
+
+// 서버에서 cf_data를 직접 다시 로드 → 메모리·화면 최신화. (실시간 페이로드 누락 대비 +
+// 열린 대시보드가 오래된 상태로 덮어쓰는 것 방지: cfData를 서버 진실로 동기화)
+async function _reloadCfFromServer() {
+  if (!_supa) return false;
+  try {
+    const { data: row, error } = await _supa.from('cf_data').select('data').limit(1).single();
+    if (error || !row) return false;
+    const fresh = Array.isArray(row.data) ? row.data : JSON.parse(row.data);
+    _isSyncing = true; // 이 대입이 자동 저장을 유발하지 않도록 가드
+    try {
+      cfData = fresh;
+      if (typeof ensureCFIds === 'function') ensureCFIds();
+      localStorage.setItem('cf_data', JSON.stringify(fresh));
+      localStorage.setItem('cf_data_safe_count', String(fresh.length));
+      renderAll();
+    } finally { _isSyncing = false; }
+    return fresh.length;
+  } catch (e) { return false; }
+}
+
 document.getElementById('cf-drive-pull-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('cf-drive-pull-btn');
   if (btn.dataset.busy === '1') return;
@@ -11644,16 +11665,34 @@ document.getElementById('cf-drive-pull-btn')?.addEventListener('click', async ()
   const orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span style="opacity:.8">가져오는 중…</span>';
-  showToast('📥 구글 드라이브에서 가져오는 중… 잠시 후 자동 반영됩니다 (~15초)', 'green');
+  showToast('📥 구글 드라이브에서 가져오는 중…', 'green');
+
+  const before = Array.isArray(cfData) ? cfData.length : 0;
   try {
     await fetch(CF_DRIVE_PULL_URL, { method: 'POST', mode: 'no-cors' });
-  } catch (e) { /* no-cors: 응답 읽을 수 없음 — 정상 */ }
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.dataset.busy = '0';
-    btn.innerHTML = orig;
-    showToast('✅ 가져오기 요청 완료. 새 내역이 자동 반영됩니다. (미반영 시 새로고침)', 'green');
-  }, 13000);
+  } catch (e) { /* no-cors: 응답 못 읽음 — 정상 */ }
+
+  // Apps Script 처리 완료까지 폴링하며 서버에서 직접 재로드 (최대 ~22초)
+  let finalLen = before, changed = false;
+  for (let i = 0; i < 9; i++) {
+    await new Promise(r => setTimeout(r, 2500));
+    const len = await _reloadCfFromServer();
+    if (len !== false) {
+      finalLen = len;
+      if (len !== before) { changed = true; break; }
+    }
+  }
+  await _reloadCfFromServer(); // 마지막 최신화
+
+  btn.disabled = false;
+  btn.dataset.busy = '0';
+  btn.innerHTML = orig;
+  showToast(
+    changed
+      ? `✅ 가져오기 완료 — 새 내역 반영됨 (총 ${finalLen}건)`
+      : `ℹ️ 새로 가져온 내역이 없습니다 (총 ${finalLen}건)`,
+    'green'
+  );
 });
 
 document.getElementById('cf-modal-close').addEventListener('click', () => document.getElementById('cf-modal').classList.add('hidden'));
