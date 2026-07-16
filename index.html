@@ -6696,7 +6696,8 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   const inNodeX = 60, inNodeW = 96;
   const outNodeX = W - 60 - 96, outNodeW = 96;
   const poolH = poolBot - poolTop, gap = 12;
-  const NODE_MIN_H = 34, NODE_GAP = 8;  // 박스 최소높이(2줄 텍스트) / 박스 간격
+  const NODE_MIN_H = 34, NODE_GAP = 8;      // 박스 최소높이(2줄 텍스트) / 박스 간격
+  const CANVAS_TOP = 50, CANVAS_BOT = 362;  // 노드가 벗어나면 안 되는 세로 경계(viewBox 380)
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs) => {
@@ -6724,11 +6725,24 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
       py += th + gap;
       return o;
     });
-    // 2) 노드 박스 쪽: 박스 높이로 따로 쌓아 겹침을 막고, 전체를 자금풀 세로중앙에 정렬
-    //    (금액 편차가 크면 얇은 리본의 박스끼리 겹치므로 부착점과 분리해야 함)
-    const totalH = arr.reduce((s, o) => s + o.boxH, 0) + NODE_GAP * Math.max(arr.length - 1, 0);
-    let ny = poolTop + (poolH - totalH) / 2;
-    arr.forEach(o => { o.cy = ny + o.boxH / 2; ny += o.boxH + NODE_GAP; });
+    // 2) 노드 박스: 시안처럼 '리본 중심'에 정렬하되, 겹칠 때만 최소한 밀어낸다.
+    //    (박스 최소높이 34 > 얇은 리본 두께라 그대로 두면 작은 대분류끼리 겹침.
+    //     균등 배치하면 겹침은 없지만 큰 노드의 박스와 리본이 어긋나 시안과 달라짐)
+    arr.forEach(o => { o.cy = o.poolY + o.thick / 2; });
+    for (let i = 1; i < arr.length; i++) {                  // 위 → 아래로 밀어내기
+      const need = arr[i - 1].cy + arr[i - 1].boxH / 2 + NODE_GAP + arr[i].boxH / 2;
+      if (arr[i].cy < need) arr[i].cy = need;
+    }
+    const last = arr[arr.length - 1];
+    if (last && last.cy + last.boxH / 2 > CANVAS_BOT) {     // 하단 초과 → 아래에서 위로 되밀기
+      last.cy = CANVAS_BOT - last.boxH / 2;
+      for (let i = arr.length - 2; i >= 0; i--) {
+        const need = arr[i + 1].cy - arr[i + 1].boxH / 2 - NODE_GAP - arr[i].boxH / 2;
+        if (arr[i].cy > need) arr[i].cy = need;
+      }
+    }
+    const under = arr.length ? CANVAS_TOP - (arr[0].cy - arr[0].boxH / 2) : 0;
+    if (under > 0) arr.forEach(o => { o.cy += under; });    // 상단 초과 → 전체 하향
     return arr;
   };
   const inL  = layout(inflows, inSum);
