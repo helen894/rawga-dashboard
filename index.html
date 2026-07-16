@@ -391,7 +391,8 @@
   /* ===== 월별 자금흐름 생키 ===== */
   #cf-sankey { width: 100%; height: auto; display: block; }
   #cf-sankey .sk-flow { transition: opacity .15s; cursor: pointer; }
-  #cf-sankey .sk-flow.dim { opacity: .22; }
+  #cf-sankey .sk-flow:hover { opacity: .9 !important; }
+  #cf-sankey .sk-flow.dim { opacity: .15 !important; }
   #cf-sankey .sk-node { cursor: pointer; }
   #cf-sankey .sk-node:focus { outline: none; }
   #cf-sankey .sk-node:focus rect { stroke-width: 2.5; }
@@ -6608,6 +6609,10 @@ function addMonthsClamped(dateStr, delta) {
    ============================================= */
 const SANKEY_MAX_NODES = 6;  // 대분류 초과 시 상위 5 + '기타'
 
+// 백만원 정수 표기 (생키 라벨 전용). 예: 5,912,371,015 → "5,912"
+// ※ 검산식은 반올림 오차로 좌우변이 어긋나 보일 수 있어 원 단위 정확값을 그대로 쓴다.
+function fmtMil_(n) { return Math.round((n || 0) / 1e6).toLocaleString('ko-KR'); }
+
 function sankeyGroup_(rows, valKey) {
   const g = {};
   for (const r of rows) {
@@ -6724,20 +6729,20 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   // 자금풀
   svg.appendChild(el('rect', {
     x: poolX, y: poolTop, width: poolW, height: poolH, rx: 8,
-    fill: 'var(--bg2)', stroke: 'var(--text3)', 'stroke-width': 1.5
+    fill: 'var(--card2)', stroke: 'var(--text3)', 'stroke-width': 1.5
   }));
   svg.appendChild(txt(poolX + poolW / 2, poolTop + 24, '자금풀', { fs: 12, fill: 'var(--text3)' }));
   svg.appendChild(txt(poolX + poolW / 2, poolTop + 52, '전월 기말', { fs: 11, fill: 'var(--text3)' }));
-  svg.appendChild(txt(poolX + poolW / 2, poolTop + 70, fmtM(openBal), { fs: 14, fw: 800 }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 70, fmtMil_(openBal) + '백만', { fs: 14, fw: 800 }));
   svg.appendChild(txt(poolX + poolW / 2, poolTop + 104, '당월 기말', { fs: 11, fill: 'var(--text3)' }));
-  svg.appendChild(txt(poolX + poolW / 2, poolTop + 122, fmtM(closeBal), { fs: 14, fw: 800 }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 122, fmtMil_(closeBal) + '백만', { fs: 14, fw: 800 }));
 
   // 리본
   const ribbon = (x1, y1a, y1b, x2, y2a, y2b, fill) => {
     const mx = (x1 + x2) / 2;
     const d = `M${x1},${y1a} C${mx},${y1a} ${mx},${y2a} ${x2},${y2a} `
             + `L${x2},${y2b} C${mx},${y2b} ${mx},${y1b} ${x1},${y1b} Z`;
-    return el('path', { d, fill, opacity: .8, class: 'sk-flow' });
+    return el('path', { d, fill, opacity: .55, class: 'sk-flow' });
   };
   const flows = [];
   inL.forEach(it => {
@@ -6759,11 +6764,12 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
       'aria-label': `${it.n} ${side === 'in' ? '입금' : '출금'} ${fmtM(it.a)} — 중분류 보기`
     });
     g.appendChild(el('rect', {
-      x, y: by, width: w, height: it.boxH, rx: 7, fill: 'var(--card)',
+      x, y: by, width: w, height: it.boxH, rx: 7,
+      fill: side === 'in' ? 'var(--green2)' : 'var(--red2)',
       stroke: side === 'in' ? 'var(--green)' : 'var(--red)', 'stroke-width': 1.3
     }));
     g.appendChild(txt(x + w / 2, by + it.boxH / 2 - 3, it.n, { fs: 12, fw: 700 }));
-    g.appendChild(txt(x + w / 2, by + it.boxH / 2 + 13, (side === 'in' ? '+' : '−') + fmtM(it.a),
+    g.appendChild(txt(x + w / 2, by + it.boxH / 2 + 13, (side === 'in' ? '+' : '−') + fmtMil_(it.a),
       { fs: 12, fw: 800, fill: side === 'in' ? 'var(--green)' : 'var(--red)' }));
     const show = () => showSankeyDrill_(it, side);
     g.addEventListener('click', show);
@@ -6786,7 +6792,7 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
 
   if (eqEl) {
     eqEl.textContent =
-      `전월 기말 ${fmt(openBal)} + 입금 ${fmt(inSum)} − 출금 ${fmt(outSum)} = 당월 기말 ${fmt(openBal + inSum - outSum)} (원)`;
+      `전월 기말 ${fmt(openBal)} + 입금 ${fmt(inSum)} − 출금 ${fmt(outSum)} = 당월 기말 ${fmt(openBal + inSum - outSum)} (단위: 원)`;
   }
 }
 
