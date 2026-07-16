@@ -387,6 +387,29 @@
     .chart-row { grid-template-columns: 1fr; }
     .report-row { grid-template-columns: 1fr; }
   }
+
+  /* ===== 월별 자금흐름 생키 ===== */
+  #cf-sankey { width: 100%; height: auto; display: block; }
+  #cf-sankey .sk-flow { transition: opacity .15s; cursor: pointer; }
+  #cf-sankey .sk-flow.dim { opacity: .22; }
+  #cf-sankey .sk-node { cursor: pointer; }
+  #cf-sankey .sk-node:focus { outline: none; }
+  #cf-sankey .sk-node:focus rect { stroke-width: 2.5; }
+  .sankey-eq {
+    text-align: center; font-size: 12px; color: var(--text3);
+    margin-top: 12px; font-family: var(--mono); font-variant-numeric: tabular-nums;
+  }
+  #sankey-drill { margin-top: 12px; }
+  #sankey-drill .sk-drill-box {
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; background: var(--bg2);
+  }
+  #sankey-drill table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #sankey-drill td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  #sankey-drill td.num { text-align: right; font-family: var(--mono); }
+  @media (prefers-reduced-motion: reduce) {
+    #cf-sankey .sk-flow { transition: none; }
+  }
 </style>
 </head>
 <body class="auth-pending">
@@ -1202,6 +1225,23 @@
         <div class="kpi-label">당월 기말</div>
         <div class="kpi-value" id="mnrpt-end">—</div>
         <div class="kpi-sub" id="mnrpt-end-sub"></div>
+      </div>
+    </div>
+
+    <!-- ======== 월별 자금흐름 생키 ======== -->
+    <div class="chart-box" style="margin-bottom:20px">
+      <div class="chart-title">
+        🌊 월별 자금흐름
+        <small id="sankey-range" style="color:var(--text3);font-weight:400"></small>
+      </div>
+      <div id="sankey-empty" style="display:none;text-align:center;color:var(--text3);padding:44px 0;font-size:13px">
+        해당 월 거래 없음
+      </div>
+      <div id="sankey-wrap">
+        <svg id="cf-sankey" viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg"
+             role="img" aria-label="월별 자금흐름 생키 다이어그램"></svg>
+        <div class="sankey-eq" id="sankey-eq"></div>
+        <div id="sankey-drill"></div>
       </div>
     </div>
 
@@ -6558,6 +6598,198 @@ function addMonthsClamped(dateStr, delta) {
 //   개선 방향: weekRefDate(주간 전용), monthRefDate(월간 전용) 변수를 분리하고
 //   각 탭의 이전/다음 버튼이 전용 변수만 변경하도록 리팩터링.
 //   이번 수정에서는 동작 변경 없이 주석으로만 문서화.
+/* =============================================
+   월별 자금흐름 생키 (리포팅 > 월간 리포팅)
+   - renderMonthlyReport()가 이미 계산한 전월말/당월말/실제 입출금 행을 그대로 받아 렌더한다.
+     → 검산식(전월 기말 + 입금 − 출금 = 당월 기말)이 구조적으로 항상 일치.
+   - 집계 기준: '실제 입금' / '실제 지출'만 (잔액 공식과 동일). 예정 거래 제외.
+   - 노드 = 대분류(big_cat), 클릭 시 중분류(mid_cat) 드릴다운.
+   - 외부 라이브러리 없이 인라인 SVG. 데이터는 메모리의 cfData 재활용(신규 조회 없음).
+   ============================================= */
+const SANKEY_MAX_NODES = 6;  // 대분류 초과 시 상위 5 + '기타'
+
+function sankeyGroup_(rows, valKey) {
+  const g = {};
+  for (const r of rows) {
+    const v = r[valKey] || 0;
+    if (v <= 0) continue;
+    const key = String(r.big_cat || '').trim() || '미분류';
+    if (!g[key]) g[key] = { n: key, a: 0, d: {} };
+    g[key].a += v;
+    const mk = String(r.mid_cat || '').trim() || '미분류';
+    g[key].d[mk] = (g[key].d[mk] || 0) + v;
+  }
+  let arr = Object.values(g)
+    .map(x => ({ n: x.n, a: x.a, d: Object.entries(x.d).sort((p, q) => q[1] - p[1]) }))
+    .sort((p, q) => q.a - p.a);
+  if (arr.length > SANKEY_MAX_NODES) {
+    const head = arr.slice(0, SANKEY_MAX_NODES - 1);
+    const tail = arr.slice(SANKEY_MAX_NODES - 1);
+    const etc = {};
+    tail.forEach(t => t.d.forEach(([k, v]) => { etc[k] = (etc[k] || 0) + v; }));
+    head.push({
+      n: '기타',
+      a: tail.reduce((s, t) => s + t.a, 0),
+      d: Object.entries(etc).sort((p, q) => q[1] - p[1])
+    });
+    arr = head;
+  }
+  return arr;
+}
+
+/* 노드 클릭 → 중분류 드릴다운 (기존 차트 드릴다운과 동일하게 하단 리스트) */
+function showSankeyDrill_(node, side) {
+  const drill = document.getElementById('sankey-drill');
+  if (!drill) return;
+  const color = side === 'in' ? 'var(--green)' : 'var(--red)';
+  const sign  = side === 'in' ? '+' : '−';
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const rows = node.d.map(([k, v]) =>
+    `<tr><td>${esc(k)}</td><td class="num" style="color:${color}">${sign}${fmt(v)}</td></tr>`).join('');
+  drill.innerHTML = `
+    <div class="sk-drill-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700">
+          ${esc(node.n)} <span style="color:${color}">${sign}${fmt(node.a)}</span>
+          <span style="font-size:11px;color:var(--text3);font-weight:400">· 중분류 내역</span>
+        </div>
+        <button class="btn" style="font-size:11px;padding:2px 8px"
+          onclick="document.getElementById('sankey-drill').innerHTML=''">닫기</button>
+      </div>
+      <table><tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) {
+  const svg     = document.getElementById('cf-sankey');
+  const wrap    = document.getElementById('sankey-wrap');
+  const empty   = document.getElementById('sankey-empty');
+  const eqEl    = document.getElementById('sankey-eq');
+  const drill   = document.getElementById('sankey-drill');
+  const rangeEl = document.getElementById('sankey-range');
+  if (!svg || !wrap) return;   // 섹션 미존재 시 안전 종료
+
+  if (rangeEl) rangeEl.textContent = `${mStart} ~ ${mEnd}`;
+  svg.innerHTML = '';
+  if (drill) drill.innerHTML = '';
+
+  const inflows  = sankeyGroup_(inRows, 'in');
+  const outflows = sankeyGroup_(outRows, 'out');
+  const inSum  = inflows.reduce((s, x) => s + x.a, 0);
+  const outSum = outflows.reduce((s, x) => s + x.a, 0);
+
+  if (!inflows.length && !outflows.length) {
+    wrap.style.display = 'none';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  wrap.style.display = '';
+  if (empty) empty.style.display = 'none';
+
+  const W = 720;
+  const poolX = 300, poolW = 120, poolTop = 90, poolBot = 250;
+  const inNodeX = 60, inNodeW = 96;
+  const outNodeX = W - 60 - 96, outNodeW = 96;
+  const poolH = poolBot - poolTop, gap = 12;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  };
+  const txt = (x, y, s, o = {}) => {
+    const t = el('text', {
+      x, y, 'text-anchor': 'middle',
+      'font-size': o.fs || 12, 'font-weight': o.fw || 600,
+      fill: o.fill || 'var(--text)'
+    });
+    t.textContent = s; return t;
+  };
+
+  // 리본 두께 = 금액 비례 (자금풀 높이를 합계에 비례 배분)
+  const layout = (items, sum) => {
+    const sc = sum > 0 ? (poolH - gap * Math.max(items.length - 1, 0)) / sum : 0;
+    let y = poolTop; const out = [];
+    items.forEach(it => {
+      const th = Math.max(it.a * sc, 6);
+      out.push({ ...it, thick: th, poolY: y, cy: y + th / 2, boxH: Math.max(th, 34) });
+      y += th + gap;
+    });
+    return out;
+  };
+  const inL  = layout(inflows, inSum);
+  const outL = layout(outflows, outSum);
+
+  // 자금풀
+  svg.appendChild(el('rect', {
+    x: poolX, y: poolTop, width: poolW, height: poolH, rx: 8,
+    fill: 'var(--bg2)', stroke: 'var(--text3)', 'stroke-width': 1.5
+  }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 24, '자금풀', { fs: 12, fill: 'var(--text3)' }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 52, '전월 기말', { fs: 11, fill: 'var(--text3)' }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 70, fmtM(openBal), { fs: 14, fw: 800 }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 104, '당월 기말', { fs: 11, fill: 'var(--text3)' }));
+  svg.appendChild(txt(poolX + poolW / 2, poolTop + 122, fmtM(closeBal), { fs: 14, fw: 800 }));
+
+  // 리본
+  const ribbon = (x1, y1a, y1b, x2, y2a, y2b, fill) => {
+    const mx = (x1 + x2) / 2;
+    const d = `M${x1},${y1a} C${mx},${y1a} ${mx},${y2a} ${x2},${y2a} `
+            + `L${x2},${y2b} C${mx},${y2b} ${mx},${y1b} ${x1},${y1b} Z`;
+    return el('path', { d, fill, opacity: .8, class: 'sk-flow' });
+  };
+  const flows = [];
+  inL.forEach(it => {
+    const p = ribbon(inNodeX + inNodeW, it.cy - it.thick / 2, it.cy + it.thick / 2,
+                     poolX, it.poolY, it.poolY + it.thick, 'var(--green)');
+    svg.appendChild(p); flows.push(p);
+  });
+  outL.forEach(it => {
+    const p = ribbon(poolX + poolW, it.poolY, it.poolY + it.thick,
+                     outNodeX, it.cy - it.thick / 2, it.cy + it.thick / 2, 'var(--red)');
+    svg.appendChild(p); flows.push(p);
+  });
+
+  // 노드 박스 (클릭/키보드 → 드릴다운)
+  const drawNode = (it, x, w, side) => {
+    const by = it.cy - it.boxH / 2;
+    const g = el('g', {
+      class: 'sk-node', tabindex: 0, role: 'button',
+      'aria-label': `${it.n} ${side === 'in' ? '입금' : '출금'} ${fmtM(it.a)} — 중분류 보기`
+    });
+    g.appendChild(el('rect', {
+      x, y: by, width: w, height: it.boxH, rx: 7, fill: 'var(--card)',
+      stroke: side === 'in' ? 'var(--green)' : 'var(--red)', 'stroke-width': 1.3
+    }));
+    g.appendChild(txt(x + w / 2, by + it.boxH / 2 - 3, it.n, { fs: 12, fw: 700 }));
+    g.appendChild(txt(x + w / 2, by + it.boxH / 2 + 13, (side === 'in' ? '+' : '−') + fmtM(it.a),
+      { fs: 12, fw: 800, fill: side === 'in' ? 'var(--green)' : 'var(--red)' }));
+    const show = () => showSankeyDrill_(it, side);
+    g.addEventListener('click', show);
+    g.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+    });
+    svg.appendChild(g);
+  };
+  inL.forEach(it => drawNode(it, inNodeX, inNodeW, 'in'));
+  outL.forEach(it => drawNode(it, outNodeX, outNodeW, 'out'));
+
+  svg.appendChild(txt(inNodeX + inNodeW / 2, poolTop - 22, '입금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
+  svg.appendChild(txt(outNodeX + outNodeW / 2, poolTop - 22, '출금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
+
+  // hover: 해당 리본 강조, 나머지 dim
+  flows.forEach(p => {
+    p.addEventListener('mouseenter', () => flows.forEach(o => { if (o !== p) o.classList.add('dim'); }));
+    p.addEventListener('mouseleave', () => flows.forEach(o => o.classList.remove('dim')));
+  });
+
+  if (eqEl) {
+    eqEl.textContent =
+      `전월 기말 ${fmt(openBal)} + 입금 ${fmt(inSum)} − 출금 ${fmt(outSum)} = 당월 기말 ${fmt(openBal + inSum - outSum)} (원)`;
+  }
+}
+
 function renderMonthlyReport() {
   const mStart = monthStart(refDate), mEnd = monthEnd(refDate);
   const pmStart = prevMonthStart(refDate), pmEnd = prevMonthEnd(refDate);
@@ -6591,6 +6823,9 @@ function renderMonthlyReport() {
     if (r.status === '실제 입금' && r.date <= mEnd) mEndCash += (r.in || 0);
     if (r.status === '실제 지출' && r.date <= mEnd) mEndCash -= (r.out || 0);
   }
+
+  // 월별 자금흐름 생키 — 위에서 계산한 값을 그대로 사용(검산식 구조적 일치)
+  renderCashflowSankey(pmEndCash, mEndCash, actualInRows, actualOutRows, mStart, mEnd);
 
   const momBadge = (cur, prev, isExpense) => {
     if (!prev) return '';
