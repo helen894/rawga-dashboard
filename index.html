@@ -6759,23 +6759,41 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   svg.appendChild(txt(poolX + poolW / 2, poolTop + 104, '당월 기말', { fs: 11, fill: 'var(--text3)' }));
   svg.appendChild(txt(poolX + poolW / 2, poolTop + 122, fmtMil_(closeBal) + '백만', { fs: 14, fw: 800 }));
 
-  // 리본
+  // 리본 — 자금풀 쪽으로 갈수록 좁아지고(테이퍼), 흐름 끝에 화살촉(▶)을 단다.
+  //   입금: 노드(두께 th) → 자금풀(th*TAPER), 화살촉은 자금풀 입구
+  //   출금: 자금풀(th*TAPER) → 노드(두께 th), 화살촉은 출금 노드 입구
+  const TAPER = 0.5, ARROW_W = 9;
   const ribbon = (x1, y1a, y1b, x2, y2a, y2b, fill) => {
     const mx = (x1 + x2) / 2;
     const d = `M${x1},${y1a} C${mx},${y1a} ${mx},${y2a} ${x2},${y2a} `
             + `L${x2},${y2b} C${mx},${y2b} ${mx},${y1b} ${x1},${y1b} Z`;
-    return el('path', { d, fill, opacity: .55, class: 'sk-flow' });
+    return el('path', { d, fill });
+  };
+  const arrow = (x, cy, halfH, fill) => {
+    const hh = Math.max(halfH + 2.5, 4.5);
+    return el('path', { d: `M${x - ARROW_W},${cy - hh} L${x},${cy} L${x - ARROW_W},${cy + hh} Z`, fill });
   };
   const flows = [];
+  const addFlow = (rib, arw) => {                 // 리본+화살촉을 한 덩어리로 (hover 동시 강조)
+    const g = el('g', { class: 'sk-flow', opacity: .55 });
+    g.appendChild(rib); g.appendChild(arw);
+    svg.appendChild(g); flows.push(g);
+  };
   inL.forEach(it => {
-    const p = ribbon(inNodeX + inNodeW, it.cy - it.thick / 2, it.cy + it.thick / 2,
-                     poolX, it.poolY, it.poolY + it.thick, 'var(--green)');
-    svg.appendChild(p); flows.push(p);
+    const pc = it.poolY + it.thick / 2, ph = it.thick * TAPER / 2;
+    addFlow(
+      ribbon(inNodeX + inNodeW, it.cy - it.thick / 2, it.cy + it.thick / 2,
+             poolX - ARROW_W, pc - ph, pc + ph, 'var(--green)'),
+      arrow(poolX, pc, ph, 'var(--green)')
+    );
   });
   outL.forEach(it => {
-    const p = ribbon(poolX + poolW, it.poolY, it.poolY + it.thick,
-                     outNodeX, it.cy - it.thick / 2, it.cy + it.thick / 2, 'var(--red)');
-    svg.appendChild(p); flows.push(p);
+    const pc = it.poolY + it.thick / 2, ph = it.thick * TAPER / 2;
+    addFlow(
+      ribbon(poolX + poolW, pc - ph, pc + ph,
+             outNodeX - ARROW_W, it.cy - it.thick / 2, it.cy + it.thick / 2, 'var(--red)'),
+      arrow(outNodeX, it.cy, it.thick / 2, 'var(--red)')
+    );
   });
 
   // 노드 박스 (클릭/키보드 → 드릴다운)
