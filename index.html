@@ -1239,7 +1239,7 @@
         해당 월 거래 없음
       </div>
       <div id="sankey-wrap">
-        <svg id="cf-sankey" viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg"
+        <svg id="cf-sankey" viewBox="0 0 720 380" xmlns="http://www.w3.org/2000/svg"
              role="img" aria-label="월별 자금흐름 생키 다이어그램"></svg>
         <div class="sankey-eq" id="sankey-eq"></div>
         <div id="sankey-drill"></div>
@@ -6692,10 +6692,11 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   if (empty) empty.style.display = 'none';
 
   const W = 720;
-  const poolX = 300, poolW = 120, poolTop = 90, poolBot = 250;
+  const poolX = 300, poolW = 120, poolTop = 110, poolBot = 270;
   const inNodeX = 60, inNodeW = 96;
   const outNodeX = W - 60 - 96, outNodeW = 96;
   const poolH = poolBot - poolTop, gap = 12;
+  const NODE_MIN_H = 34, NODE_GAP = 8;  // 박스 최소높이(2줄 텍스트) / 박스 간격
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs) => {
@@ -6715,13 +6716,20 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   // 리본 두께 = 금액 비례 (자금풀 높이를 합계에 비례 배분)
   const layout = (items, sum) => {
     const sc = sum > 0 ? (poolH - gap * Math.max(items.length - 1, 0)) / sum : 0;
-    let y = poolTop; const out = [];
-    items.forEach(it => {
+    // 1) 자금풀 쪽 부착점: 리본 두께에 비례해 쌓는다 (두께 = 금액 비례)
+    let py = poolTop;
+    const arr = items.map(it => {
       const th = Math.max(it.a * sc, 6);
-      out.push({ ...it, thick: th, poolY: y, cy: y + th / 2, boxH: Math.max(th, 34) });
-      y += th + gap;
+      const o = { ...it, thick: th, poolY: py, boxH: Math.max(th, NODE_MIN_H) };
+      py += th + gap;
+      return o;
     });
-    return out;
+    // 2) 노드 박스 쪽: 박스 높이로 따로 쌓아 겹침을 막고, 전체를 자금풀 세로중앙에 정렬
+    //    (금액 편차가 크면 얇은 리본의 박스끼리 겹치므로 부착점과 분리해야 함)
+    const totalH = arr.reduce((s, o) => s + o.boxH, 0) + NODE_GAP * Math.max(arr.length - 1, 0);
+    let ny = poolTop + (poolH - totalH) / 2;
+    arr.forEach(o => { o.cy = ny + o.boxH / 2; ny += o.boxH + NODE_GAP; });
+    return arr;
   };
   const inL  = layout(inflows, inSum);
   const outL = layout(outflows, outSum);
@@ -6781,8 +6789,9 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   inL.forEach(it => drawNode(it, inNodeX, inNodeW, 'in'));
   outL.forEach(it => drawNode(it, outNodeX, outNodeW, 'out'));
 
-  svg.appendChild(txt(inNodeX + inNodeW / 2, poolTop - 22, '입금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
-  svg.appendChild(txt(outNodeX + outNodeW / 2, poolTop - 22, '출금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
+  // 측면 라벨은 최상단 고정 (노드 스택이 자금풀 위로 넘칠 수 있어 poolTop 기준이면 겹침)
+  svg.appendChild(txt(inNodeX + inNodeW / 2, 30, '입금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
+  svg.appendChild(txt(outNodeX + outNodeW / 2, 30, '출금 · 대분류', { fs: 12, fill: 'var(--text3)' }));
 
   // hover: 해당 리본 강조, 나머지 dim
   flows.forEach(p => {
