@@ -6611,7 +6611,8 @@ function addMonthsClamped(dateStr, delta) {
    - 노드 = 대분류(big_cat), 클릭 시 중분류(mid_cat) 드릴다운.
    - 외부 라이브러리 없이 인라인 SVG. 데이터는 메모리의 cfData 재활용(신규 조회 없음).
    ============================================= */
-const SANKEY_MAX_NODES = 6;  // 대분류 초과 시 상위 5 + '기타'
+const SANKEY_MAX_NODES = 6;          // 대분류 초과 시 상위 5 + '기타'
+const SANKEY_MIN_AMOUNT = 10000000;  // 1천만원 — 합계가 이하인 대분류는 '기타(소액)'로 합쳐 표시
 
 // 백만원 정수 표기 (생키 라벨 전용). 예: 5,912,371,015 → "5,912"
 // ※ 검산식은 반올림 오차로 좌우변이 어긋나 보일 수 있어 원 단위 정확값을 그대로 쓴다.
@@ -6631,6 +6632,22 @@ function sankeyGroup_(rows, valKey) {
   let arr = Object.values(g)
     .map(x => ({ n: x.n, a: x.a, d: Object.entries(x.d).sort((p, q) => q[1] - p[1]) }))
     .sort((p, q) => q.a - p.a);
+
+  // 합계가 1천만원 이하인 대분류는 '기타(소액)' 하나로 합친다.
+  // 금액을 버리지 않고 보존하므로 inSum/outSum이 그대로라 검산식이 유지된다.
+  const small = arr.filter(x => x.a <= SANKEY_MIN_AMOUNT);
+  if (small.length) {
+    const sd = {};
+    small.forEach(t => t.d.forEach(([k, v]) => { sd[k] = (sd[k] || 0) + v; }));
+    arr = arr.filter(x => x.a > SANKEY_MIN_AMOUNT);
+    arr.push({
+      n: '기타(소액)',
+      a: small.reduce((s, t) => s + t.a, 0),
+      d: Object.entries(sd).sort((p, q) => q[1] - p[1])
+    });
+    arr.sort((p, q) => q.a - p.a);
+  }
+
   if (arr.length > SANKEY_MAX_NODES) {
     const head = arr.slice(0, SANKEY_MAX_NODES - 1);
     const tail = arr.slice(SANKEY_MAX_NODES - 1);
