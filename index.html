@@ -6695,9 +6695,10 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   const poolX = 300, poolW = 120, poolTop = 110, poolBot = 270;
   const inNodeX = 60, inNodeW = 96;
   const outNodeX = W - 60 - 96, outNodeW = 96;
-  const poolH = poolBot - poolTop, gap = 12;
-  const NODE_MIN_H = 34, NODE_GAP = 8;      // 박스 최소높이(2줄 텍스트) / 박스 간격
-  const CANVAS_TOP = 50, CANVAS_BOT = 362;  // 노드가 벗어나면 안 되는 세로 경계(viewBox 380)
+  const poolH = poolBot - poolTop;
+  const NODE_H = 34, NODE_GAP = 8;   // 박스 높이 고정(2줄 라벨) / 박스 간격
+  const TAPER = 0.3, ARROW_W = 13;   // 자금풀 쪽 두께 비율(수렴 정도) / 화살촉 길이
+  const MIN_TH = 3, POOL_GAP = 6;    // 리본 최소 두께 / 자금풀 부착점 간격
 
   const NS = 'http://www.w3.org/2000/svg';
   const el = (tag, attrs) => {
@@ -6714,39 +6715,25 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
     t.textContent = s; return t;
   };
 
-  // 리본 두께 = 금액 비례 (자금풀 높이를 합계에 비례 배분)
-  const layout = (items, sum) => {
-    const sc = sum > 0 ? (poolH - gap * Math.max(items.length - 1, 0)) / sum : 0;
-    // 1) 자금풀 쪽 부착점: 리본 두께에 비례해 쌓는다 (두께 = 금액 비례)
-    let py = poolTop;
-    const arr = items.map(it => {
-      const th = Math.max(it.a * sc, 6);
-      const o = { ...it, thick: th, poolY: py, boxH: Math.max(th, NODE_MIN_H) };
-      py += th + gap;
-      return o;
-    });
-    // 2) 노드 박스: 시안처럼 '리본 중심'에 정렬하되, 겹칠 때만 최소한 밀어낸다.
-    //    (박스 최소높이 34 > 얇은 리본 두께라 그대로 두면 작은 대분류끼리 겹침.
-    //     균등 배치하면 겹침은 없지만 큰 노드의 박스와 리본이 어긋나 시안과 달라짐)
-    arr.forEach(o => { o.cy = o.poolY + o.thick / 2; });
-    for (let i = 1; i < arr.length; i++) {                  // 위 → 아래로 밀어내기
-      const need = arr[i - 1].cy + arr[i - 1].boxH / 2 + NODE_GAP + arr[i].boxH / 2;
-      if (arr[i].cy < need) arr[i].cy = need;
-    }
-    const last = arr[arr.length - 1];
-    if (last && last.cy + last.boxH / 2 > CANVAS_BOT) {     // 하단 초과 → 아래에서 위로 되밀기
-      last.cy = CANVAS_BOT - last.boxH / 2;
-      for (let i = arr.length - 2; i >= 0; i--) {
-        const need = arr[i + 1].cy - arr[i + 1].boxH / 2 - NODE_GAP - arr[i].boxH / 2;
-        if (arr[i].cy > need) arr[i].cy = need;
-      }
-    }
-    const under = arr.length ? CANVAS_TOP - (arr[0].cy - arr[0].boxH / 2) : 0;
-    if (under > 0) arr.forEach(o => { o.cy += under; });    // 상단 초과 → 전체 하향
+  // 리본 두께 = 금액 비례. 단 '가장 큰 대분류의 두께 = 박스 높이'가 되도록 스케일해
+  // 리본이 박스 밖으로 삐져나오는 단차를 없앤다. 입금·출금 공통 스케일이라 굵기 비교 가능.
+  const maxAmt = Math.max(...inflows.map(x => x.a), ...outflows.map(x => x.a), 1);
+  const thOf = a => Math.max(a * (NODE_H / maxAmt), MIN_TH);
+
+  const layout = (items) => {
+    const arr = items.map(it => ({ ...it, thick: thOf(it.a), boxH: NODE_H }));
+    // 1) 자금풀 부착점: 좁아진(테이퍼) 두께로 쌓아 자금풀 세로중앙에 모은다 → 좁은 목으로 수렴
+    const tapH = arr.reduce((s, o) => s + o.thick * TAPER, 0) + POOL_GAP * Math.max(arr.length - 1, 0);
+    let py = poolTop + (poolH - tapH) / 2;
+    arr.forEach(o => { const tp = o.thick * TAPER; o.poolCy = py + tp / 2; py += tp + POOL_GAP; });
+    // 2) 노드 박스: 높이가 고정이라 균등 분산해도 절대 겹치지 않는다 (자금풀 기준 세로중앙)
+    const boxTotal = arr.length * NODE_H + NODE_GAP * Math.max(arr.length - 1, 0);
+    let ny = poolTop + (poolH - boxTotal) / 2;
+    arr.forEach(o => { o.cy = ny + NODE_H / 2; ny += NODE_H + NODE_GAP; });
     return arr;
   };
-  const inL  = layout(inflows, inSum);
-  const outL = layout(outflows, outSum);
+  const inL  = layout(inflows);
+  const outL = layout(outflows);
 
   // 자금풀
   svg.appendChild(el('rect', {
@@ -6762,15 +6749,14 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
   // 리본 — 자금풀 쪽으로 갈수록 좁아지고(테이퍼), 흐름 끝에 화살촉(▶)을 단다.
   //   입금: 노드(두께 th) → 자금풀(th*TAPER), 화살촉은 자금풀 입구
   //   출금: 자금풀(th*TAPER) → 노드(두께 th), 화살촉은 출금 노드 입구
-  const ARROW_W = 13, NECK_H = 4;   // 화살촉 길이 / 노드 쪽 '얇은 목'의 반두께
-  // 리본: 노드 쪽 얇은 목에서 시작 → 중간에서 금액비례 두께로 부드럽게 벌어짐 → 자금풀까지 그 두께 유지.
-  //   입금·출금 모두 '노드 쪽이 얇고 자금풀 쪽이 금액비례'로 좌우 대칭 (xNode > xPool이면 자동으로 미러됨).
-  const ribbon = (xNode, cyNode, xPool, cyPool, hPool, fill) => {
-    const mx = (xNode + xPool) / 2, cm = (xNode + mx) / 2;
-    const d = `M${xNode},${cyNode - NECK_H} `
-            + `C${cm},${cyNode - NECK_H} ${cm},${cyPool - hPool} ${mx},${cyPool - hPool} `
-            + `L${xPool},${cyPool - hPool} L${xPool},${cyPool + hPool} L${mx},${cyPool + hPool} `
-            + `C${cm},${cyPool + hPool} ${cm},${cyNode + NECK_H} ${xNode},${cyNode + NECK_H} Z`;
+  // 리본: 노드 쪽은 금액비례(최대 = 박스 높이) → 자금풀 쪽으로 좁아지며 수렴.
+  //   xNode > xPool(출금)이면 좌우가 자동으로 미러되므로 함수 하나로 양방향 처리.
+  const ribbon = (xNode, cyNode, hNode, xPool, cyPool, hPool, fill) => {
+    const mx = (xNode + xPool) / 2;
+    const d = `M${xNode},${cyNode - hNode} `
+            + `C${mx},${cyNode - hNode} ${mx},${cyPool - hPool} ${xPool},${cyPool - hPool} `
+            + `L${xPool},${cyPool + hPool} `
+            + `C${mx},${cyPool + hPool} ${mx},${cyNode + hNode} ${xNode},${cyNode + hNode} Z`;
     return el('path', { d, fill, opacity: .55 });   // 리본은 연하게
   };
   const arrow = (x, cy, halfH, fill) => {
@@ -6784,18 +6770,18 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd) 
     g.appendChild(rib); g.appendChild(arw);
     svg.appendChild(g); flows.push(g);
   };
-  inL.forEach(it => {   // 입금: 노드(얇은 목) → 자금풀(금액비례), 화살촉은 자금풀 입구
-    const pc = it.poolY + it.thick / 2, hp = it.thick / 2;
+  inL.forEach(it => {   // 입금: 노드(두꺼움) → 자금풀(뾰족), 화살촉은 자금풀 입구
+    const hp = it.thick * TAPER / 2;
     addFlow(
-      ribbon(inNodeX + inNodeW, it.cy, poolX - ARROW_W, pc, hp, 'var(--green)'),
-      arrow(poolX, pc, hp, 'var(--green)')
+      ribbon(inNodeX + inNodeW, it.cy, it.thick / 2, poolX - ARROW_W, it.poolCy, hp, 'var(--green)'),
+      arrow(poolX, it.poolCy, hp, 'var(--green)')
     );
   });
-  outL.forEach(it => {  // 출금: 자금풀(금액비례) → 노드(얇은 목), 화살촉은 출금 노드 입구
-    const pc = it.poolY + it.thick / 2, hp = it.thick / 2;
+  outL.forEach(it => {  // 출금: 자금풀(뾰족) → 노드(두꺼움), 화살촉은 출금 노드 입구
+    const hp = it.thick * TAPER / 2;
     addFlow(
-      ribbon(outNodeX - ARROW_W, it.cy, poolX + poolW, pc, hp, 'var(--red)'),
-      arrow(outNodeX, it.cy, NECK_H, 'var(--red)')
+      ribbon(outNodeX - ARROW_W, it.cy, it.thick / 2, poolX + poolW, it.poolCy, hp, 'var(--red)'),
+      arrow(outNodeX, it.cy, it.thick / 2, 'var(--red)')
     );
   });
 
