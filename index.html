@@ -400,6 +400,11 @@
     text-align: center; font-size: 12px; color: var(--text3);
     margin-top: 12px; font-family: var(--mono); font-variant-numeric: tabular-nums;
   }
+  .sankey-note {
+    text-align: center; font-size: 11px; color: var(--text3);
+    margin-top: 6px; line-height: 1.6;
+  }
+  .sankey-note:empty { display: none; }
   #sankey-drill { margin-top: 12px; }
   #sankey-drill .sk-drill-box {
     border: 1px solid var(--border); border-radius: 8px;
@@ -1242,6 +1247,7 @@
         <svg id="cf-sankey" viewBox="0 0 720 380" xmlns="http://www.w3.org/2000/svg"
              role="img" aria-label="월별 자금흐름 생키 다이어그램"></svg>
         <div class="sankey-eq" id="sankey-eq"></div>
+        <div class="sankey-note" id="sankey-note"></div>
         <div id="sankey-drill"></div>
       </div>
     </div>
@@ -6688,11 +6694,13 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd, 
   const wrap    = document.getElementById('sankey-wrap');
   const empty   = document.getElementById('sankey-empty');
   const eqEl    = document.getElementById('sankey-eq');
+  const noteEl  = document.getElementById('sankey-note');
   const drill   = document.getElementById('sankey-drill');
   const rangeEl = document.getElementById('sankey-range');
   if (!svg || !wrap) return;   // 섹션 미존재 시 안전 종료
 
-  if (rangeEl) rangeEl.textContent = `${mStart} ~ ${mEnd}`;
+  // 노드·자금풀 숫자는 백만원, 검산식은 원 단위라 헤더에 명시
+  if (rangeEl) rangeEl.textContent = `${mStart} ~ ${mEnd} · 단위: 백만원`;
   svg.innerHTML = '';
   if (drill) drill.innerHTML = '';
 
@@ -6702,6 +6710,10 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd, 
   // 1천만원 이하 노드를 숨겨도 금액은 그대로 반영되어야 하므로 (= KPI 월간 입금/출금과 동일 값)
   const inSum  = inRows.reduce((s, r) => s + (r.in || 0), 0);
   const outSum = outRows.reduce((s, r) => s + (r.out || 0), 0);
+
+  // 표시 제외된 금액 = 원본 합계 − 실제로 그려지는 노드 합계 (1천만원 이하라 숨긴 몫)
+  const hiddenIn  = Math.max(inSum  - inflows.reduce((s, x) => s + x.a, 0), 0);
+  const hiddenOut = Math.max(outSum - outflows.reduce((s, x) => s + x.a, 0), 0);
 
   if (!inRows.length && !outRows.length) {
     wrap.style.display = 'none';
@@ -6847,6 +6859,16 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd, 
     const tTerm = t === 0 ? '' : ` ${t > 0 ? '+' : '−'} 계좌간이체 ${fmt(Math.abs(t))}`;
     eqEl.textContent =
       `전월 기말 ${fmt(openBal)} + 입금 ${fmt(inSum)} − 출금 ${fmt(outSum)}${tTerm} = 당월 기말 ${fmt(openBal + inSum - outSum + t)} (단위: 원)`;
+  }
+
+  // 각주 — 숨긴 소액이 있을 때만. 보이는 노드 합이 검산식 금액보다 작은 이유를 설명한다.
+  if (noteEl) {
+    const parts = [];
+    if (hiddenIn  > 0) parts.push(`입금 ${fmt(hiddenIn)}원`);
+    if (hiddenOut > 0) parts.push(`출금 ${fmt(hiddenOut)}원`);
+    noteEl.textContent = parts.length
+      ? `※ 1천만원 이하 항목(${parts.join(' · ')})은 그래프에서 생략했습니다. 위 검산식과 상단 KPI에는 포함된 금액입니다.`
+      : '';
   }
 }
 
