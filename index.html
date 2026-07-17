@@ -6633,34 +6633,31 @@ function sankeyGroup_(rows, valKey) {
     .map(x => ({ n: x.n, a: x.a, d: Object.entries(x.d).sort((p, q) => q[1] - p[1]) }))
     .sort((p, q) => q.a - p.a);
 
-  // 합계가 1천만원 이하인 대분류는 '기타(소액)' 하나로 합친다.
-  // 금액을 버리지 않고 보존하므로 inSum/outSum이 그대로라 검산식이 유지된다.
-  const small = arr.filter(x => x.a <= SANKEY_MIN_AMOUNT);
-  if (small.length) {
-    const sd = {};
-    small.forEach(t => t.d.forEach(([k, v]) => { sd[k] = (sd[k] || 0) + v; }));
-    arr = arr.filter(x => x.a > SANKEY_MIN_AMOUNT);
-    arr.push({
-      n: '기타(소액)',
-      a: small.reduce((s, t) => s + t.a, 0),
-      d: Object.entries(sd).sort((p, q) => q[1] - p[1])
-    });
-    arr.sort((p, q) => q.a - p.a);
+  // 여러 대분류를 '기타' 하나로 합치는 헬퍼.
+  // 이미 대분류 '기타'가 있으면 거기에 더해서, '기타' 노드가 두 개 생기지 않게 한다.
+  const mergeToEtc = (keep, move) => {
+    if (!move.length) return keep;
+    let etc = keep.find(x => x.n === '기타');
+    if (!etc) { etc = { n: '기타', a: 0, d: [] }; keep.push(etc); }
+    const dm = new Map(etc.d);
+    move.forEach(t => t.d.forEach(([k, v]) => dm.set(k, (dm.get(k) || 0) + v)));
+    etc.a += move.reduce((s, t) => s + t.a, 0);
+    etc.d = [...dm.entries()].sort((p, q) => q[1] - p[1]);
+    return keep.sort((p, q) => q.a - p.a);
+  };
+
+  // 1) 합계 1천만원 이하 대분류는 '기타'로 합친다
+  arr = mergeToEtc(arr.filter(x => x.a > SANKEY_MIN_AMOUNT || x.n === '기타'),
+                   arr.filter(x => x.a <= SANKEY_MIN_AMOUNT && x.n !== '기타'));
+
+  // 2) 노드가 너무 많으면 상위 N-1만 남기고 나머지도 '기타'로
+  if (arr.length > SANKEY_MAX_NODES) {
+    arr = mergeToEtc(arr.slice(0, SANKEY_MAX_NODES - 1), arr.slice(SANKEY_MAX_NODES - 1));
   }
 
-  if (arr.length > SANKEY_MAX_NODES) {
-    const head = arr.slice(0, SANKEY_MAX_NODES - 1);
-    const tail = arr.slice(SANKEY_MAX_NODES - 1);
-    const etc = {};
-    tail.forEach(t => t.d.forEach(([k, v]) => { etc[k] = (etc[k] || 0) + v; }));
-    head.push({
-      n: '기타',
-      a: tail.reduce((s, t) => s + t.a, 0),
-      d: Object.entries(etc).sort((p, q) => q[1] - p[1])
-    });
-    arr = head;
-  }
-  return arr;
+  // 3) 합쳐도 1천만원 이하인 노드('기타' 포함)는 표시하지 않는다.
+  //    검산식의 입금/출금은 원본 거래 행에서 합산하므로, 숨겨도 금액은 그대로 반영된다.
+  return arr.filter(x => x.a > SANKEY_MIN_AMOUNT);
 }
 
 /* 노드 클릭 → 중분류 드릴다운 (기존 차트 드릴다운과 동일하게 하단 리스트) */
@@ -6699,12 +6696,14 @@ function renderCashflowSankey(openBal, closeBal, inRows, outRows, mStart, mEnd, 
   svg.innerHTML = '';
   if (drill) drill.innerHTML = '';
 
-  const inflows  = sankeyGroup_(inRows, 'in');
+  const inflows  = sankeyGroup_(inRows, 'in');   // 표시할 노드 (1천만원 이하는 빠져 있음)
   const outflows = sankeyGroup_(outRows, 'out');
-  const inSum  = inflows.reduce((s, x) => s + x.a, 0);
-  const outSum = outflows.reduce((s, x) => s + x.a, 0);
+  // 검산식 합계는 '표시되는 노드'가 아니라 원본 거래 행에서 구한다.
+  // 1천만원 이하 노드를 숨겨도 금액은 그대로 반영되어야 하므로 (= KPI 월간 입금/출금과 동일 값)
+  const inSum  = inRows.reduce((s, r) => s + (r.in || 0), 0);
+  const outSum = outRows.reduce((s, r) => s + (r.out || 0), 0);
 
-  if (!inflows.length && !outflows.length) {
+  if (!inRows.length && !outRows.length) {
     wrap.style.display = 'none';
     if (empty) empty.style.display = '';
     return;
