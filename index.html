@@ -8873,6 +8873,14 @@ function normalizeCCAmount(v) {
   const n = parseInt(String(v).replace(/[^0-9\-]/g, ''), 10);
   return isNaN(n) ? 0 : n;
 }
+// memo → 계정과목: 클로브 memo가 '계정과목: 세부설명' 형식이라 ':' 앞만 계정과목으로 사용.
+// ':' 없으면 전체를 계정과목으로, 빈값은 '미분류'.
+function extractCCAccount(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '미분류';
+  const acc = (s.includes(':') ? s.slice(0, s.indexOf(':')) : s).trim();
+  return acc || '미분류';
+}
 
 /* ===== 법인카드 청구내역 — 공통 정규화 ===== */
 function normalizeCorpCardTxRow(row) {
@@ -8912,11 +8920,12 @@ function handleCCTxFileSelect(e) {
 
       // 열 이름 후보 → 실제 열 찾기
       const colCandidates = {
-        use_date:       ['이용일자', '사용일자', '승인일자'],
-        card_alias:     ['카드 별칭', '카드별칭', '사용자', '카드명의'],
+        use_date:       ['이용일자', '사용일자', '승인일자', '승인일시'],
+        card_alias:     ['카드 별칭', '카드별칭', '사용자', '카드명의', '별칭'],
         card_no:        ['이용 카드', '카드번호', '이용카드', '카드 번호', '카드No', '카드 NO'],
         merchant:       ['가맹점명', '가맹점 명'],
-        billing_amount: ['청구금액', '청구 금액', '승인금액'],
+        // 순액 우선: '남은금액(원)'(승인−취소) → 없으면 청구/승인금액. 취소건 순액 반영을 위해 남은금액을 최우선.
+        billing_amount: ['남은금액(원)', '청구금액', '청구 금액', '승인금액(원)', '승인금액'],
         memo:           ['메모', '계정과목', '구분'],
       };
       const mapped = {};
@@ -8930,22 +8939,26 @@ function handleCCTxFileSelect(e) {
       }
 
       const now = Date.now();
-      const newRows = raw.map((row, i) => ({
+      const newRowsAll = raw.map((row, i) => ({
         _id:            `corp_card_${now}_${i}_${Math.random().toString(36).slice(2)}`,
         use_date:       normalizeCCDate(row[mapped.use_date]),
         card_alias:     String(row[mapped.card_alias] || '').trim(),
         card_no:        String(row[mapped.card_no]    || '').trim(),
         merchant:       String(row[mapped.merchant]   || '').trim(),
         billing_amount: normalizeCCAmount(row[mapped.billing_amount]),
-        memo:           String(row[mapped.memo]       || '').trim(),
+        memo:           extractCCAccount(row[mapped.memo]),   // '계정과목: 세부' → 계정과목만, 빈값 → 미분류
       }));
+      // 취소건 순액 처리: billing_amount를 '남은금액(원)'(승인−취소 순액)으로 매핑하므로
+      // 전액취소 등 순액 0 이하 행은 실제 청구 대상이 아님 → 업로드 대상에서 제외
+      const newRows = newRowsAll.filter(r => r.billing_amount > 0);
+      const voided  = newRowsAll.length - newRows.length;
 
       // 중복 예상 건수 (사용일자+카드번호+사용자+가맹점명+금액 기준)
       const existingKeys = new Set(corpCardTxData.map(r => `${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`));
       const dupeCount = newRows.filter(r => existingKeys.has(`${r.use_date}|${r.card_no}|${r.card_alias}|${r.merchant}|${r.billing_amount}`)).length;
 
       _pendingCCTxRows = newRows;
-      showCCTxUploadModal(newRows.length, dupeCount, sheetName);
+      showCCTxUploadModal(newRows.length, dupeCount, sheetName, voided);
     } catch(err) {
       alert('파일 읽기 실패: ' + (err.message || err));
     }
@@ -8953,12 +8966,12 @@ function handleCCTxFileSelect(e) {
   reader.readAsArrayBuffer(file);
 }
 
-function showCCTxUploadModal(total, dupeCount, sheetName) {
+function showCCTxUploadModal(total, dupeCount, sheetName, voided = 0) {
   const body = document.getElementById('cctx-modal-body');
   body.innerHTML =
     `<div style="margin-bottom:14px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:1.9">` +
       `<div><b>시트:</b> ${sheetName}</div>` +
-      `<div><b>읽은 행:</b> ${total.toLocaleString()}건</div>` +
+      `<div><b>업로드 대상:</b> ${total.toLocaleString()}건${voided > 0 ? ` <span style="color:var(--text3)">(취소·0원 ${voided.toLocaleString()}건 제외, 순액 기준)</span>` : ''}</div>` +
       `<div><b>현재 데이터:</b> ${corpCardTxData.length.toLocaleString()}건</div>` +
       (dupeCount > 0 ? `<div style="color:var(--amber)"><b>중복 예상:</b> ${dupeCount.toLocaleString()}건 (사용일자+카드번호+사용자+가맹점명+금액 기준)</div>` : '') +
     `</div>` +
