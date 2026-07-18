@@ -4348,7 +4348,15 @@ function renderCFTable() {
     </tr>`;
   }).join('');
 
-  document.getElementById('cf-count').textContent = `총 ${total}건`;
+  // 건수 옆 금액 합계 — 현재 필터로 걸러진 전체(cfFiltered) 기준(건수와 동일 범위)
+  let sumIn = 0, sumOut = 0;
+  for (const r of cfFiltered) { sumIn += (r.in || 0); sumOut += (r.out || 0); }
+  const sumNet = sumIn - sumOut;
+  document.getElementById('cf-count').innerHTML =
+    `총 ${total}건`
+    + ` <span style="color:var(--text3)">·</span> 입금 <span style="color:var(--green)">+${fmt(sumIn)}</span>`
+    + ` <span style="color:var(--text3)">·</span> 출금 <span style="color:var(--red)">-${fmt(sumOut)}</span>`
+    + ` <span style="color:var(--text3)">·</span> 순액 <span style="color:${sumNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(sumNet)}</span>`;
   document.getElementById('cf-page-info').textContent = `${cfPage} / ${pages}`;
 
   // 정렬 표시(▲▼) 업데이트
