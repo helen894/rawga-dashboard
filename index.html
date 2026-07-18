@@ -3719,10 +3719,8 @@ function updateDashboardDateLabels() {
   const fmtD  = d => d ? d.slice(5).replace('-','/') : '';
   const fmtYM = d => { const [y,m] = d.slice(0,7).split('-'); return `${y}년 ${parseInt(m)}월`; };
 
-  // 다가오는 예정 지출/입금 — 보고기준일 기준 15일
-  const in15dt = new Date(refDate+'T00:00:00'); in15dt.setDate(in15dt.getDate()+15);
-  const limit15 = in15dt.toISOString().slice(0,10);
-  const upRange = `${fmtD(refDate)} ~ ${fmtD(limit15)}`;
+  // 다가오는 예정 지출/입금 — 보고기준일이 속한 주(월~일)
+  const upRange = `${fmtD(weekStart(refDate))} ~ ${fmtD(weekEnd(refDate))}`;
   setText('upcoming-date-range',    upRange);
   setText('upcoming-in-date-range', upRange);
 
@@ -3788,8 +3786,8 @@ function renderMonthlyRevenueChart() {
 /* ---- 다가오는 예정 지출 ---- */
 function renderUpcomingPayments() {
   const today = new Date().toISOString().slice(0,10);
-  const in15dt = new Date(refDate+'T00:00:00'); in15dt.setDate(in15dt.getDate()+15);
-  const limit  = in15dt.toISOString().slice(0,10);
+  // 상한 = 보고기준일이 속한 주(월~일)의 일요일까지. 하한 없음 → 과거 연체 예정도 계속 표시.
+  const limit  = weekEnd(refDate);
 
   const dayDiff  = d => Math.ceil((new Date(d+'T00:00:00') - new Date(refDate+'T00:00:00')) / 86400000);
   const dayLabel = d => {
@@ -3813,7 +3811,7 @@ function renderUpcomingPayments() {
     return 'var(--text2)';
   };
 
-  // 예정 지출 — 미처리 항목 모두 표시 (과거 포함, 기준일+15일까지)
+  // 예정 지출 — 미처리 항목 모두 표시 (과거 연체 포함, 보고기준일이 속한 주 일요일까지)
   const outEl    = document.getElementById('upcoming-list');
   const outTotal = document.getElementById('upcoming-out-total');
   if (outEl) {
@@ -3844,7 +3842,7 @@ function renderUpcomingPayments() {
     }
   }
 
-  // 예정 입금 — 미처리 항목 모두 표시 (과거 포함, 기준일+15일까지)
+  // 예정 입금 — 미처리 항목 모두 표시 (과거 연체 포함, 보고기준일이 속한 주 일요일까지)
   const inEl    = document.getElementById('upcoming-in-list');
   const inTotal = document.getElementById('upcoming-in-total');
   if (inEl) {
