@@ -12044,6 +12044,7 @@ function parseCFRows() {
   // 컬럼 자동감지
   const map = {};
   CF_FIELDS.forEach(f => { map[f.key] = autoDetect(headers, f.candidates); });
+  const descAltCol = autoDetect(headers, ['거래자명','거래자','예금주','상대방']); // 적요(거래내용) 비면 거래자명 폴백
 
   const errors = [], parsed = [];
 
@@ -12051,6 +12052,7 @@ function parseCFRows() {
     const dateRaw = map.date ? row[map.date] : '';
     const dateStr = excelDateToStr(dateRaw);
     const desc = map.desc ? String(row[map.desc] || '').trim() : '';
+    const descAlt = descAltCol ? String(row[descAltCol] || '').trim() : ''; // 적요 비면 거래자명
 
     // 금액 먼저 계산
     let inAmt = 0, outAmt = 0;
@@ -12065,7 +12067,7 @@ function parseCFRows() {
     // 거래일·거래내용 누락이라도 금액이 있으면 정상건으로 처리
     if (!dateStr && !hasAmt) { errors.push(`행 ${i+2}: 거래일 및 금액 누락 (빈 행)`); return; }
     if (!dateStr)             { errors.push(`행 ${i+2}: 거래일 누락`); return; }
-    const finalDesc = desc || '(거래내용 없음)';
+    const finalDesc = desc || descAlt || '(거래내용 없음)';
 
     if (inAmt === 0 && outAmt === 0) { errors.push(`행 ${i+2}: 입금액/출금액 모두 0`); return; }
 
