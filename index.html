@@ -969,6 +969,19 @@
     </div>
   </div>
 
+  <!-- ======== 주간 요약 (KPI 카드 아래) ======== -->
+  <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-bottom:20px">
+    <div class="weekly-summary-head">
+      <div class="chart-title" style="margin-bottom:0">📝 주간 요약</div>
+      <span class="weekly-summary-updated" id="wkrpt-summary-updated">마지막 수정일: —</span>
+    </div>
+    <textarea id="wkrpt-summary-textarea" class="weekly-summary-textarea" placeholder="주간 요약을 입력하거나 자동생성 버튼을 눌러 주세요."></textarea>
+    <div class="weekly-summary-actions">
+      <button class="btn sm" id="wkrpt-summary-generate-btn">요약 자동생성</button>
+      <button class="btn sm green" id="wkrpt-summary-save-btn">저장</button>
+    </div>
+  </div>
+
   <!-- 입금/지출 내역 2열 -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
 
@@ -1077,19 +1090,6 @@
           <div id="wkrpt-ar-highrisk-cnt" style="font-size:11px;color:var(--red);margin-top:3px">0건</div>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- ======== 주간 요약 ======== -->
-  <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-top:16px">
-    <div class="weekly-summary-head">
-      <div class="chart-title" style="margin-bottom:0">📝 주간 요약</div>
-      <span class="weekly-summary-updated" id="wkrpt-summary-updated">마지막 수정일: —</span>
-    </div>
-    <textarea id="wkrpt-summary-textarea" class="weekly-summary-textarea" placeholder="주간 요약을 입력하거나 자동생성 버튼을 눌러 주세요."></textarea>
-    <div class="weekly-summary-actions">
-      <button class="btn sm" id="wkrpt-summary-generate-btn">요약 자동생성</button>
-      <button class="btn sm green" id="wkrpt-summary-save-btn">저장</button>
     </div>
   </div>
 
@@ -7813,6 +7813,13 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div></td></tr>
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<!-- 📝 주간 요약 (주간 KPI 아래) -->
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
+  <div style="font-size:13px;color:${C.t2};line-height:1.7">${summaryHtml}</div>
+  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${updatedAtDisp}</div>
+</td></tr>
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 입금 내역 -->
 <tr><td style="background:${C.card};padding:18px 18px 0">
   <div style="font-size:13px;font-weight:600;color:${C.green};margin-bottom:8px">💰 주간 입금 내역${cntBadge(groupedIn.length, groupedIn.length > MAX_ROWS)}</div>
@@ -7837,12 +7844,6 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace;margin-bottom:3px">${v}</div>
         <div style="font-size:10px;color:${co};line-height:1.45;word-break:keep-all;overflow-wrap:anywhere">${s}</div></div></td>`).join('')}
   </tr></table></td></tr>
-<!-- 📝 주간 요약 -->
-<tr><td style="background:${C.card};padding:18px 18px 12px">
-  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
-  <div style="font-size:13px;color:${C.t2};line-height:1.7">${summaryHtml}</div>
-  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${updatedAtDisp}</div>
-</td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
   <div style="font-size:11px;color:${C.t3}">RAWGA 자금 대시보드 · 자동 발송 리포트 · ${sentAt}</div>
