@@ -18,7 +18,8 @@
  *  4) installTrigger() 1회 실행(10분마다 자동 적재) — 또는 메뉴에서 수동 실행
  */
 
-var EDGE_URL = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/cf-folder-ingest';
+// ⚠ Supabase 함수 URL 슬러그 = clever-endpoint (대시보드 표시명은 cf-folder-ingest지만 실제 invoke 슬러그는 clever-endpoint로 고정)
+var EDGE_URL = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/clever-endpoint';
 
 // ▼▼ 드라이브 폴더 ID 3개 (폴더 URL의 .../folders/<여기> 부분) ▼▼
 var INBOX_FOLDER_ID = '1QdNNqxyF3o2qqR3mftalqiDxDmBZRkes';
@@ -30,10 +31,14 @@ var ERROR_FOLDER_ID = '1SQO5SlHC1ekFOXs2FcRjuXKZBS0ntm2q';
 var CF_CANDIDATES = {
   date:   ['거래일', '날짜', 'date', '일자'],
   desc:   ['거래내용', '내용', '적요', 'desc', 'description', '거래처'],
+  desc_alt: ['거래자명', '거래자', '예금주', '상대방'],   // 적요(desc) 비었을 때 거래내용 폴백 (클로브 계좌간 이체 등 적요 공란 행)
   in:     ['입금액', '입금', 'in', 'credit', '수입'],
   out:    ['출금액', '출금', 'out', 'debit', '지출액'],
   amount: ['금액', 'amount', '잔액변동'],
   status: ['상태', 'status'],
+  // (선택) 클로브 연동 파일용 — 없으면 무시(하위호환). 일반 은행 xlsx엔 이 헤더가 없어 영향 없음.
+  mid:      ['중분류'],
+  clobe_id: ['clobe_id', '클로브id', 'clobeid'],
 };
 
 function getSecret_() {
@@ -98,7 +103,7 @@ function xlsxToValues_(file) {
   }
 }
 
-/** 값 배열 → CF 행 [{date,desc,in,out,status}] (mid는 빈칸으로 적재) */
+/** 값 배열 → CF 행 [{date,desc,in,out,status,(mid),(clobe_id)}]. mid/clobe_id는 헤더 있을 때만(클로브 CSV). */
 function parseValues_(values) {
   if (!values || values.length < 2) return { rows: [], note: '데이터 행 없음' };
   var headers = values[0];
@@ -111,13 +116,18 @@ function parseValues_(values) {
     var row = values[i];
     var date = dstr_(row[idx.date]);
     var desc = idx.desc >= 0 ? String(row[idx.desc] || '').trim() : '';
+    var descAlt = idx.desc_alt >= 0 ? String(row[idx.desc_alt] || '').trim() : '';  // 적요 비면 거래자명 폴백
     var inA = 0, outA = 0;
     if (idx.amount >= 0) { var v = num_(row[idx.amount]); if (v > 0) inA = v; else outA = -v; }
     if (idx.in  >= 0 && row[idx.in])  inA  = num_(row[idx.in]);
     if (idx.out >= 0 && row[idx.out]) outA = num_(row[idx.out]);
     var status = idx.status >= 0 ? String(row[idx.status] || '').trim() : '';
     if (!date || (inA === 0 && outA === 0)) { skipped++; continue; }
-    out.push({ date: date, desc: desc || '(거래내용 없음)', in: inA, out: outA, status: status });
+    var rec = { date: date, desc: desc || descAlt || '(거래내용 없음)', in: inA, out: outA, status: status };
+    // (선택) 클로브 연동 필드 — 있을 때만 전달(하위호환)
+    if (idx.mid      >= 0) { var m = String(row[idx.mid] || '').trim();      if (m) rec.mid = m; }
+    if (idx.clobe_id >= 0) { var c = String(row[idx.clobe_id] || '').trim(); if (c) rec.clobe_id = c; }
+    out.push(rec);
   }
   return { rows: out, note: '파싱 ' + out.length + '건 (건너뜀 ' + skipped + ')' };
 }
@@ -148,7 +158,7 @@ function previewFirst() {
   var files = inbox.getFiles();
   while (files.hasNext()) {
     var f = files.next();
-    if (!/\.(xlsx|xls)$/i.test(f.getName())) continue;
+    if (!/\.(xlsx|xls|csv)$/i.test(f.getName())) continue;
     var p = parseValues_(xlsxToValues_(f));
     var sample = p.rows.slice(0, 5).map(function (r) {
       return r.date + ' | ' + r.desc + ' | 입 ' + r.in + ' 출 ' + r.out + ' | ' + (r.status || '(자동)');
@@ -173,7 +183,7 @@ function ingestNewFiles() {
   while (files.hasNext()) {
     var f = files.next();
     var name = f.getName();
-    if (!/\.(xlsx|xls)$/i.test(name)) continue;
+    if (!/\.(xlsx|xls|csv)$/i.test(name)) continue;
     try {
       var p = parseValues_(xlsxToValues_(f));
       if (!p.rows.length) { moveFile_(f, err); summary.push('⚠ ' + name + ': ' + p.note); continue; }
