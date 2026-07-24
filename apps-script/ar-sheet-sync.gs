@@ -33,7 +33,7 @@ var TAB_CONFIG = {
   'JHT':            { expected: '예상입금액',         collected: '실제 입금액',  remaining: '',       start: '송금일',   due: '예상 입금일', collect: '입금일' },
   '팬텀':           { expected: '총 회수예정액',       collected: '최종 회수액',  remaining: '',       start: '송금날짜', due: '예상회수일', collect: '회수일' },
   '천대표':         { expected: '총 회수예정액',       collected: '실제 회수액',  remaining: '미회수액', start: '송금날짜', due: '예상회수일', collect: '회수일' },
-  '천대표(부산영업)': { expected: '예상회수액',         collected: '최종 회수액',  remaining: '',       start: '송금일',   due: '예상회수일', collect: '최종회수일' },
+  '천대표(부산영업)': { expected: '예상회수액',         collected: '최종 회수액(1)', remaining: '',      start: '송금일',   due: '예상회수일', collect: '최종회수일(1)' },
   '동이식품':       { expected: '매출액',             collected: '현재 회수액',  remaining: '미회수금액', start: '송금일',   due: '예상회수일', collect: '실제회수일' },
   '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자' },
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
@@ -108,6 +108,71 @@ function isSummaryRow_(rowVals) {
   return false;
 }
 
+/**
+ * 과입금(회수 > 예상) 자동 감지 시에만, 그 거래처의 회수액을 2단 우선순위로 예상회수액
+ * 상한까지 재배분한다: ①실제 회수일 있는 행 먼저(회수일 순) → ②나머지 오래된 송금일 순.
+ * (예: 로가온 — 오래된 채권부터 lump로 처리되며 한 행에 회수가 몰려 예상 초과 → 음수 미회수 교정)
+ *  - 총 회수·총 예상은 보존(재분배만). 거래처 미회수 합계·KPI는 불변.
+ *  - 진짜 초과분(총회수 > 총예상, 예: 회수이자)은 가장 최근 행에 남겨 음수 미회수 유지(기존 'clamp 안 함' 결정과 일관).
+ *  - 예상이 0/음수인 행은 상한 0 → 회수 0으로 비우고 그 금액을 오래된 채권으로 흘려보냄
+ *    (단, 음수 예상 자체는 시트 원본 오류 — FIFO로 고쳐지지 않으니 별도 정정 필요).
+ * 반환: { changed, moved }  moved = 회수액이 조정된 행 수
+ */
+function allocateFifoIfOvercollected_(records) {
+  if (!records || !records.length) return { changed: false, moved: 0 };
+  var TOL = 1; // 부동소수 오차 무시
+
+  // 1) 과입금 감지: 예상이 양수인데 회수가 예상을 초과하는 행이 하나라도 있으면 발동
+  var over = false;
+  for (var i = 0; i < records.length; i++) {
+    if (records[i].expected > 0 && (records[i].collected || 0) > records[i].expected + TOL) { over = true; break; }
+  }
+  if (!over) return { changed: false, moved: 0 };
+
+  // 2) 총 회수액 + 원본 백업(변경 건수 집계용)
+  var totalCollected = 0, before = [];
+  for (var j = 0; j < records.length; j++) { totalCollected += (records[j].collected || 0); before.push(records[j].collected || 0); }
+
+  // 3) 2단 정렬: ①실제 회수일(collect_date) 있는 행 우선(회수일 순) → ②나머지 오래된 송금일 순
+  //    회수일 찍힌 행 = 실제로 걷힌 것이므로 먼저 정산, 그 뒤 남은 회수액을 오래된 채권부터.
+  //    (회수일 열 없는 탭은 전부 회수일 '' → 자동으로 ②오래된 순만 = 현행과 동일)
+  var order = [];
+  for (var k = 0; k < records.length; k++) order.push(k);
+  order.sort(function (a, b) {
+    var ra = records[a], rb = records[b];
+    var ca = ra.collect_date ? String(ra.collect_date).trim() : '';
+    var cb = rb.collect_date ? String(rb.collect_date).trim() : '';
+    var hasA = ca !== '', hasB = cb !== '';
+    if (hasA !== hasB) return hasA ? -1 : 1;                 // 회수일 있는 행 먼저
+    if (hasA && hasB && ca !== cb) return ca < cb ? -1 : 1;  // 둘 다 있으면 회수일 순
+    var sa = ra.start || '9999-99-99', sb = rb.start || '9999-99-99';  // 나머지는 오래된 송금일 순
+    if (sa !== sb) return sa < sb ? -1 : 1;
+    return a - b;                                            // 동률은 원래 순서
+  });
+
+  // 4) FIFO 배분 (예상 상한까지)
+  var pool = totalCollected;
+  for (var o = 0; o < order.length; o++) {
+    var rec = records[order[o]];
+    var cap = rec.expected > 0 ? rec.expected : 0;
+    var alloc = Math.min(pool, cap);
+    if (alloc < 0) alloc = 0;
+    rec.collected = alloc;
+    pool -= alloc;
+    if (rec.remaining !== undefined) rec.remaining = rec.expected - alloc; // 미회수 열 보유 탭은 재계산
+  }
+  // 5) 진짜 초과분(총회수 > 총예상) → 가장 최근 행에 남김 (음수 미회수 유지)
+  if (pool > TOL && order.length) {
+    var last = records[order[order.length - 1]];
+    last.collected += pool;
+    if (last.remaining !== undefined) last.remaining = last.expected - last.collected;
+  }
+
+  var moved = 0;
+  for (var m = 0; m < records.length; m++) if (Math.abs((records[m].collected || 0) - before[m]) > TOL) moved++;
+  return { changed: moved > 0, moved: moved };
+}
+
 // 한 탭 파싱 → { records:[], note:'' }
 function parseTab_(sh, cfg) {
   var values = sh.getDataRange().getValues();
@@ -161,20 +226,34 @@ function parseTab_(sh, cfg) {
       collect_date: colMap.collect !== undefined ? fmtDate_(row[colMap.collect]) : '',
       note: '',
     };
+    // 회수액 없는 행(미회수)에 실제 입금일이 잘못 찍혀 있으면 공란 (입금 없으면 입금일도 없음).
+    // FIFO 2단 정렬 전에 정리해야 stray 회수일이 '회수일 있는 행'으로 잘못 우선순위 먹지 않음 (예: 팬텀).
+    if (!(rec.collected > 0)) rec.collect_date = '';
     // 미회수 열이 있는 탭만 remaining 전달(없으면 Edge가 예상-회수로 계산)
     if (colMap.remaining !== undefined) rec.remaining = num_(row[colMap.remaining]);
     records.push(rec);
   }
 
+  // 과입금 감지 시 오래된 채권부터 예상액 상한으로 회수액 FIFO 재배분 (감지 안 되면 원본 그대로)
+  var fifo = allocateFifoIfOvercollected_(records);
+
+  // 불변식 재적용: 재배분으로 회수액이 0이 된 행은 실제 입금일 공란
+  for (var ci = 0; ci < records.length; ci++) { if (!(records[ci].collected > 0)) records[ci].collect_date = ''; }
+
   var foundCols = FIELDS.filter(function (f) { return colMap[f] !== undefined; });
-  return { records: records, note: 'OK (헤더 ' + (headerRow + 1) + '행, 매핑: ' + foundCols.join(',') + ')' };
+  return {
+    records: records,
+    fifo: fifo,
+    note: 'OK (헤더 ' + (headerRow + 1) + '행, 매핑: ' + foundCols.join(',') + ')' +
+          (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '')
+  };
 }
 
 // 전체 탭 파싱 → { records:[], report:[], skipped:[] }
 function parseAll_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheets = ss.getSheets();
-  var records = [], report = [], skipped = [];
+  var records = [], report = [], skipped = [], fifoTabs = [];
   var configured = {};
 
   sheets.forEach(function (sh) {
@@ -184,6 +263,7 @@ function parseAll_() {
     if (!cfg) { skipped.push(name); report.push('· ' + name + ' : (설정 없음 — 건너뜀)'); return; }
     configured[name] = true;
     var res = parseTab_(sh, cfg);
+    if (res.fifo && res.fifo.changed) fifoTabs.push(name + '(' + res.fifo.moved + '행)');
     var sumE = res.records.reduce(function (s, r) { return s + r.expected; }, 0);
     var sumC = res.records.reduce(function (s, r) { return s + r.collected; }, 0);
     report.push('· ' + name + ' : ' + res.records.length + '건, 예상 ' + Math.round(sumE).toLocaleString() + ' / 회수 ' + Math.round(sumC).toLocaleString() + ' — ' + res.note);
@@ -195,7 +275,7 @@ function parseAll_() {
     if (!configured[k]) report.push('⚠ 설정에 있으나 탭 못 찾음: ' + k + ' (탭 이름 확인 필요)');
   });
 
-  return { records: records, report: report, skipped: skipped };
+  return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs };
 }
 
 // ① 미리보기(검증) — 대시보드 변경 없이 파싱 결과 표시
@@ -223,8 +303,12 @@ function previewSync() {
     ? '⚠ 설정이 없어 대시보드에서 빠지는 탭: ' + out.skipped.join(', ') +
       '\n   → TAB_CONFIG에 추가해야 반영됩니다.\n\n'
     : '';
+  var fifoMsg = out.fifoTabs && out.fifoTabs.length
+    ? '⚙ 과입금 감지 → FIFO 재배분된 탭: ' + out.fifoTabs.join(', ') +
+      '\n   회수액을 오래된 채권부터 예상액 상한으로 재분배(총액 불변). AR_preview에서 행별 확인하세요.\n\n'
+    : '';
   ui.alert(
-    warn +
+    warn + fifoMsg +
     '미리보기 (대시보드 변경 없음)\n\n' +
     '총 ' + out.records.length + '건\n예상회수 합계: ' + Math.round(totalE).toLocaleString() + '\n회수 합계: ' + Math.round(totalC).toLocaleString() +
     '\n\n[탭별]\n' + out.report.join('\n') +
