@@ -281,6 +281,12 @@
   .ar-risk-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap; }
   .ar-risk-badge.danger { background: rgba(255,77,106,0.15); color: var(--red); }
   .ar-risk-badge.normal { background: rgba(245,166,35,0.12); color: var(--amber); }
+  /* AR 갱신 상태 배지 (신규/변경/유지) */
+  .ar-upd { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .ar-upd.new  { background: var(--green2); color: var(--green); }
+  .ar-upd.chg  { background: var(--amber2); color: var(--amber); }
+  .ar-upd.kept { background: var(--bg3); color: var(--text3); }
+  .ar-memo-cell:hover { background: var(--bg3); }
 
   /* 주간 요약 (textarea 에디터) */
   .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
@@ -894,7 +900,8 @@
           <th class="sort" data-col="collect_date">실제 입금일</th>
           <th>상태</th>
           <th class="num sort" data-col="elapsed">경과일</th>
-          <th>비고</th>
+          <th title="최근 동기화 기준 신규/변경/유지">갱신</th>
+          <th>메모</th>
           <th></th>
         </tr>
       </thead>
@@ -2377,6 +2384,86 @@ const AR_AUTOMATION_ENABLED = false;
 // 매출채권 탭 읽기 전용: 구글시트가 진실원천이므로 대시보드에서 AR 추가/수정/삭제 차단.
 const AR_READONLY = true;
 
+/* ===== 매출채권(AR) 대시보드 전용 메타 — 메모 + 변경추적 =====
+ * ar_data(시트 전체교체)와 분리해 cat_data 키 'ar_meta'에 저장 → 동기화가 메모를 지우지 않음.
+ * 시트 행에 ID가 없어 (거래처|시작일|예상액|예정일) 조합을 안정 키로 사용.
+ * rows[key] = { firstSeen, lastChanged, sig, memo }.  lastSync = 마지막으로 변화가 감지된 날짜. */
+let arMeta = (() => {
+  try { const v = JSON.parse(localStorage.getItem('ar_meta')); if (v && typeof v === 'object') { if (!v.rows) v.rows = {}; if (typeof v.syncSeq !== 'number') v.syncSeq = 0; return v; } } catch (e) {}
+  return { rows: {}, syncSeq: 0, baselined: false };
+})();
+
+function arRowKey(r) {
+  return [String(r.partner || ''), String(r.start || ''), Math.round(Number(r.expected) || 0), String(r.due_date || '')].join('|');
+}
+function arRowSig(r) {
+  const rem = (r.remaining !== undefined && r.remaining !== null && r.remaining !== '')
+    ? Number(r.remaining) : (Number(r.expected || 0) - Number(r.collected || 0));
+  return [Math.round(Number(r.collected) || 0), Math.round(rem), String(r.collect_date || '')].join('|');
+}
+
+// arData(진실원천)를 기존 메타와 대조 → 신규/변경일 스탬프. 메모는 보존.
+function reconcileArMeta() {
+  if (!arMeta || typeof arMeta !== 'object') arMeta = { rows: {}, syncSeq: 0, baselined: false };
+  if (!arMeta.rows) arMeta.rows = {};
+  if (typeof arMeta.syncSeq !== 'number') arMeta.syncSeq = 0;
+  const today = todayKST();
+  const firstInit = !arMeta.baselined;         // 최초 1회는 전량 '유지'로 베이스라인(전부 신규로 뜨는 것 방지)
+
+  // 1) 신규/변경 탐지
+  const news = [], chgs = [];
+  for (const r of (Array.isArray(arData) ? arData : [])) {
+    const key = arRowKey(r), sig = arRowSig(r);
+    const m = arMeta.rows[key];
+    if (!m) { news.push({ key, sig }); }
+    else {
+      if (m.firstSeq === undefined) m.firstSeq = 0;   // 구버전 메타 마이그레이션
+      if (m.changeSeq === undefined) m.changeSeq = 0;
+      if (m.sig !== sig) chgs.push({ sig, m });
+    }
+  }
+  const hasChange = news.length > 0 || chgs.length > 0;
+  // 2) 이번 배치 시퀀스: 최초 baseline은 0(전부 유지), 이후 실제 변화가 있을 때만 +1
+  const seq = (hasChange && !firstInit) ? arMeta.syncSeq + 1 : arMeta.syncSeq;
+  // 3) 스탬프 (날짜=표시용, seq=분류용)
+  for (const n of news) arMeta.rows[n.key] = { firstSeen: today, lastChanged: today, firstSeq: seq, changeSeq: seq, sig: n.sig, memo: '' };
+  for (const c of chgs) { c.m.lastChanged = today; c.m.changeSeq = seq; c.m.sig = c.sig; }
+
+  if (firstInit) arMeta.baselined = true;        // syncSeq는 0 유지 → baseline 행 전부 '유지'
+  else if (hasChange) arMeta.syncSeq = seq;
+  if (hasChange || firstInit) saveArMeta();
+}
+
+// 행의 갱신 상태: 최근 동기화 배치(syncSeq) 기준으로 신규/변경/유지 + 날짜
+function arRowStatus(r) {
+  const m = arMeta.rows && arMeta.rows[arRowKey(r)];
+  if (!m) return { label: '유지', date: '', cls: 'kept' };
+  const seq = arMeta.syncSeq || 0;
+  if (seq > 0 && m.firstSeq === seq)  return { label: '신규', date: m.firstSeen,   cls: 'new' };
+  if (seq > 0 && m.changeSeq === seq) return { label: '변경', date: m.lastChanged, cls: 'chg' };
+  return { label: '유지', date: m.lastChanged || m.firstSeen, cls: 'kept' };
+}
+
+async function saveArMeta() {
+  try { localStorage.setItem('ar_meta', JSON.stringify(arMeta)); } catch (e) {}
+  try {
+    if (typeof _supa !== 'undefined' && _supa && typeof _isInitialized !== 'undefined' && _isInitialized) {
+      const { error } = await _supa.from('cat_data').upsert([{ key: 'ar_meta', data: arMeta }], { onConflict: 'key' });
+      if (error) console.warn('[ar-meta] Supabase 저장 실패:', error.message);
+    }
+  } catch (e) { console.warn('[ar-meta] 저장 예외:', e); }
+}
+
+// 메모 저장 (대시보드 전용, AR_READONLY와 무관)
+function saveArMemo(key, text) {
+  if (!arMeta.rows) arMeta.rows = {};
+  if (!arMeta.rows[key]) arMeta.rows[key] = { firstSeen: todayKST(), lastChanged: todayKST(), firstSeq: (arMeta.syncSeq || 0), changeSeq: (arMeta.syncSeq || 0), sig: '', memo: '' };
+  arMeta.rows[key].memo = String(text || '');
+  saveArMeta();
+  renderARTable();
+  showToast('메모 저장됨', 'green');
+}
+
 /* 이메일 자동 발송 설정 — 기본값 */
 let emailSettings = {
   enabled:            false,
@@ -2846,6 +2933,11 @@ async function loadDataFromSupabase() {
         if (row.key === 'report_base_date' && row.data) {
           reportBaseDate = row.data; // 리포팅 전용 기준일만 갱신 — refDate(입출금 기준)는 건드리지 않음
         }
+        if (row.key === 'ar_meta' && row.data && typeof row.data === 'object') {
+          arMeta = row.data;
+          if (!arMeta.rows) arMeta.rows = {};
+          localStorage.setItem('ar_meta', JSON.stringify(arMeta));
+        }
         if (row.key === 'corp_card_tx_data') {
           // 방어적 파싱: JSONB 배열 또는 JSON 문자열 모두 처리
           let raw = row.data;
@@ -2926,6 +3018,9 @@ async function loadDataFromSupabase() {
     if (!Object.keys(catDescToMid).length) catDescToMid = {...DEFAULT_DESC_TO_MID};
     // cf_data는 Section 1에서 이미 정상 로드됨 — true 반환 유지
   }
+
+  // AR 메타(메모·변경추적) — ar_data와 ar_meta 모두 로드된 뒤 대조해 신규/변경일 스탬프
+  try { reconcileArMeta(); } catch (e) { console.warn('[ar-meta] reconcile 실패:', e); }
 
   setSyncStatus('online');
   return true; // cf_data 로드 성공 기준 — cat_data 실패 여부와 무관
@@ -3069,6 +3164,7 @@ function subscribeRealtime() {
         // Realtime 갱신 후 존재하지 않는 ID는 선택 목록에서 제거
         const validARIdSet = new Set(arData.map(r => r._id).filter(Boolean));
         for (const id of arSelectedIds) { if (!validARIdSet.has(id)) arSelectedIds.delete(id); }
+        try { reconcileArMeta(); } catch (e) { console.warn('[ar-meta] reconcile 실패:', e); }
         renderAll();
         showToast('🔄 매출채권 데이터가 업데이트됐습니다.', 'green');
       } finally { _isSyncing = false; }
@@ -3126,6 +3222,12 @@ function subscribeRealtime() {
                 renderCorpCardTab();
                 renderCCTxTable();
               }
+            }
+            if (row.key === 'ar_meta' && row.data && typeof row.data === 'object') {
+              arMeta = row.data;
+              if (!arMeta.rows) arMeta.rows = {};
+              localStorage.setItem('ar_meta', JSON.stringify(arMeta));
+              if (typeof renderARTable === 'function') { try { renderARTable(); } catch (e) {} }
             }
           }
           ['cf-midcat','edit-cf-midcat'].forEach(id => {
@@ -5408,6 +5510,8 @@ function renderARTable() {
     const elapsedHtml = dispStatus === '완료'
       ? '—'
       : `${arRisk.basisDays}일 <span class="ar-risk-badge ${arRisk.riskLevel === '위험' ? 'danger' : 'normal'}">${arRisk.riskLevel}</span>`;
+    const _upd  = arRowStatus(r);
+    const _memo = (arMeta.rows[arRowKey(r)] && arMeta.rows[arRowKey(r)].memo) || '';
     return `<tr>
       <td style="text-align:center">
         ${AR_READONLY ? '' : `<input type="checkbox" class="ar-row-check" data-id="${r._id}" ${arSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">`}
@@ -5423,7 +5527,8 @@ function renderARTable() {
       </td>
       <td><span class="badge ${dispStatus}">${dispStatus}</span></td>
       <td class="num">${elapsedHtml}</td>
-      <td style="font-size:11px;color:var(--text2);max-width:150px;overflow:hidden;text-overflow:ellipsis">${r.note||'—'}</td>
+      <td style="white-space:nowrap"><span class="ar-upd ${_upd.cls}">${_upd.label}</span>${_upd.date ? `<br><span style="font-size:10px;color:var(--text3)">${_upd.date}</span>` : ''}</td>
+      <td class="ar-memo-cell" data-id="${r._id}" title="클릭하여 메모 편집" style="cursor:text;font-size:11px;color:var(--text2);max-width:170px;overflow:hidden;text-overflow:ellipsis">${_memo ? escapeHtml(_memo) : '<span style="color:var(--text3)">＋ 메모</span>'}</td>
       <td style="white-space:nowrap">
         ${AR_READONLY
           ? '<span style="color:var(--text3);font-size:11px">시트 관리</span>'
@@ -5489,6 +5594,24 @@ document.getElementById('ar-tbody').addEventListener('click', e => {
   const editBtn = e.target.closest('.ar-edit-btn');
   if (delBtn)  deleteAR(delBtn.dataset.id);
   if (editBtn) openEditAR(editBtn.dataset.id);
+  // 메모 인라인 편집 (AR_READONLY와 무관 — 대시보드 전용 메타, 시트 동기화에 안 지워짐)
+  const memoCell = e.target.closest('.ar-memo-cell');
+  if (memoCell && !memoCell.querySelector('input')) {
+    const row = arData.find(x => x._id === memoCell.dataset.id);
+    if (!row) return;
+    const key = arRowKey(row);
+    const cur = (arMeta.rows[key] && arMeta.rows[key].memo) || '';
+    memoCell.innerHTML = `<input class="ar-memo-input" type="text" maxlength="200" value="${escapeHtml(cur)}" style="width:100%;font-size:11px;padding:2px 5px;border:1px solid var(--blue);border-radius:4px;background:var(--card)">`;
+    const inp = memoCell.querySelector('input');
+    inp.focus(); inp.select();
+    let done = false;
+    const commit = () => { if (done) return; done = true; saveArMemo(key, inp.value.trim()); };
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+      else if (ev.key === 'Escape') { done = true; renderARTable(); }
+    });
+  }
 });
 
 /* ---- AR 수정 모달 ---- */
