@@ -5538,7 +5538,10 @@ function renderARTable() {
     </tr>`;
   }).join('');
 
-  document.getElementById('ar-count').textContent = `총 ${total}건 | 미회수 합계: ${fmt(arFiltered.reduce((s,r)=>s+(r.remaining||0),0))}원`;
+  document.getElementById('ar-count').innerHTML =
+    `총 ${total}건 &nbsp;|&nbsp; 예상회수액 합계: ${fmt(arFiltered.reduce((s,r)=>s+(r.expected||0),0))}원`
+    + ` &nbsp;|&nbsp; 현재 회수액 합계: <span style="color:var(--green)">${fmt(arFiltered.reduce((s,r)=>s+(r.collected||0),0))}</span>원`
+    + ` &nbsp;|&nbsp; 미회수 합계: <span style="color:var(--amber)">${fmt(arFiltered.reduce((s,r)=>s+(r.remaining||0),0))}</span>원`;
   document.getElementById('ar-page-info').textContent = `${arPage} / ${pages}`;
 
   // 버튼 상태 갱신
