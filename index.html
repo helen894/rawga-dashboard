@@ -930,6 +930,7 @@
   <div class="sheet-tabs" id="reporting-sub-tabs" style="margin-bottom:20px">
     <div class="sheet-tab active" data-reporting-sub="weekly">주간</div>
     <div class="sheet-tab" data-reporting-sub="monthly">월간</div>
+    <div class="sheet-tab" data-reporting-sub="regular">정기 보고 <span style="font-size:10px;color:var(--amber);font-weight:700">MVP</span></div>
   </div>
 
   <!-- 주간 하위 패널 -->
@@ -1350,6 +1351,76 @@
     </div>
 
   </div><!-- /rpt-panel-monthly -->
+
+  <!-- ======== 정기 보고 (MVP) ======== -->
+  <div id="rpt-panel-regular" style="display:none">
+    <style>
+      #rpt-panel-regular .rr-doc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px 26px 28px;max-width:800px;margin:0 auto;line-height:1.7;color:var(--text);}
+      #rpt-panel-regular .rr-when{font-size:13px;color:var(--text3);}
+      #rpt-panel-regular .rr-ttl{font-size:22px;font-weight:700;margin-top:3px;letter-spacing:-.01em;}
+      #rpt-panel-regular .rr-meta{font-size:12.5px;color:var(--text3);margin-top:6px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+      #rpt-panel-regular .rr-h{font-size:16px;font-weight:700;margin:26px 0 10px;}
+      #rpt-panel-regular .rr-h .s{font-size:12.5px;font-weight:400;color:var(--text3);margin-left:6px;}
+      #rpt-panel-regular .rr-call{border-left:3px solid var(--border);background:var(--card2);border-radius:0 6px 6px 0;padding:12px 15px;margin:13px 0;}
+      #rpt-panel-regular .rr-call.blue{border-color:var(--blue);background:var(--blue2);}
+      #rpt-panel-regular .rr-call.red{border-color:var(--red);background:var(--red2);}
+      #rpt-panel-regular .rr-call.green{border-color:var(--green);background:var(--green2);}
+      #rpt-panel-regular .rr-call.amber{border-color:var(--amber);background:var(--amber2);}
+      #rpt-panel-regular .rr-call .ct{font-size:13px;font-weight:700;margin-bottom:3px;color:var(--text2);}
+      #rpt-panel-regular .rr-call.blue .ct{color:var(--blue);} #rpt-panel-regular .rr-call.red .ct{color:var(--red);}
+      #rpt-panel-regular .rr-call.green .ct{color:var(--green);} #rpt-panel-regular .rr-call.amber .ct{color:var(--amber);}
+      #rpt-panel-regular .rr-call p{margin:0;font-size:13.5px;color:var(--text2);line-height:1.65;}
+      #rpt-panel-regular .rr-call p b{color:var(--text);}
+      #rpt-panel-regular .rr-crit{color:var(--red);font-weight:700;}
+      #rpt-panel-regular .rr-sigs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}
+      #rpt-panel-regular .rr-sig{font-size:13px;padding:3px 9px;border-radius:6px;}
+      #rpt-panel-regular .rr-sig.red{background:var(--red2);color:var(--red);}
+      #rpt-panel-regular .rr-sig.amber{background:var(--amber2);color:var(--amber);}
+      #rpt-panel-regular .rr-sig.green{background:var(--green2);color:var(--green);}
+      #rpt-panel-regular .rr-cashn{font-size:34px;font-weight:700;letter-spacing:-.03em;}
+      #rpt-panel-regular .rr-cashn .u{font-size:17px;font-weight:500;color:var(--text3);margin-left:3px;}
+      #rpt-panel-regular .rr-cd{font-size:14px;font-weight:700;color:var(--green);margin-left:10px;}
+      #rpt-panel-regular .rr-bar{position:relative;height:8px;border-radius:99px;background:var(--bg3);margin-top:12px;}
+      #rpt-panel-regular .rr-bar>.f{position:absolute;left:0;top:0;height:100%;border-radius:99px;background:var(--green);}
+      #rpt-panel-regular .rr-bar>.r{position:absolute;top:-4px;height:16px;width:2px;background:var(--red);border-radius:2px;}
+      #rpt-panel-regular .rr-cl{font-size:12.5px;color:var(--text3);margin-top:9px;}
+      #rpt-panel-regular .rr-cl b{color:var(--text);} #rpt-panel-regular .rr-cl .rk{color:var(--red);}
+      #rpt-panel-regular table.rr-kpi{width:100%;border-collapse:collapse;font-size:13.5px;}
+      #rpt-panel-regular table.rr-kpi th{font-size:11.5px;font-weight:500;color:var(--text3);text-align:right;padding:0 0 8px;}
+      #rpt-panel-regular table.rr-kpi th:first-child{text-align:left;}
+      #rpt-panel-regular table.rr-kpi td{padding:9px 0;border-top:1px solid var(--border);text-align:right;vertical-align:middle;}
+      #rpt-panel-regular table.rr-kpi td:first-child{text-align:left;color:var(--text2);}
+      #rpt-panel-regular table.rr-kpi td small{color:var(--text3);margin-left:4px;}
+      #rpt-panel-regular .rr-num{font-weight:700;color:var(--text);} #rpt-panel-regular .rr-num.in{color:var(--green);} #rpt-panel-regular .rr-num.out{color:var(--red);}
+      #rpt-panel-regular .rr-prev{color:var(--text3);}
+      #rpt-panel-regular .rr-dl{font-weight:700;font-size:12px;} #rpt-panel-regular .rr-dl.up{color:var(--green);} #rpt-panel-regular .rr-dl.dn{color:var(--red);} #rpt-panel-regular .rr-dl.fl{color:var(--text3);} #rpt-panel-regular .rr-dl.nu{color:var(--blue);}
+      #rpt-panel-regular .rr-spark{display:inline-block;width:72px;height:24px;vertical-align:middle;}
+      #rpt-panel-regular .rr-spark svg,#rpt-panel-regular .rr-proj svg{display:block;width:100%;height:auto;}
+      #rpt-panel-regular .rr-proj{width:100%;margin:8px 0 4px;}
+      #rpt-panel-regular table.rr-tl{width:100%;border-collapse:collapse;font-size:12.5px;}
+      #rpt-panel-regular table.rr-tl td{padding:8px 0;border-top:1px solid var(--border);}
+      #rpt-panel-regular table.rr-tl tr:first-child td{border-top:none;}
+      #rpt-panel-regular .rr-dt{color:var(--text3);white-space:nowrap;font-size:12px;}
+      #rpt-panel-regular .rr-amt{text-align:right;font-weight:700;white-space:nowrap;}
+      #rpt-panel-regular .rr-amt.in{color:var(--green);} #rpt-panel-regular .rr-amt.out{color:var(--red);}
+      #rpt-panel-regular .rr-biz{display:flex;flex-wrap:wrap;gap:10px;}
+      #rpt-panel-regular .rr-bizc{flex:1;min-width:140px;border:1px solid var(--border);border-radius:8px;padding:11px 12px;text-align:center;}
+      #rpt-panel-regular .rr-bizc .bn{font-size:12.5px;font-weight:700;color:var(--text);}
+      #rpt-panel-regular .rr-bizc .bv{font-size:18px;font-weight:700;color:var(--text);margin-top:4px;letter-spacing:-.02em;}
+      #rpt-panel-regular .rr-bizc .bs{font-size:11px;color:var(--text3);margin-top:2px;}
+      #rpt-panel-regular .rr-stub{border:1px dashed var(--border);border-radius:8px;padding:13px 15px;color:var(--text3);font-size:13px;background:var(--card2);}
+      #rpt-panel-regular .rr-stub b{color:var(--text2);}
+      #rpt-panel-regular .rr-toolbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2);}
+      #rpt-panel-regular .rr-toolbar input{width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:13px;}
+    </style>
+
+    <div class="rr-toolbar">
+      <span>보고기준일 <b id="rr-basedate" style="color:var(--text)">—</b></span>
+      <span>위험선(최소유지현금) <input type="number" id="rr-minbal" placeholder="억" step="1"> 억</span>
+      <span style="color:var(--text3);font-size:12px">MVP · 기존 데이터 연동 — 결정 대기함·예산 도넛·대출 만기는 데이터 준비되는 대로 연결</span>
+    </div>
+    <div id="rr-root"></div>
+  </div><!-- /rpt-panel-regular -->
 
 </div><!-- /panel-reporting -->
 
@@ -8093,6 +8164,193 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
   document.getElementById('email-refresh-history').addEventListener('click', () => renderEmailHistory());
 })();
 
+/* ===== 정기 보고 (MVP) — 기존 cfData 연동 ===== */
+function rrEok(n){ return (Number(n||0)/1e8).toFixed(1); }
+function rrAddDays(dateStr, days){ var d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
+
+function rrSparkSVG(pts, tone){
+  if(!pts || pts.length<2) return '';
+  var w=72,h=24,p=2.5,n=pts.length;
+  var mn=Math.min.apply(null,pts), mx=Math.max.apply(null,pts), rg=(mx-mn)||1;
+  var X=function(i){return p+i*(w-2*p)/(n-1);}, Y=function(v){return h-p-(v-mn)/rg*(h-2*p);};
+  var line='',area='M'+X(0).toFixed(1)+','+h;
+  for(var i=0;i<n;i++){var x=X(i).toFixed(1),y=Y(pts[i]).toFixed(1); line+=(i?'L':'M')+x+','+y+' '; area+=' L'+x+','+y;}
+  area+=' L'+X(n-1).toFixed(1)+','+h+' Z';
+  var col = tone==='neg'?'var(--red)':(tone==='neu'?'var(--blue)':'var(--green)');
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-hidden="true">'
+    +'<path d="'+area+'" fill="'+col+'" opacity="0.10"/>'
+    +'<path d="'+line.trim()+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    +'<circle cx="'+X(n-1).toFixed(1)+'" cy="'+Y(pts[n-1]).toFixed(1)+'" r="2" fill="'+col+'"/></svg>';
+}
+
+function rrProjSVG(weeksWon, riskWon){
+  var n=weeksWon.length; if(n<2) return '';
+  var pts=weeksWon.map(function(v){return v/1e8;});
+  var risk = riskWon!=null ? riskWon/1e8 : null;
+  var W=600,H=170,x0=10,x1=W-52,y0=18,y1=H-26;
+  var lo=Math.min.apply(null,pts), hi=Math.max.apply(null,pts);
+  if(risk!=null) lo=Math.min(lo,risk);
+  var pad=(hi-lo)*0.15||1, dmin=lo-pad, dmax=hi+pad*0.7, rng=(dmax-dmin)||1;
+  var X=function(i){return x0+i*(x1-x0)/(n-1);}, Y=function(v){return y1-(v-dmin)/rng*(y1-y0);};
+  var tmin=Math.min.apply(null,pts), ti=pts.indexOf(tmin);
+  var line='',area='M'+X(0).toFixed(1)+','+y1;
+  for(var i=0;i<n;i++){var x=X(i).toFixed(1),y=Y(pts[i]).toFixed(1); line+=(i?'L':'M')+x+','+y+' '; area+=' L'+x+','+y;}
+  area+=' L'+X(n-1).toFixed(1)+','+y1+' Z';
+  var o='';
+  if(risk!=null){ var ry=Y(risk);
+    o+='<line x1="'+x0+'" y1="'+ry.toFixed(1)+'" x2="'+x1+'" y2="'+ry.toFixed(1)+'" stroke="var(--red)" stroke-width="1" stroke-dasharray="4 3" opacity="0.6"/>';
+    o+='<text x="'+(x1+4)+'" y="'+(ry+3).toFixed(1)+'" font-size="9.5" fill="var(--red)">위험선 '+risk.toFixed(0)+'</text>';
+  }
+  o+='<path d="'+area+'" fill="var(--blue)" opacity="0.08"/>';
+  o+='<path d="'+line.trim()+'" fill="none" stroke="var(--blue)" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/>';
+  o+='<circle cx="'+X(0).toFixed(1)+'" cy="'+Y(pts[0]).toFixed(1)+'" r="2.6" fill="var(--blue)"/>';
+  o+='<text x="'+(X(0)+5).toFixed(1)+'" y="'+(Y(pts[0])-6).toFixed(1)+'" font-size="10" font-weight="700" fill="var(--text)">현재 '+pts[0].toFixed(1)+'</text>';
+  var ta=ti===n-1?'end':(ti===0?'start':'middle'), tx=ti===n-1?X(ti)-1:X(ti);
+  o+='<circle cx="'+X(ti).toFixed(1)+'" cy="'+Y(tmin).toFixed(1)+'" r="3.2" fill="var(--red)"/>';
+  o+='<text x="'+tx.toFixed(1)+'" y="'+(Y(tmin)-8).toFixed(1)+'" text-anchor="'+ta+'" font-size="10.5" font-weight="800" fill="var(--red)">최저 '+tmin.toFixed(1)+'억</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+o+'</svg>';
+}
+
+function renderRegularReport(){
+  var root=document.getElementById('rr-root'); if(!root) return;
+  var ref = reportBaseDate || refDate || todayKST();
+  var bd=document.getElementById('rr-basedate'); if(bd) bd.textContent=ref;
+  var minEok=parseFloat(localStorage.getItem('rr_min_balance'));
+  var minInput=document.getElementById('rr-minbal');
+  if(minInput && document.activeElement!==minInput) minInput.value = isNaN(minEok)?'':minEok;
+  var riskWon = isNaN(minEok)?null:minEok*1e8;
+
+  var mS=monthStart(ref), pmS=prevMonthStart(ref), pmE=prevMonthEnd(ref);
+  var day=parseInt(ref.slice(8,10),10);
+
+  var cash=INIT_CASH, inMTD=0, outMTD=0, inPrev=0;
+  var inDaily={}, outDaily={};
+  for(var k=0;k<cfData.length;k++){ var r=cfData[k];
+    var rin=Number(r.in||0), rout=Number(r.out||0);
+    if(r.status==='실제 입금' && r.date<=ref) cash+=rin;
+    if(r.status==='실제 지출' && r.date<=ref) cash-=rout;
+    if(r.status==='실제 입금' && r.date>=mS && r.date<=ref){ inMTD+=rin; inDaily[r.date]=(inDaily[r.date]||0)+rin; }
+    if(r.status==='실제 지출' && r.date>=mS && r.date<=ref){ outMTD+=rout; outDaily[r.date]=(outDaily[r.date]||0)+rout; }
+    if(r.status==='실제 입금' && r.date>=pmS && r.date<=pmE && parseInt(r.date.slice(8,10),10)<=day) inPrev+=rin;
+  }
+  function dailyCum(map){ var keys=Object.keys(map).sort(), acc=0, arr=[]; for(var i=0;i<keys.length;i++){ acc+=map[keys[i]]; arr.push(acc); } if(arr.length===0) arr=[0,0]; else if(arr.length===1) arr=[0,arr[0]]; return arr; }
+  var inSpark=dailyCum(inDaily), outSpark=dailyCum(outDaily);
+
+  var s3=rrAddDays(ref,-91), out3=0;
+  for(var k2=0;k2<cfData.length;k2++){ var r2=cfData[k2]; if(r2.status==='실제 지출' && r2.date>s3 && r2.date<=ref) out3+=Number(r2.out||0); }
+  var avgOut=out3/3, runway = avgOut>0 ? cash/avgOut : null;
+  var deplete='—';
+  if(runway!=null && runway<600){ var dd=new Date(ref+'T00:00:00'); dd.setMonth(dd.getMonth()+Math.floor(runway)); deplete=dd.toISOString().slice(0,7); }
+  var mtdPct = inPrev>0 ? Math.round(inMTD/inPrev*100) : null;
+
+  var weeks=[cash];
+  for(var w=1;w<=13;w++){ var weS=rrAddDays(ref, w*7), pin=0, pout=0;
+    for(var k3=0;k3<cfData.length;k3++){ var r3=cfData[k3];
+      if(r3.status==='입금 예정' && r3.date<=weS) pin+=Number(r3.in||0);
+      if(r3.status==='지출 예정' && r3.date<=weS) pout+=Number(r3.out||0);
+    }
+    weeks.push(cash+pin-pout);
+  }
+  var troughWon=Math.min.apply(null,weeks);
+
+  var limit=rrAddDays(ref,60), TH=3e7, events=[];
+  for(var k4=0;k4<cfData.length;k4++){ var r4=cfData[k4];
+    if((r4.status==='입금 예정'||r4.status==='지출 예정') && r4.date>ref && r4.date<=limit){
+      var amt = r4.status==='입금 예정'?Number(r4.in||0):Number(r4.out||0);
+      if(amt>=TH) events.push({date:r4.date, desc:r4.desc||r4.big_cat||'—', inc:r4.status==='입금 예정', amt:amt});
+    }
+  }
+  events.sort(function(a,b){return a.date<b.date?-1:1;}); events=events.slice(0,10);
+
+  var biz={ '세종F2':0, '라오스':0, '인오가닉':0 };
+  for(var k5=0;k5<cfData.length;k5++){ var r5=cfData[k5];
+    if(r5.status!=='실제 지출' || r5.date<mS || r5.date>ref) continue;
+    var bc=r5.big_cat||'';
+    if(bc==='세종시') biz['세종F2']+=Number(r5.out||0);
+    else if(bc==='라오스') biz['라오스']+=Number(r5.out||0);
+    if((r5.mid_cat||'')==='인오가닉') biz['인오가닉']+=Number(r5.out||0);
+  }
+
+  var sigs=[];
+  if(runway!=null){ if(runway<6) sigs.push(['red','런웨이 '+runway.toFixed(1)+'개월']); else if(runway<12) sigs.push(['amber','런웨이 '+runway.toFixed(1)+'개월']); else sigs.push(['green','런웨이 '+runway.toFixed(1)+'개월']); }
+  if(riskWon!=null){ if(troughWon<riskWon) sigs.push(['red','향후 저점 위험선 하회']); else sigs.push(['green','향후 저점 여유 '+rrEok(troughWon-riskWon)+'억']); }
+  if(mtdPct!=null){ if(mtdPct<90) sigs.push(['amber','입금 전월동기 '+mtdPct+'%']); else sigs.push(['green','입금 전월동기 '+mtdPct+'%']); }
+
+  var netMTD=inMTD-outMTD;
+  var H='';
+  H+='<div class="rr-doc">';
+  H+='<div class="rr-when">정기 현금흐름 보고 · 자동 생성(MVP)</div>';
+  H+='<div class="rr-ttl">현금흐름 보고</div>';
+  H+='<div class="rr-meta">보고기준일 '+ref+' · 재무 Mini-CEO</div>';
+
+  H+='<div class="rr-call blue"><div class="ct">결론</div><p>현재 가용현금 <b>'+rrEok(cash)+'억</b>'
+    +(runway!=null?', 런웨이 <b>'+runway.toFixed(1)+'개월</b>':'')
+    +'. 당월 입금 '+rrEok(inMTD)+'억 · 출금 '+rrEok(outMTD)+'억 (순 '+(netMTD>=0?'+':'−')+rrEok(Math.abs(netMTD))+'억)'
+    +(riskWon==null?' <span class="rr-crit">· 위험선을 설정하면 저점 여유가 표시됩니다.</span>':'')+'</p></div>';
+
+  if(sigs.length){ H+='<div class="rr-sigs">'; for(var si=0;si<sigs.length;si++) H+='<span class="rr-sig '+sigs[si][0]+'">'+sigs[si][1]+'</span>'; H+='</div>'; }
+
+  H+='<div class="rr-h">결정 대기함</div>';
+  H+='<div class="rr-stub">🔻 <b>다음 단계에서 연결됩니다.</b> 결정 항목(사안·선택지·권고·Owner·기한) 입력 체계가 준비되면 이 자리에 CEO(L3) 결정 대기 목록이 표시됩니다.</div>';
+
+  H+='<div class="rr-h">① 현금 상황</div>';
+  H+='<div><span class="rr-cashn">'+rrEok(cash)+'<span class="u">억</span></span></div>';
+  if(riskWon!=null){
+    var scale=Math.max(cash, riskWon)*1.15/1e8;
+    H+='<div class="rr-bar"><span class="f" style="width:'+Math.min(100,(cash/1e8)/scale*100).toFixed(0)+'%"></span><span class="r" style="left:'+((riskWon/1e8)/scale*100).toFixed(0)+'%"></span></div>';
+    H+='<div class="rr-cl">가용 <b>'+rrEok(cash)+'억</b> · <span class="rk">위험선 '+minEok+'억</span>'+(runway!=null?' · 현 소진율 기준 고갈 <b>'+deplete+'</b>':'')+'</div>';
+  } else {
+    H+='<div class="rr-cl">'+(runway!=null?'현 소진율 기준 고갈 <b>'+deplete+'</b> · ':'')+'위험선 미설정 (상단에서 입력)</div>';
+  }
+  H+='<div class="rr-cl" style="margin-top:4px">통장별 분포는 계좌 연동 후 표시됩니다.</div>';
+
+  H+='<div class="rr-h">② 정량 지표 <span class="s">전사 · 당월 누계</span></div>';
+  H+='<table class="rr-kpi"><thead><tr><th>지표</th><th>현재</th><th>당월 추이</th></tr></thead><tbody>';
+  H+='<tr><td>총잔액</td><td class="rr-num">'+rrEok(cash)+'억</td><td></td></tr>';
+  H+='<tr><td>입금 <small>당월 누계</small></td><td class="rr-num in">'+rrEok(inMTD)+'억</td><td><span class="rr-spark">'+rrSparkSVG(inSpark,'pos')+'</span></td></tr>';
+  H+='<tr><td>출금 <small>당월 누계</small></td><td class="rr-num out">'+rrEok(outMTD)+'억</td><td><span class="rr-spark">'+rrSparkSVG(outSpark,'neg')+'</span></td></tr>';
+  H+='<tr><td>런웨이</td><td class="rr-num">'+(runway!=null?runway.toFixed(1)+'개월':'—')+'</td><td></td></tr>';
+  H+='<tr><td>MTD 입금 <small>전월동기 대비</small></td><td class="rr-num">'+(mtdPct!=null?mtdPct+'%':'—')+'</td><td><small>전월동기 '+rrEok(inPrev)+'억</small></td></tr>';
+  H+='</tbody></table>';
+  H+='<div class="rr-cl" style="margin-top:6px">※ 직전 보고 대비(Δ)는 보고 스냅샷이 쌓이면 활성화됩니다.</div>';
+
+  H+='<div class="rr-h">③ 사업별 예산 집행 <span class="s">현재는 당월 집행액만 · 예산 도넛은 마스터 입력 후</span></div>';
+  H+='<div class="rr-biz">';
+  ['세종F2','라오스','인오가닉'].forEach(function(nm){ H+='<div class="rr-bizc"><div class="bn">'+nm+'</div><div class="bv">'+rrEok(biz[nm])+'억</div><div class="bs">당월 집행</div></div>'; });
+  H+='</div>';
+  H+='<div class="rr-stub" style="margin-top:8px">🔻 총예산·대출/자부담·기지급/미지급 <b>예산 마스터</b>가 입력되면 도넛(집행률)로 전환됩니다.</div>';
+
+  H+='<div class="rr-h">④ 임계 입출금 <span class="s">향후 60일 · 3천만원↑ 예정</span></div>';
+  if(events.length){
+    H+='<table class="rr-tl"><tbody>';
+    for(var e=0;e<events.length;e++){ var ev=events[e];
+      H+='<tr><td><span class="rr-dt">'+ev.date.slice(5)+'</span> &nbsp;'+ev.desc+'</td><td class="rr-amt '+(ev.inc?'in':'out')+'">'+(ev.inc?'+':'−')+rrEok(ev.amt)+'억</td></tr>';
+    }
+    H+='</tbody></table>';
+    H+='<div class="rr-cl" style="margin-top:5px">※ 대출 만기는 로가 대출현황 적재 후 자동 포함됩니다.</div>';
+  } else {
+    H+='<div class="rr-stub">해당 기간 3천만원 이상 예정 입출금 없음. (대출 만기는 로가 대출현황 적재 후 포함)</div>';
+  }
+
+  H+='<div class="rr-h">⑤ 향후 현금 전망 <span class="s">향후 13주 · 예정 입출금 누적</span></div>';
+  H+='<div class="rr-proj">'+rrProjSVG(weeks, riskWon)+'</div>';
+  H+='<div class="rr-cl">향후 13주 최저 <b>'+rrEok(troughWon)+'억</b>'+(riskWon!=null?' · <span class="rk">위험선 '+minEok+'억</span>까지 여유 <b>'+rrEok(troughWon-riskWon)+'억</b>':'')+'</div>';
+
+  H+='<div class="rr-h">⑥ 정성 코멘트</div>';
+  H+='<div class="rr-stub">🔻 해석·의견 편집 기능은 다음 단계. 자동 요약: 당월 순현금 '+(netMTD>=0?'흑자':'적자')+' '+rrEok(Math.abs(netMTD))+'억 · 런웨이 '+(runway!=null?runway.toFixed(1)+'개월':'—')+'.</div>';
+
+  H+='</div>';
+  root.innerHTML=H;
+}
+
+document.addEventListener('input', function(ev){
+  if(ev.target && ev.target.id==='rr-minbal'){
+    var v=ev.target.value;
+    if(v==='') localStorage.removeItem('rr_min_balance'); else localStorage.setItem('rr_min_balance', String(parseFloat(v)));
+    renderRegularReport();
+  }
+});
+
 /* ---- 리포팅 하위 탭 이벤트 ---- */
 /* ---- 리포팅 하위 탭 이벤트 ---- */
 function renderActiveReportingSubTab() {
@@ -8100,9 +8358,12 @@ function renderActiveReportingSubTab() {
   const sub = active?.dataset.reportingSub || 'weekly';
   const weeklyPanel = document.getElementById('rpt-panel-weekly');
   const monthlyPanel = document.getElementById('rpt-panel-monthly');
+  const regularPanel = document.getElementById('rpt-panel-regular');
   if (weeklyPanel) weeklyPanel.style.display = sub === 'weekly' ? '' : 'none';
   if (monthlyPanel) monthlyPanel.style.display = sub === 'monthly' ? '' : 'none';
+  if (regularPanel) regularPanel.style.display = sub === 'regular' ? '' : 'none';
   if (sub === 'monthly') renderMonthlyReport();
+  else if (sub === 'regular') renderRegularReport();
   else renderWeeklyReport();
 }
 
