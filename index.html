@@ -597,6 +597,16 @@
     </div>
   </div>
 
+  <!-- 대출 현황 요약 (대출 있을 때만 표시) -->
+  <div class="chart-box dashboard-card" id="loan-dash-box" style="margin-bottom:20px;display:none">
+    <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <span>🏦 대출 현황 <small id="loan-dash-period" style="font-size:12px;color:var(--text2);font-weight:400"></small></span>
+      <span id="loan-dash-link" style="font-size:12px;color:var(--blue);font-weight:600;cursor:pointer">대출 탭 →</span>
+    </div>
+    <div id="loan-dash-warn"></div>
+    <div class="corp-card-grid" id="loan-dash-grid"></div>
+  </div>
+
   <!-- 법인카드 -->
   <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
     <div class="chart-title" style="margin-bottom:12px">💳 법인카드 <span id="corp-card-period" style="font-size:12px;color:var(--text2);font-weight:400"></span></div>
@@ -8999,6 +9009,7 @@ const LOAN_FIELDS = [
 ];
 let loanData = [];
 let _loanLoaded = false;
+let _loanLoading = false;
 let _loanEditIdx = null;
 
 function loanWon(n){ return Math.round(Number(n)||0).toLocaleString('ko-KR'); }
@@ -9023,6 +9034,7 @@ function loanDdayBadge(due){
 }
 
 async function loadLoanData(){
+  if(_loanLoading) return; _loanLoading=true;
   try{ const ls=JSON.parse(localStorage.getItem('loan_data')||'null'); if(Array.isArray(ls)) loanData=ls; }catch(e){}
   try{
     if(typeof _supa!=='undefined' && _supa){
@@ -9030,7 +9042,7 @@ async function loadLoanData(){
       if(!error && data && Array.isArray(data.data)) loanData=data.data;
     }
   }catch(e){ console.warn('[loan] 로드 실패', e); }
-  _loanLoaded=true;
+  _loanLoaded=true; _loanLoading=false;
   renderLoanTab();
 }
 
@@ -9123,6 +9135,34 @@ function renderLoanTab(){
   }
   // 대시보드 상단 요약(있으면)도 갱신
   if(typeof renderLoanSummaryCard==='function') try{ renderLoanSummaryCard(); }catch(e){}
+}
+
+/* 대시보드 탭 상단 대출 요약 카드 (법인카드 위) */
+function renderLoanSummaryCard(){
+  const box=document.getElementById('loan-dash-box'); if(!box) return;
+  if(!_loanLoaded){ loadLoanData(); return; }   // 지연 로드 (완료 시 renderLoanTab이 재호출)
+  const s=loanSummary();
+  if(!s.count){ box.style.display='none'; return; }  // 대출 없으면 카드 숨김
+  box.style.display='';
+  const period=document.getElementById('loan-dash-period'); if(period) period.textContent=`${s.count}건 · 잔액 ${loanEok(s.bal)}억`;
+  const warn=document.getElementById('loan-dash-warn');
+  if(warn){
+    warn.innerHTML = s.immN>0
+      ? `<div style="display:flex;align-items:center;gap:9px;background:var(--red2);color:var(--red);border-radius:9px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:12px"><span>⚠️ 3개월 내 만기 <b>${s.immN}건 · ${loanEok(s.immSum)}억</b> — 대응 필요</span>${s.nextDday!=null?`<span style="margin-left:auto;font-weight:700">다음 D-${s.nextDday}</span>`:''}</div>`
+      : '';
+  }
+  const grid=document.getElementById('loan-dash-grid');
+  if(grid){
+    const card=(label,val,sub,hot)=>`<div class="corp-mini-card"${hot?' style="background:var(--red2)"':''}>`
+      +`<div class="corp-card-label"${hot?' style="color:var(--red)"':''}>${label}</div>`
+      +`<div class="corp-card-value"${hot?' style="color:var(--red)"':''}>${val}${sub?` <span style="font-size:11px;font-weight:600;color:${hot?'var(--red)':'var(--text3)'}">${sub}</span>`:''}</div></div>`;
+    grid.innerHTML =
+      card('총 대출잔액', loanEok(s.bal)+'억', s.count+'건') +
+      card('월 이자(추정)', loanMan(s.mi)+'만', '실효 '+s.effRate.toFixed(1)+'%') +
+      card('최고 금리', s.maxRate?s.maxRate.toFixed(2)+'%':'—', '') +
+      card('임박 만기', s.immN>0?loanEok(s.immSum)+'억':'없음', s.immN>0?s.immN+'건':'', s.immN>0) +
+      card('다음 만기', s.nextDday!=null?'D-'+s.nextDday:'—', s.nextDue?s.nextDue.slice(5):'');
+  }
 }
 
 function openLoanModal(idx){
@@ -9235,6 +9275,7 @@ function exportLoanExcel(){
   const cancel=document.getElementById('loan-modal-cancel'); if(cancel) cancel.addEventListener('click',closeLoanModal);
   const save=document.getElementById('loan-modal-save'); if(save) save.addEventListener('click',saveLoanModal);
   const modal=document.getElementById('loan-modal'); if(modal) modal.addEventListener('click',e=>{ if(e.target===modal) closeLoanModal(); });
+  const dashLink=document.getElementById('loan-dash-link'); if(dashLink) dashLink.addEventListener('click',()=>{ const t=document.querySelector('.tab[data-tab="loan"]'); if(t) t.click(); });
 })();
 
 document.querySelectorAll('.tab').forEach(tab => {
@@ -11049,6 +11090,7 @@ function getDefaultAR() {
 function renderAll() {
   renderKPIs();
   renderCorpCardDashboard();
+  if (typeof renderLoanSummaryCard === 'function') try { renderLoanSummaryCard(); } catch(e) {}
   renderCharts();
   buildCFFilterSelects();
   renderCFTable();
