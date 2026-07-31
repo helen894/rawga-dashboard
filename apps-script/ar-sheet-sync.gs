@@ -194,15 +194,17 @@ function parseTab_(sh, cfg) {
   if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfg.expected + ') 못 찾음' };
   if (colMap.expected === undefined) return { records: [], note: '⚠ 예상회수액 열 못 찾음' };
 
-  var records = [];
+  // ── 1차 스캔: 후보 행 수집 (송금일 빈 행도 일단 보류로 담음) ─────────────
+  //   종전에는 '송금일 빈 행 = 합계/공백'으로 보고 전부 버렸으나, 병합셀 연속행
+  //   (같은 매입 건의 추가 매출/분할 회수 행)까지 사라져 금액이 누락됐음(동이식품 1억).
+  var hasStartCol = colMap.start !== undefined;
+  var cand = [];
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
     // ── (옵트인) 키워드 제외: config의 excludeKeywords 중 하나라도 행에 있으면 제외 ──
     //   예: CNA의 '통관경비'(매출 아님) 행 제외. 다른 탭엔 영향 없음.
     if (cfg.excludeKeywords && rowHasKeyword_(row, cfg.excludeKeywords)) continue;
     if (isSummaryRow_(row)) continue;
-    // start 열이 있으면 비어있는 행(누적/공백) 제외
-    if (colMap.start !== undefined && !String(row[colMap.start] || '').trim()) continue;
 
     var expected = num_(row[colMap.expected]);
     var collected = colMap.collected !== undefined ? num_(row[colMap.collected]) : 0;
@@ -216,21 +218,49 @@ function parseTab_(sh, cfg) {
     }
     if (expected === 0 && collected === 0) continue; // 빈 행 제외
 
+    // 송금일 열이 없는 탭은 이 판정을 적용하지 않음(종전 동작 유지)
+    var hasStart = hasStartCol ? String(row[colMap.start] || '').trim() !== '' : true;
+    cand.push({ row: row, expected: expected, collected: collected, hasStart: hasStart, first: cand.length === 0 });
+  }
+
+  // ── 2차: 합계 행만 걸러내고 나머지는 살림 ──────────────────────────────
+  //   송금일 빈 행은 아래 중 하나면 제외:
+  //     ⑴ 헤더 바로 아래 첫 행(대부분 탭의 총계 위치)
+  //     ⑵ 예상액이 '나머지 전 행의 합'과 일치(총계 행 고유 특징 — 하단 총계도 감지)
+  //     ⑶ 회수예정일·실제회수일·회수액이 모두 없음 = 근거 없는 참고/잔여 행
+  //        (지앤원 하단 2행처럼 시트 자체 합계에서도 빠져 있는 행)
+  //   나머지 = 병합셀 연속행(같은 매입 건의 추가 매출/분할 회수) → 직전 행의 송금일 승계해 유지
+  var totalExpAll = 0, skippedTotalRows = 0;
+  for (var t = 0; t < cand.length; t++) totalExpAll += cand[t].expected;
+
+  var records = [], lastStart = '';
+  for (var k = 0; k < cand.length; k++) {
+    var c = cand[k];
+    if (!c.hasStart) {
+      var dueVal     = colMap.due     !== undefined ? String(c.row[colMap.due]     || '').trim() : '';
+      var collectVal = colMap.collect !== undefined ? String(c.row[colMap.collect] || '').trim() : '';
+      var noEvidence = !dueVal && !collectVal && !(c.collected > 0);   // 회수 근거 전무
+      var isDropRow  = c.first || Math.abs(2 * c.expected - totalExpAll) <= 2 || noEvidence;
+      if (isDropRow) { skippedTotalRows++; continue; }
+    }
+    var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[colMap.start]) : (hasStartCol ? lastStart : '');
+    if (c.hasStart && hasStartCol) lastStart = startStr;
+
     var rec = {
       _id: '',
       partner: sh.getName(),
-      start: colMap.start !== undefined ? fmtDate_(row[colMap.start]) : '',
-      expected: expected,
-      collected: collected,
-      due_date: colMap.due !== undefined ? fmtDate_(row[colMap.due]) : '',
-      collect_date: colMap.collect !== undefined ? fmtDate_(row[colMap.collect]) : '',
+      start: startStr,
+      expected: c.expected,
+      collected: c.collected,
+      due_date: colMap.due !== undefined ? fmtDate_(c.row[colMap.due]) : '',
+      collect_date: colMap.collect !== undefined ? fmtDate_(c.row[colMap.collect]) : '',
       note: '',
     };
     // 회수액 없는 행(미회수)에 실제 입금일이 잘못 찍혀 있으면 공란 (입금 없으면 입금일도 없음).
     // FIFO 2단 정렬 전에 정리해야 stray 회수일이 '회수일 있는 행'으로 잘못 우선순위 먹지 않음 (예: 팬텀).
     if (!(rec.collected > 0)) rec.collect_date = '';
     // 미회수 열이 있는 탭만 remaining 전달(없으면 Edge가 예상-회수로 계산)
-    if (colMap.remaining !== undefined) rec.remaining = num_(row[colMap.remaining]);
+    if (colMap.remaining !== undefined) rec.remaining = num_(c.row[colMap.remaining]);
     records.push(rec);
   }
 
