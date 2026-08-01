@@ -15,6 +15,8 @@
  *  2) 외화(FX) 계좌 — inAmount/outAmount 가 USD 원금이라 원화로 섞으면 안 된다. 기본 제외하고 보고만.
  *  3) 오늘자 거래는 스냅샷이 불완전할 수 있어 기본 제외(--allow-today 로 해제).
  *  4) 적재 전 일자별 건수·합계를 출력해 눈으로 대조할 수 있게 한다.
+ *  5) desc 는 businessEntityName 우선(은행 원본 문자열은 잘려서 학습 키가 분산됨).
+ *     중분류는 보내지 않고 대시보드 '자동분류 추천'에 맡긴다 — 이유는 6) 블록 주석 참고.
  */
 import { readFileSync } from 'node:fs';
 
@@ -26,6 +28,12 @@ if (!file) { console.error('사용법: node scripts/clobe-cf-ingest.mjs <clobe.j
 
 const EDGE = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/cf-clobe-ingest';
 const SECRET_FILE = 'C:/Users/RAWGA/AppData/Local/rawga/bank-sync.secret';
+/* 이 함수는 verify_jwt=true 로 배포돼 있어 게이트웨이가 키를 요구한다
+ * (없으면 함수에 닿기도 전에 401 UNAUTHORIZED_NO_AUTH_HEADER).
+ * 아래는 index.html 에 이미 박혀 브라우저로 배포되는 공개 publishable 키라 비밀이 아니다.
+ * 실제 인증은 본문의 secret(=BANK_SYNC_SECRET) 이 한다.
+ * 나중에 --no-verify-jwt 로 재배포해도 이 헤더는 무시될 뿐이라 그대로 둬도 된다. */
+const SUPA_PUBLISHABLE_KEY = 'sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
 
 const won = n => Math.round(n).toLocaleString('ko-KR');
 const todayKST = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -133,17 +141,23 @@ for (const d of [...byDate.keys()].sort()) {
 console.log(`  합계        ${String(target.length).padStart(3)}건   입금 ${won(sumIn).padStart(15)}   출금 ${won(sumOut).padStart(15)}   순 ${won(sumIn - sumOut).padStart(15)}`);
 
 /* ── 6) cf_data 행으로 변환 ────────────────────────────────── */
-const CLOBE_SKIP_CATEGORY = /^계정 없는/;   // '계정 없는 입금/출금' 은 미분류로 비움
+/* desc — businessEntityName(클로브가 정규화한 거래처명) 우선.
+ *   은행 원본 문자열은 잘리거나 이체수단마다 달라져서("주식회사스파크" ↔ "스파크플러스",
+ *   "휴온스엔" ↔ "휴온스푸디언스") 대시보드 학습 매핑(catDescToMid)의 키가 분산된다.
+ *   기존 드라이브/CSV 적재 경로도 businessEntityName 우선이라 이쪽이 이력과도 맞는다.
+ *   거래처가 안 붙은 건(세무서·특송 등)은 은행 문자열로 폴백.
+ * 중분류(mid) — 보내지 않는다. 대시보드가 분류한다.
+ *   클로브 계정라벨은 대시보드 중분류와 어휘 체계가 다르고(매출원가·세금 환급 등 미등록),
+ *   한 거래에 라벨이 여러 개 붙어 어느 것이 채택될지가 응답 순서에 좌우된다.
+ *   mid 를 비우면 Edge 가 mid_cat:"" 로 넣고 대시보드 '✨ 자동분류 추천'의 대상이 된다. */
 const rows = target.map(r => {
   const inA = Number(r.inAmount) || 0, outA = Number(r.outAmount) || 0;
-  const cat = String(r.category || '').trim();
-  const desc = String(r.transactionDescription || r.transactionName || '').trim();
+  const desc = String(r.businessEntityName || r.transactionDescription || r.transactionName || '').trim();
   return {
     date: dateOf(r),
     desc: desc || '(거래내용 없음)',
     in: inA, out: outA,
     status: inA > 0 ? '실제 입금' : '실제 지출',
-    mid: CLOBE_SKIP_CATEGORY.test(cat) ? '' : cat,
     clobe_id: String(r.transactionId),
   };
 });
@@ -154,7 +168,11 @@ if (DRY) { console.log(`\n[dry-run] 적재하지 않았습니다. 대상 ${rows.
 const secret = readFileSync(SECRET_FILE, 'utf8').trim();
 const res = await fetch(EDGE, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    apikey: SUPA_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${SUPA_PUBLISHABLE_KEY}`,
+  },
   body: JSON.stringify({ secret, action: 'push', rows }),
 });
 const out = await res.json().catch(() => ({}));
