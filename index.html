@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAWGA 자금 대시보드</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- RAWGA Brand Identity Guidelines V2.0 — 국문 Pretendard / 영문(브랜드) Poppins, 수치는 JetBrains Mono 유지 -->
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -20,8 +22,17 @@
     --text: #1a1d2e;
     --text2: #5a6478;
     --text3: #9aa0b0;
-    --blue: #075138;
-    --blue2: rgba(7,81,56,0.10);
+    /* ── RAWGA Brand Identity Guidelines V2.0 (2026) 주요 색상 ──
+       강조(--blue)는 RAWGA DEEP GREEN. 아래 semantic 색(green/red/amber)은
+       증감·경고를 나타내는 기능색이라 브랜드색과 별개로 유지한다. */
+    --brand-deep: #314840;        /* RAWGA DEEP GREEN  · PANTONE 561 C  */
+    --brand-dark: #1B2B30;        /* RAWGA DARK GREEN  · PANTONE 5463 C */
+    --brand-soft: #739C65;        /* RAWGA SOFT GREEN  · PANTONE P 149-13 C */
+    --brand-light: #A8BCA3;       /* RAWGA LIGHT GREEN · PANTONE 559 C  */
+    --brand-white-green: #E7F1E1; /* RAWGA WHITE GREEN · PANTONE P 151-1 C */
+    --brand-online: #BCD4B0;      /* 온라인 전용 */
+    --blue: #314840;              /* 강조색 = DEEP GREEN */
+    --blue2: rgba(49,72,64,0.10);
     --green: #2ec77a;
     --green2: #d4f4e3;
     --red: #ff4d6a;
@@ -30,7 +41,8 @@
     --amber2: #fff3d4;
     --purple: #9b6dff;
     --teal: #00d4b4;
-    --font: 'Noto Sans KR', system-ui, sans-serif;
+    --font: 'Pretendard', system-ui, -apple-system, 'Malgun Gothic', sans-serif;
+    --font-brand: 'Poppins', 'Pretendard', sans-serif;  /* 영문 브랜드 표기 전용 */
     --mono: 'JetBrains Mono', monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,7 +56,8 @@
   #brand-home:hover { background: var(--blue2); color: var(--blue); }
   #brand-home:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { #brand-home { transition: none; } }
-  .logo span { color: var(--blue); }
+  /* 워드마크 'RAWGA' — 영문 전용 서체(Poppins) + DEEP GREEN (가이드 2.11 / 2.9) */
+  .logo span { color: var(--blue); font-family: var(--font-brand); font-weight: 600; letter-spacing: 0.02em; }
   .header-right { display: flex; align-items: center; gap: 16px; }
   .ref-date-wrap { display: flex; align-items: center; gap: 8px; }
   .ref-date-wrap label { font-size: 12px; color: var(--text2); }
@@ -216,7 +229,7 @@
   .cctx-popover-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:8px; }
   .cctx-popover-btns { display:flex; gap:6px; margin-top:10px; justify-content:flex-end; }
   .cctx-active-filters { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:4px 0 6px; }
-  .cctx-filter-tag { display:inline-flex; align-items:center; gap:3px; padding:2px 10px 2px 10px; background:rgba(7,81,56,0.10); border:1px solid rgba(7,81,56,0.28); border-radius:12px; font-size:11px; color:var(--blue); white-space:nowrap; }
+  .cctx-filter-tag { display:inline-flex; align-items:center; gap:3px; padding:2px 10px 2px 10px; background:rgba(49,72,64,0.10); border:1px solid rgba(49,72,64,0.28); border-radius:12px; font-size:11px; color:var(--blue); white-space:nowrap; }
   .cctx-filter-tag-x { background:none; border:none; cursor:pointer; color:var(--blue); padding:0; font-size:13px; line-height:1; margin-left:3px; }
   .cctx-filter-tag-x:hover { color:var(--red); }
   /* cctx 다중 선택 필터 — 체크박스 리스트 */
@@ -261,7 +274,7 @@
   .badge.지출 { background: rgba(255,77,106,0.15); color: var(--red); }
   .badge.완료 { background: rgba(46,199,122,0.15); color: var(--green); }
   .badge.지연 { background: rgba(255,77,106,0.15); color: var(--red); }
-  .badge.정상 { background: rgba(7,81,56,0.15); color: var(--blue); }
+  .badge.정상 { background: rgba(49,72,64,0.15); color: var(--blue); }
   .badge.미정 { background: rgba(155,109,255,0.15); color: var(--purple); }
   .badge.예정     { background: rgba(245,166,35,0.15); color: var(--amber); }
   .badge.부분회수 { background: rgba(245,166,35,0.15); color: var(--amber); }
@@ -367,7 +380,7 @@
   .modal-close { background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 6px; }
   .modal-close:hover { background: var(--bg3); color: var(--text); }
   .drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.15s; }
-  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: rgba(7,81,56,0.05); }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: rgba(49,72,64,0.05); }
   .drop-zone-icon { font-size: 36px; margin-bottom: 10px; }
   .drop-zone-text { font-size: 14px; color: var(--text2); margin-bottom: 6px; }
   .drop-zone-sub { font-size: 12px; color: var(--text3); }
@@ -2403,7 +2416,7 @@
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px">
           거래내용 + 구분 → 중분류 매핑
-          <span style="margin-left:8px;font-size:11px;font-weight:400;padding:2px 8px;border-radius:4px;background:rgba(7,81,56,0.15);color:var(--blue)">우선 적용</span>
+          <span style="margin-left:8px;font-size:11px;font-weight:400;padding:2px 8px;border-radius:4px;background:rgba(49,72,64,0.15);color:var(--blue)">우선 적용</span>
         </div>
         <div style="font-size:11px;color:var(--text3)">같은 거래내용이라도 입금/지출에 따라 다른 중분류를 자동 분류합니다 — 위 단독 매핑보다 우선 적용됩니다</div>
       </div>
@@ -4026,7 +4039,7 @@ function renderMonthlyRevenueChart() {
       datasets: [{
         label: '매출',
         data: vals,
-        backgroundColor: vals.map((v,i,a) => i===a.length-1 ? 'rgba(7,81,56,0.85)' : 'rgba(7,81,56,0.4)'),
+        backgroundColor: vals.map((v,i,a) => i===a.length-1 ? 'rgba(49,72,64,0.85)' : 'rgba(49,72,64,0.4)'),
         borderRadius: 4,
       }]
     },
@@ -4227,7 +4240,7 @@ function renderCashChart() {
   const skip = Math.max(1, Math.floor(labels.length/20));
   cashChartInst = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ label: '현금잔액', data: vals, borderColor: '#075138', backgroundColor: 'rgba(7,81,56,0.08)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#075138', fill: true, tension: 0.3 }] },
+    data: { labels, datasets: [{ label: '현금잔액', data: vals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.08)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840', fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
@@ -4264,7 +4277,7 @@ function renderDonutChart() {
   }
   const cats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#075138','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
+  const colors = ['#314840','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
 
   const legend = document.getElementById('donut-legend');
   legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
@@ -4297,7 +4310,7 @@ function renderDonutWeeklyChart() {
   }
   const cats   = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#075138','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
+  const colors = ['#314840','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
 
   const legend = document.getElementById('donut-weekly-legend');
   if (legend) legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
@@ -4489,7 +4502,7 @@ function renderARDonutChart() {
   // 건수 0인 항목 제외
   const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
   const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
-  const colors = { 완료: '#2ec77a', 정상: '#075138', 지연: '#ff4d6a', 미정: '#9b6dff' };
+  const colors = { 완료: '#2ec77a', 정상: '#314840', 지연: '#ff4d6a', 미정: '#9b6dff' };
   const colArr = labels.map(l => colors[l] || '#aaaaaa');
 
   const legend = document.getElementById('ar-legend');
@@ -7739,7 +7752,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
     green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
-    amber:'#f5a623', amber2:'#fff3d4', blue:'#075138',
+    amber:'#f5a623', amber2:'#fff3d4', blue:'#314840',
     text:'#1a1d2e', t2:'#5a6478', t3:'#9aa0b0',
     bg:'#f5f6fa', bg3:'#f0f2f7', card:'#ffffff', border:'#e8eaef',
   };
@@ -11384,7 +11397,7 @@ function renderDescMidList() {
       </div>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
       <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px">
-        <span class="badge" style="background:rgba(7,81,56,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${mid}</span>
+        <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${mid}</span>
         <span style="font-size:10px;color:var(--text3);white-space:nowrap">${bigCat}</span>
       </div>
       <button class="cat-del-desc-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5" title="삭제">✕</button>
@@ -11512,7 +11525,7 @@ function renderMidBigList() {
       </div>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
       <div style="flex:1;min-width:0">
-        <span class="badge" style="background:rgba(7,81,56,0.12);color:${col};font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${big}</span>
+        <span class="badge" style="background:rgba(49,72,64,0.12);color:${col};font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${big}</span>
       </div>
       <button class="cat-del-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5" title="삭제">✕</button>
     </div>`;
@@ -12007,7 +12020,7 @@ function renderComboList() {
       </div>
       <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;flex-shrink:0;background:${typeBg};color:${typeColor}">${type}</span>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
-      <span class="badge" style="background:rgba(7,81,56,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0">${mid}</span>
+      <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0">${mid}</span>
       <button class="combo-del-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5">✕</button>
     </div>`;
   }).join('');
@@ -12247,7 +12260,7 @@ function renderCatPreview(descResult, midResult, errors) {
     const tbody = document.querySelector('#cat-prev-desc-tbl tbody');
     const entries = Object.entries(descResult).slice(0, 30);
     tbody.innerHTML = entries.map(([d,m]) =>
-      `<tr><td style="color:var(--text)">${d}</td><td><span class="badge" style="background:rgba(7,81,56,0.15);color:var(--blue);font-size:11px;padding:2px 7px;border-radius:4px">${m}</span></td></tr>`
+      `<tr><td style="color:var(--text)">${d}</td><td><span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 7px;border-radius:4px">${m}</span></td></tr>`
     ).join('') + (totalDesc > 30 ? `<tr><td colspan="2" style="text-align:center;color:var(--text3)">... 외 ${totalDesc-30}건</td></tr>` : '');
   }
 
