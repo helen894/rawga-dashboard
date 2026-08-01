@@ -28,6 +28,17 @@ create trigger cf_data_bump_version
   before update on public.cf_data
   for each row execute function public.bump_version();
 
+-- ── Realtime 발행 ──────────────────────────────────────────────────────────
+-- 유실의 진짜 원인. 대시보드는 cf_data 의 UPDATE 를 구독하고 있었지만, supabase_realtime
+-- 퍼블리케이션에 cat_data 만 들어 있어 cf_data 이벤트가 한 번도 오지 않았다.
+-- → Edge 가 써도 대시보드는 모른 채 예전 배열을 들고 있다가 다음 저장에 통째로 덮어썼다.
+-- cat_data 는 발행돼 있어 카테고리 동기화만 정상이라 문제가 드러나지 않았다.
+alter publication supabase_realtime add table public.cf_data;
+
 -- 확인:
 --   select id, version, jsonb_array_length(data) as rows, updated_at from public.cf_data;
 --   update public.cf_data set updated_at = now() where id = <id>;  -- version 이 +1 되어야 정상
+--   select schemaname||'.'||tablename from pg_publication_tables where pubname='supabase_realtime';
+--
+-- 미적용: ar_data 도 대시보드가 구독하지만 발행돼 있지 않다(AR 은 시트가 진실원천이라
+--         브라우저가 쓰지 않아 유실 위험은 낮음). cat_data 와 함께 별도 검토.
