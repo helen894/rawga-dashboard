@@ -39,6 +39,11 @@
   /* HEADER */
   .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
   .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+  /* 좌상단 로고 = 대시보드로 이동 버튼 */
+  #brand-home { cursor: pointer; user-select: none; border-radius: 6px; padding: 2px 6px; margin-left: -6px; transition: background .12s, color .12s; }
+  #brand-home:hover { background: var(--blue2); color: var(--blue); }
+  #brand-home:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { #brand-home { transition: none; } }
   .logo span { color: var(--blue); }
   .header-right { display: flex; align-items: center; gap: 16px; }
   .ref-date-wrap { display: flex; align-items: center; gap: 8px; }
@@ -465,7 +470,7 @@
 </div>
 
 <div class="header">
-  <div class="logo"><span>RAWGA</span> 자금 대시보드</div>
+  <div class="logo" id="brand-home" role="button" tabindex="0" title="대시보드로 이동" aria-label="대시보드로 이동"><span>RAWGA</span> 자금 대시보드</div>
   <div class="header-right">
     <div class="user-badge" id="user-badge" style="display:none">
       <span class="user-dot"></span><span id="user-email-label"></span>
@@ -8888,6 +8893,7 @@ function navigateToWeeklyReport(skipRender) {
 
   // skipRender === true 이면 탭 전환만 (데이터 로드 전 조기 호출 용도)
   if (skipRender !== true) renderWeeklyReport();
+  pushTabState('reporting'); // 뒤로가기로 직전 화면 복귀
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -8937,6 +8943,7 @@ document.getElementById('kpi-sejong-card').addEventListener('click', () => {
   }
   if (bigSel) bigSel.value = '세종시';
   renderCFTable();
+  pushTabState('cashflow'); // 뒤로가기로 대시보드 복귀
 });
 
 // 라오스 카드 클릭 → 입출금 내역 탭 + 대분류 라오스 필터
@@ -8973,6 +8980,7 @@ document.getElementById('kpi-laos-card').addEventListener('click', () => {
   }
   if (bigSel) bigSel.value = '라오스';
   renderCFTable();
+  pushTabState('cashflow'); // 뒤로가기로 대시보드 복귀
 });
 
 document.getElementById('kpi-ar-card').addEventListener('click', () => {
@@ -9278,46 +9286,89 @@ function exportLoanExcel(){
   const dashLink=document.getElementById('loan-dash-link'); if(dashLink) dashLink.addEventListener('click',()=>{ const t=document.querySelector('.tab[data-tab="loan"]'); if(t) t.click(); });
 })();
 
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const panel = document.getElementById('panel-' + tab.dataset.tab);
-    panel.classList.add('active');
-    if (tab.dataset.tab === 'dashboard')      { renderKPIs(); renderCharts(); }
-    if (tab.dataset.tab === 'reporting')      renderActiveReportingSubTab();
-    if (tab.dataset.tab === 'corp-card')      renderCorporateCardTab();
-    if (tab.dataset.tab === 'loan')           renderLoanTab();
-    if (tab.dataset.tab === 'category')       setTimeout(() => renderCategoryTab(), 0);
-    if (tab.dataset.tab === 'recurring')      renderRecurringTab();
-    if (tab.dataset.tab === 'admin')          renderAuditLog();
+/* ===== 탭 전환 · 브라우저 히스토리(뒤로가기) 연동 =====
+ * 탭 클릭 / 좌상단 로고 / 뒤로가기가 모두 activateTab()을 거친다.
+ *  - push=false 는 popstate(뒤로가기) 전용 — 히스토리를 다시 쌓지 않기 위함
+ *  - URL은 바꾸지 않고 state만 쌓는다(기존 #reporting-weekly 딥링크와 충돌 방지)
+ */
+function pushTabState(name) {
+  try {
+    if (history.state && history.state.rawgaTab === name) return; // 같은 탭 중복 방지
+    history.pushState({ rawgaTab: name }, '');
+  } catch (e) { /* 히스토리 미지원 환경 무시 */ }
+}
 
-    // 탭 전환 시 필터 초기화 — 입출금 내역
-    if (tab.dataset.tab === 'cashflow') {
-      // ⚠ cf-from / cf-to 는 탭 이동 시 초기화하지 않음
-      //   이번 달로 리셋하면 다음 달 날짜의 '입금 예정' / '지출 예정' 항목이
-      //   필터 범위 밖으로 밀려나 사라진 것처럼 보이는 버그 방지
-      //   날짜 범위 초기화는 '필터 초기화' 버튼(cf-filter-reset-btn)으로 수행
-      document.getElementById('cf-filter-type').value = '';
-      document.getElementById('cf-filter-status').value = '';
-      document.getElementById('cf-filter-mid').value = '';
-      document.getElementById('cf-filter-big').value = '';
-      document.getElementById('cf-search').value = '';
-      document.getElementById('cf-amount-min').value = '';
-      document.getElementById('cf-amount-max').value = '';
-      cfPage = 1;
-      renderCFTable();
-    }
-    if (tab.dataset.tab === 'ar') {
-      document.getElementById('ar-filter-status').value = '';
-      document.getElementById('ar-filter-partner').value = '';
-      document.getElementById('ar-search').value = '';
-      arPage = 1;
-      renderARTable();
-    }
-  });
+function activateTab(name, { push = true } = {}) {
+  const tab   = document.querySelector(`.tab[data-tab="${name}"]`);
+  const panel = document.getElementById('panel-' + name);
+  if (!tab || !panel) return;
+
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  panel.classList.add('active');
+
+  if (name === 'dashboard')      { renderKPIs(); renderCharts(); }
+  if (name === 'reporting')      renderActiveReportingSubTab();
+  if (name === 'corp-card')      renderCorporateCardTab();
+  if (name === 'loan')           renderLoanTab();
+  if (name === 'category')       setTimeout(() => renderCategoryTab(), 0);
+  if (name === 'recurring')      renderRecurringTab();
+  if (name === 'admin')          renderAuditLog();
+
+  // 탭 전환 시 필터 초기화 — 입출금 내역
+  if (name === 'cashflow') {
+    // ⚠ cf-from / cf-to 는 탭 이동 시 초기화하지 않음
+    //   이번 달로 리셋하면 다음 달 날짜의 '입금 예정' / '지출 예정' 항목이
+    //   필터 범위 밖으로 밀려나 사라진 것처럼 보이는 버그 방지
+    //   날짜 범위 초기화는 '필터 초기화' 버튼(cf-filter-reset-btn)으로 수행
+    document.getElementById('cf-filter-type').value = '';
+    document.getElementById('cf-filter-status').value = '';
+    document.getElementById('cf-filter-mid').value = '';
+    document.getElementById('cf-filter-big').value = '';
+    document.getElementById('cf-search').value = '';
+    document.getElementById('cf-amount-min').value = '';
+    document.getElementById('cf-amount-max').value = '';
+    cfPage = 1;
+    renderCFTable();
+  }
+  if (name === 'ar') {
+    document.getElementById('ar-filter-status').value = '';
+    document.getElementById('ar-filter-partner').value = '';
+    document.getElementById('ar-search').value = '';
+    arPage = 1;
+    renderARTable();
+  }
+
+  if (push) pushTabState(name);
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => activateTab(tab.dataset.tab));
 });
+
+// 뒤로가기/앞으로가기 → 해당 탭 복원 (히스토리를 다시 쌓지 않음)
+window.addEventListener('popstate', e => {
+  const name = (e.state && e.state.rawgaTab) || 'dashboard';
+  activateTab(name, { push: false });
+});
+
+// 최초 진입 상태 기록 — 첫 탭 이동 후 뒤로가기가 이 상태로 돌아오게 함
+try {
+  const _initialTab = document.querySelector('.tab.active')?.dataset.tab || 'dashboard';
+  history.replaceState({ rawgaTab: _initialTab }, '');
+} catch (e) {}
+
+// 좌상단 로고 → 대시보드로 이동
+(() => {
+  const home = document.getElementById('brand-home');
+  if (!home) return;
+  const goHome = () => { activateTab('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  home.addEventListener('click', goHome);
+  home.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goHome(); }
+  });
+})();
 
 /* ===== 법인카드 탭 — 저장/렌더/CRUD ===== */
 function saveCorpCardSettings() {
@@ -10239,6 +10290,7 @@ function goToCorpCardForPerson(col) {
   const panel = document.getElementById('panel-corp-card');
   if (tab) tab.classList.add('active');
   if (panel) panel.classList.add('active');
+  pushTabState('corp-card'); // 뒤로가기로 직전 화면 복귀
   renderCorporateCardTab();
   renderCCTxTable();
 }
@@ -10968,6 +11020,7 @@ function switchToARTab(partner) {
   const panel = document.getElementById('panel-ar');
   if (tab) tab.classList.add('active');
   if (panel) panel.classList.add('active');
+  pushTabState('ar'); // 뒤로가기로 직전 화면 복귀
   if (partner) {
     const sel = document.getElementById('ar-filter-partner');
     if (sel) sel.value = partner;
