@@ -2651,12 +2651,24 @@ function renderBankRecon() {
   const bg   = ad <= 1000000 ? 'var(--green2)' : (ad <= 10000000 ? 'var(--amber2)' : 'var(--red2)');
   const mark = ad <= 1000000 ? '일치' : (ad <= 10000000 ? '확인 필요' : '점검 필요');
 
-  // 신선도
+  // 신선도 — 수집 시각(월/일 시:분) + 경과(분·시간·일). 매일 09시 자동 갱신이라 24시간 넘으면 경고
   let age = '', stale = false;
   if (s.asOf) {
-    const d = Math.floor((new Date(today + 'T00:00:00') - new Date(String(s.asOf).slice(0,10) + 'T00:00:00')) / 86400000);
-    age = d <= 0 ? '오늘 수집' : `${d}일 전 수집`;
-    stale = d >= 3;
+    const t = new Date(s.asOf);
+    if (!isNaN(t.getTime())) {
+      const mins  = Math.max(0, Math.floor((Date.now() - t.getTime()) / 60000));
+      const p2    = n => String(n).padStart(2, '0');
+      const stamp = `${p2(t.getMonth() + 1)}/${p2(t.getDate())} ${p2(t.getHours())}:${p2(t.getMinutes())}`;
+      const rel   = mins < 60        ? `${mins}분 전`
+                  : mins < 60 * 48   ? `${Math.floor(mins / 60)}시간 전`
+                                     : `${Math.floor(mins / 1440)}일 전`;
+      age   = `${stamp} 수집 · ${rel}`;
+      stale = mins >= 60 * 24;
+    } else {
+      const d = Math.floor((new Date(today + 'T00:00:00') - new Date(String(s.asOf).slice(0,10) + 'T00:00:00')) / 86400000);
+      age = d <= 0 ? '오늘 수집' : `${d}일 전 수집`;
+      stale = d >= 1;
+    }
   }
   const fxTxt = (s.fx && s.fx.length)
     ? s.fx.map(x => `${x.ccy} ${Number(x.amount).toLocaleString()}`).join(' + ') +
