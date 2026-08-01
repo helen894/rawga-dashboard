@@ -11,17 +11,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
-    --bg: #f5f6fa;
+    /* 뉴트럴은 브랜드 그린 쪽으로 색조를 살짝 기울인 값 — 차가운 회색 대신
+       'Designed by Nature' 무드의 차분한 자연 톤 (Brand Identity V2.0) */
+    --bg: #F2F5F1;
     --bg2: #ffffff;
-    --bg3: #f0f2f7;
+    --bg3: #E9EFE7;
     --bg4: #e8eaf000;
     --card: #ffffff;
-    --card2: #f8f9fc;
-    --border: rgba(0,0,0,0.08);
-    --border2: rgba(0,0,0,0.15);
-    --text: #1a1d2e;
-    --text2: #5a6478;
-    --text3: #9aa0b0;
+    --card2: #F6F9F4;
+    --border: rgba(49,72,64,0.12);
+    --border2: rgba(49,72,64,0.22);
+    --text: #1B2B30;      /* RAWGA DARK GREEN */
+    --text2: #55655D;
+    --text3: #94A296;
     /* ── RAWGA Brand Identity Guidelines V2.0 (2026) 주요 색상 ──
        강조(--blue)는 RAWGA DEEP GREEN. 아래 semantic 색(green/red/amber)은
        증감·경고를 나타내는 기능색이라 브랜드색과 별개로 유지한다. */
@@ -33,14 +35,15 @@
     --brand-online: #BCD4B0;      /* 온라인 전용 */
     --blue: #314840;              /* 강조색 = DEEP GREEN */
     --blue2: rgba(49,72,64,0.10);
-    --green: #2ec77a;
-    --green2: #d4f4e3;
-    --red: #ff4d6a;
-    --red2: #ffe0e5;
-    --amber: #f5a623;
-    --amber2: #fff3d4;
-    --purple: #9b6dff;
-    --teal: #00d4b4;
+    /* 의미색(증감·경고)은 유지하되 채도를 낮춰 자연 톤에 맞춤 — 대비는 오히려 개선됨 */
+    --green: #2A7F57;              /* 입금·증가 */
+    --green2: #E7F1E1;             /* RAWGA WHITE GREEN */
+    --red: #C24A38;                /* 출금·감소 (테라코타) */
+    --red2: #F7E4DE;
+    --amber: #9E6A15;              /* 주의 (오커) */
+    --amber2: #F8EEDA;
+    --purple: #7A6AA6;
+    --teal: #3F9E8C;
     --font: 'Pretendard', system-ui, -apple-system, 'Malgun Gothic', sans-serif;
     --font-brand: 'Poppins', 'Pretendard', sans-serif;  /* 영문 브랜드 표기 전용 */
     --mono: 'JetBrains Mono', monospace;
@@ -50,14 +53,16 @@
 
   /* HEADER */
   .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
-  .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); display: flex; align-items: center; gap: 11px; }
+  /* CI 로고타입(벡터 원본) — 화면 최소 20px 준수(가이드 2.4), 비례 유지·임의 재색 금지(2.5).
+     흰 배경에는 RAWGA DEEP GREEN 적용(2.9). 색을 고정해 부모 hover 색 변화의 영향을 받지 않게 함 */
+  .brand-mark { height: 21px; width: auto; display: block; flex: none; color: var(--brand-deep); }
+  .brand-sub { font-weight: 600; color: var(--text); letter-spacing: -0.3px; }
   /* 좌상단 로고 = 대시보드로 이동 버튼 */
   #brand-home { cursor: pointer; user-select: none; border-radius: 6px; padding: 2px 6px; margin-left: -6px; transition: background .12s, color .12s; }
   #brand-home:hover { background: var(--blue2); color: var(--blue); }
   #brand-home:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { #brand-home { transition: none; } }
-  /* 워드마크 'RAWGA' — 영문 전용 서체(Poppins) + DEEP GREEN (가이드 2.11 / 2.9) */
-  .logo span { color: var(--blue); font-family: var(--font-brand); font-weight: 600; letter-spacing: 0.02em; }
   .header-right { display: flex; align-items: center; gap: 16px; }
   .ref-date-wrap { display: flex; align-items: center; gap: 8px; }
   .ref-date-wrap label { font-size: 12px; color: var(--text2); }
@@ -109,7 +114,7 @@
   .audit-table th { text-align: left; padding: 9px 12px; background: var(--bg3); color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .audit-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
   .audit-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600; white-space: nowrap; }
-  .audit-login    { background: var(--green2); color: #2ec77a; }
+  .audit-login    { background: var(--green2); color: var(--green); }
   .audit-logout   { background: var(--bg3);   color: var(--text2); }
   .audit-modify   { background: var(--amber2); color: var(--amber); }
   .audit-upload   { background: var(--blue2);  color: var(--blue); }
@@ -483,7 +488,7 @@
 </div>
 
 <div class="header">
-  <div class="logo" id="brand-home" role="button" tabindex="0" title="대시보드로 이동" aria-label="대시보드로 이동"><span>RAWGA</span> 자금 대시보드</div>
+  <div class="logo" id="brand-home" role="button" tabindex="0" title="대시보드로 이동" aria-label="RAWGA 자금 대시보드 — 대시보드로 이동"><svg class="brand-mark" viewBox="0 0 865.24 178.77" fill="currentColor" role="img" aria-label="RAWGA"><path d="M443.96 176.13L410.43 55.06L375.35 176.13L347.96 176.13L299.71 2.51L327.66 2.51L362.97 138.36L400.41 2.51L418.88 2.51L456.34 138.36L491.63 2.51L519.58 2.51L471.36 176.13L443.96 176.13"/><path d="M613.75 178.77C563.56 178.77 525.71 140.4 525.71 89.51C525.71 38.48 563.56 0 613.75 0C651.47 0 681.67 19.78 694.53 52.91L695.85 56.32L663.97 56.32L663.3 54.89C654.4 35.92 636.34 25.04 613.75 25.04C577.68 25.04 553.44 50.95 553.44 89.51C553.44 127.93 577.68 153.73 613.75 153.73C644.06 153.73 665.23 135.99 670.39 106.27L670.87 103.49L603.19 103.49L603.19 80.41L699.83 80.41L699.83 100.02C695.63 145.55 659.42 178.77 613.75 178.77"/><path d="M836.23 176.13L783.38 36.29L730.53 176.13L701.52 176.13L771.92 2.51L794.84 2.51L865.24 176.13L836.23 176.13"/><path d="M26.9 79.6L76.84 79.6C81.88 79.6 86.42 78.48 90.33 76.27C94.29 74.02 97.27 70.93 99.43 66.81C101.55 62.74 102.63 57.99 102.63 52.7C102.63 47.4 101.55 42.65 99.43 38.59C97.27 34.46 94.31 31.37 90.39 29.13C86.52 26.91 81.96 25.79 76.84 25.79L26.9 25.79L26.9 79.6M107.39 176.25L66.66 102.87L26.9 102.87L26.9 176.25L0 176.25L0 2.51L75.79 2.51C86.77 2.51 96.56 4.61 104.89 8.73C113.21 12.85 119.75 18.78 124.34 26.36C128.92 33.93 131.24 42.79 131.24 52.7C131.24 62.6 128.9 71.47 124.28 79.04C119.65 86.62 113.08 92.55 104.76 96.66C102.74 97.66 100.54 98.54 98.04 99.35L95.25 100.26L139.29 176.25L107.39 176.25"/><path d="M283.33 176.13L234.34 42.79L185.55 176.13L156.53 176.13L222.87 2.51L245.8 2.51L312.34 176.13L283.33 176.13"/><path d="M253.1 157.46C253.1 167.77 244.75 176.13 234.44 176.13C224.13 176.13 215.77 167.77 215.77 157.46C215.77 147.15 224.13 138.8 234.44 138.8C244.75 138.8 253.1 147.15 253.1 157.46"/><path d="M765.4 146.06H795.46V176.13H765.4Z"/></svg><span class="brand-sub">자금 대시보드</span></div>
   <div class="header-right">
     <div class="user-badge" id="user-badge" style="display:none">
       <span class="user-dot"></span><span id="user-email-label"></span>
@@ -4240,7 +4245,7 @@ function renderCashChart() {
   const skip = Math.max(1, Math.floor(labels.length/20));
   cashChartInst = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ label: '현금잔액', data: vals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.08)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840', fill: true, tension: 0.3 }] },
+    data: { labels, datasets: [{ label: '현금잔액', data: vals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840', fill: true, tension: 0.3 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
@@ -4277,7 +4282,7 @@ function renderDonutChart() {
   }
   const cats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
+  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
 
   const legend = document.getElementById('donut-legend');
   legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
@@ -4310,7 +4315,7 @@ function renderDonutWeeklyChart() {
   }
   const cats   = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#2ec77a','#ff4d6a','#f5a623','#9b6dff','#00d4b4','#ff8c42','#a8c5ff'];
+  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
 
   const legend = document.getElementById('donut-weekly-legend');
   if (legend) legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
@@ -4371,9 +4376,9 @@ const AR_BAR_COLORS = {
   normal:  'rgba( 46, 199, 122, 0.75)', // 초록: 정상 + 보통
 };
 const AR_BAR_BORDER_COLORS = {
-  danger:  '#ff4d6a',
-  warning: '#f5a623',
-  normal:  '#2ec77a',
+  danger:  '#C24A38',
+  warning: '#9E6A15',
+  normal:  '#2A7F57',
 };
 
 /* 차트 대상 AR: remaining > 0이고 정상/지연/미정 상태인 것만 */
@@ -4502,7 +4507,7 @@ function renderARDonutChart() {
   // 건수 0인 항목 제외
   const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
   const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
-  const colors = { 완료: '#2ec77a', 정상: '#314840', 지연: '#ff4d6a', 미정: '#9b6dff' };
+  const colors = { 완료: '#2A7F57', 정상: '#314840', 지연: '#C24A38', 미정: '#7A6AA6' };
   const colArr = labels.map(l => colors[l] || '#aaaaaa');
 
   const legend = document.getElementById('ar-legend');
@@ -7751,10 +7756,10 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
 function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
-    green:'#2ec77a', green2:'#d4f4e3', red:'#ff4d6a', red2:'#ffe0e5',
-    amber:'#f5a623', amber2:'#fff3d4', blue:'#314840',
-    text:'#1a1d2e', t2:'#5a6478', t3:'#9aa0b0',
-    bg:'#f5f6fa', bg3:'#f0f2f7', card:'#ffffff', border:'#e8eaef',
+    green:'#2A7F57', green2:'#E7F1E1', red:'#C24A38', red2:'#F7E4DE',
+    amber:'#9E6A15', amber2:'#F8EEDA', blue:'#314840',
+    text:'#1B2B30', t2:'#55655D', t3:'#94A296',
+    bg:'#F2F5F1', bg3:'#E9EFE7', card:'#ffffff', border:'#DDE6DA',
   };
 
   // ── 주간 범위 & 주차 계산 ──
@@ -8092,7 +8097,7 @@ async function renderEmailHistory() {
   }
 
   const statusBadge = s => {
-    const map = { sent:'background:#d4f4e3;color:#2ec77a', pending:'background:#fff3d4;color:#f5a623', failed:'background:#ffe0e5;color:#ff4d6a' };
+    const map = { sent:'background:#E7F1E1;color:#2A7F57', pending:'background:#F8EEDA;color:#9E6A15', failed:'background:#F7E4DE;color:#C24A38' };
     const style = map[s] || 'background:#f0f2f7;color:#5a6478';
     const label = s==='sent'?'성공':s==='pending'?'처리중':'실패';
     return `<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;${style}">${label}</span>`;
@@ -13305,7 +13310,7 @@ function showToast(msg, type='green') {
     t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;pointer-events:none;';
     document.body.appendChild(t);
   }
-  const colors = { green: 'background:#0d3d24;color:#2ec77a;border:1px solid rgba(46,199,122,0.4)', red: 'background:#3d0f18;color:#ff4d6a;border:1px solid rgba(255,77,106,0.4)' };
+  const colors = { green: 'background:#183D2B;color:#8FD3AC;border:1px solid rgba(42,127,87,0.45)', red: 'background:#3D1C16;color:#E9A18F;border:1px solid rgba(255,77,106,0.4)' };
   t.style.cssText += colors[type] || colors.green;
   t.textContent = msg;
   t.style.opacity = '1';

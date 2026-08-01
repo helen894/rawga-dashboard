@@ -216,10 +216,10 @@ function buildWeeklyReportHTML(
 ): { html: string; subject: string; weekKey: string; startDate: string; endDate: string } {
 
   const C = {
-    green:'#2ec77a', red:'#ff4d6a', red2:'#ffe0e5',
-    amber:'#f5a623', blue:'#314840', /* RAWGA DEEP GREEN — Brand Identity Guidelines V2.0 */
-    text:'#1a1d2e', t2:'#5a6478', t3:'#9aa0b0',
-    bg:'#f5f6fa', bg3:'#f0f2f7', card:'#ffffff', border:'#e8eaef',
+    green:'#2A7F57', red:'#C24A38', red2:'#F7E4DE',
+    amber:'#9E6A15', blue:'#314840', /* RAWGA DEEP GREEN — Brand Identity Guidelines V2.0 */
+    text:'#1B2B30', t2:'#55655D', t3:'#94A296',
+    bg:'#F2F5F1', bg3:'#E9EFE7', card:'#ffffff', border:'#DDE6DA',
   };
 
   /* 주간 범위 & 주차 계산 */
