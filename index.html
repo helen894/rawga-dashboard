@@ -1861,9 +1861,9 @@
 
     <!-- 대분류 -->
     <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">대분류</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">대분류 <span style="font-weight:400;color:var(--text3)">— 중분류를 바꾸면 자동으로 매핑됩니다</span></div>
       <select id="cf-bulk-big" style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:13px;padding:8px 10px;border-radius:8px;cursor:pointer">
-        <option value="__KEEP__">변경 안 함</option>
+        <option value="__KEEP__">변경 안 함 (중분류 기준 자동)</option>
         <option value="">— 빈 값으로 변경 —</option>
       </select>
     </div>
@@ -4767,7 +4767,8 @@ function buildMidCatSelect() {
   if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
 }
 
-let cfUnassignedOnly = false;
+// 분류 필터: '' 전체 · 'noMid' 중분류없음 · 'noBig' 대분류없음 · 'done' 분류완료
+let cfUnassignedOnly = '';
 
 function getFilteredCF() {
   const from      = document.getElementById('cf-from').value;
@@ -4788,7 +4789,9 @@ function getFilteredCF() {
     if (status && r.status !== status) return false;
     if (mid && r.mid_cat !== mid) return false;
     if (big && r.big_cat !== big) return false;
-    if (cfUnassignedOnly && r.mid_cat) return false;
+    if (cfUnassignedOnly === 'noMid' && (r.mid_cat || '').trim()) return false;
+    if (cfUnassignedOnly === 'noBig' && (r.big_cat || '').trim()) return false;
+    if (cfUnassignedOnly === 'done'  && !((r.mid_cat || '').trim() && (r.big_cat || '').trim())) return false;
     if (q && !r.desc.toLowerCase().includes(q)) return false;
     // 금액 필터: 입금 or 출금 중 하나라도 범위 내에 있으면 포함
     const amt = Math.max(r.in || 0, r.out || 0);
@@ -5205,20 +5208,29 @@ function cfAddSingleRow(row) {
 document.getElementById('cf-filter-btn').addEventListener('click', () => { cfPage = 1; renderCFTable(); });
 
 // 미분류만 보기 토글
-document.getElementById('cf-unassigned-btn').addEventListener('click', () => {
-  cfUnassignedOnly = !cfUnassignedOnly;
+/* 분류 필터 4단 순환: 전체 → 중분류 없음 → 대분류 없음 → 분류완료(둘 다 있음) → 전체 */
+const CF_CLASS_MODES = [
+  { key: '',      label: '미분류만',       title: '클릭: 중분류 없는 항목만' },
+  { key: 'noMid', label: '중분류 없음',    title: '중분류가 비어 있는 항목만. 클릭: 대분류 없음' },
+  { key: 'noBig', label: '대분류 없음',    title: '대분류가 비어 있는 항목만. 클릭: 분류완료' },
+  { key: 'done',  label: '분류완료만',     title: '중분류·대분류가 모두 있는 항목만. 클릭: 전체 보기' },
+];
+function applyCFClassMode() {
   const btn = document.getElementById('cf-unassigned-btn');
-  if (cfUnassignedOnly) {
-    btn.textContent = '전체 보기';
-    btn.style.background = 'var(--amber2)';
-    btn.style.color = 'var(--amber)';
-    btn.style.borderColor = 'var(--amber)';
-  } else {
-    btn.textContent = '미분류만';
-    btn.style.background = '';
-    btn.style.color = 'var(--text2)';
-    btn.style.borderColor = '';
-  }
+  if (!btn) return;
+  const m = CF_CLASS_MODES.find(x => x.key === (cfUnassignedOnly || '')) || CF_CLASS_MODES[0];
+  btn.textContent = m.label;
+  btn.title = m.title;
+  const on = !!cfUnassignedOnly;
+  const done = cfUnassignedOnly === 'done';
+  btn.style.background  = on ? (done ? 'var(--green2)' : 'var(--amber2)') : '';
+  btn.style.color       = on ? (done ? 'var(--green)'  : 'var(--amber)')  : 'var(--text2)';
+  btn.style.borderColor = on ? (done ? 'var(--green)'  : 'var(--amber)')  : '';
+}
+document.getElementById('cf-unassigned-btn').addEventListener('click', () => {
+  const i = CF_CLASS_MODES.findIndex(x => x.key === (cfUnassignedOnly || ''));
+  cfUnassignedOnly = CF_CLASS_MODES[(i + 1) % CF_CLASS_MODES.length].key;
+  applyCFClassMode();
   cfPage = 1;
   renderCFTable();
 });
@@ -5342,12 +5354,8 @@ document.getElementById('cf-filter-reset-btn').addEventListener('click', () => {
   document.getElementById('cf-search').value = '';
   document.getElementById('cf-amount-min').value = '';
   document.getElementById('cf-amount-max').value = '';
-  // 미분류 필터 초기화
-  if (cfUnassignedOnly) {
-    cfUnassignedOnly = false;
-    const btn = document.getElementById('cf-unassigned-btn');
-    if (btn) { btn.textContent = '미분류만'; btn.style.background = ''; btn.style.color = 'var(--text2)'; btn.style.borderColor = ''; }
-  }
+  // 분류 필터 초기화
+  if (cfUnassignedOnly) { cfUnassignedOnly = ''; applyCFClassMode(); }
   cfPage = 1;
   renderCFTable();
 });
@@ -5587,8 +5595,13 @@ function calcCFBulkStats(selectedRows, params) {
     // 중분류
     if (params.mid !== '__KEEP__' && (r.mid_cat || '') !== params.mid) { midCnt++; changed = true; }
 
-    // 대분류
-    if (params.big !== '__KEEP__' && (r.big_cat || '') !== params.big) { bigCnt++; changed = true; }
+    // 대분류 — 명시 지정, 또는 중분류 변경에 따른 자동 매핑
+    if (params.big !== '__KEEP__') {
+      if ((r.big_cat || '') !== params.big) { bigCnt++; changed = true; }
+    } else if (params.mid !== '__KEEP__' && params.mid) {
+      const autoBig = getBigCat(params.mid);
+      if (autoBig && (r.big_cat || '') !== autoBig) { bigCnt++; changed = true; }
+    }
 
     // 거래내용
     if (params.descMode === 'empty' && (r.desc || '') !== '') { descCnt++; changed = true; }
@@ -5655,7 +5668,9 @@ function previewCFBulkEdit() {
   html += row('변경 없는 항목', stats.noChangeCnt + '건', 'var(--text3)');
   if (params.status)            html += row('　· 상태 변경',   stats.statusCnt + '건');
   if (params.mid !== '__KEEP__') html += row('　· 중분류 변경', stats.midCnt    + '건');
-  if (params.big !== '__KEEP__') html += row('　· 대분류 변경', stats.bigCnt    + '건');
+  if (params.big !== '__KEEP__')      html += row('　· 대분류 변경', stats.bigCnt + '건');
+  else if (params.mid !== '__KEEP__' && params.mid && stats.bigCnt)
+    html += row(`　· 대분류 자동(${getBigCat(params.mid)})`, stats.bigCnt + '건');
   if (params.descMode !== 'keep') html += row('　· 거래내용 변경', stats.descCnt + '건');
   if (params.memoMode !== 'keep') html += row('　· 비고 변경',     stats.memoCnt + '건');
   html += row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#f59e0b' : '');
@@ -5690,7 +5705,9 @@ function applyCFBulkEdit() {
   let confirmMsg = `선택한 ${selectedRows.length}건 중 ${stats.actualCnt}건을 수정합니다.\n\n`;
   if (params.status)              confirmMsg += `· 상태 변경:   ${stats.statusCnt}건\n`;
   if (params.mid !== '__KEEP__')  confirmMsg += `· 중분류 변경: ${stats.midCnt}건\n`;
-  if (params.big !== '__KEEP__')  confirmMsg += `· 대분류 변경: ${stats.bigCnt}건\n`;
+  if (params.big !== '__KEEP__')      confirmMsg += `· 대분류 변경: ${stats.bigCnt}건\n`;
+  else if (params.mid !== '__KEEP__' && params.mid && stats.bigCnt)
+    confirmMsg += `· 대분류 자동 매핑(${getBigCat(params.mid)}): ${stats.bigCnt}건\n`;
   if (params.descMode !== 'keep') confirmMsg += `· 거래내용 변경: ${stats.descCnt}건\n`;
   if (params.memoMode !== 'keep') confirmMsg += `· 비고 변경:   ${stats.memoCnt}건\n`;
   if (stats.arLinkedCnt > 0)      confirmMsg += `\n⚠ AR 반영 완료 ${stats.arLinkedCnt}건 포함\n   → 상태 변경 제외, 나머지 항목만 수정됩니다.\n`;
@@ -5712,10 +5729,13 @@ function applyCFBulkEdit() {
       // 상태 (AR 반영 완료 행은 변경 안 함)
       if (params.status && !isAR) newRow.status = params.status;
 
-      // 중분류
-      if (params.mid !== '__KEEP__') newRow.mid_cat = params.mid;
+      // 중분류 — 변경 시 대분류를 따로 지정하지 않았으면 매핑표로 자동 채움
+      if (params.mid !== '__KEEP__') {
+        newRow.mid_cat = params.mid;
+        if (params.big === '__KEEP__' && params.mid) newRow.big_cat = getBigCat(params.mid);
+      }
 
-      // 대분류
+      // 대분류 (명시 지정이 우선)
       if (params.big !== '__KEEP__') newRow.big_cat = params.big;
 
       // 거래내용
@@ -9166,11 +9186,7 @@ document.getElementById('kpi-sejong-card').addEventListener('click', () => {
   document.getElementById('cf-search').value = '';
   document.getElementById('cf-amount-min').value = '';
   document.getElementById('cf-amount-max').value = '';
-  if (typeof cfUnassignedOnly !== 'undefined') {
-    cfUnassignedOnly = false;
-    const btn = document.getElementById('cf-unassigned-btn');
-    if (btn) { btn.textContent = '미분류만'; btn.style.background = ''; btn.style.color = 'var(--text2)'; btn.style.borderColor = ''; }
-  }
+  if (typeof cfUnassignedOnly !== 'undefined') { cfUnassignedOnly = ''; applyCFClassMode(); }
   cfPage = 1;
   buildCFFilterSelects();
   // select에 세종시 값이 없을 경우 직접 옵션 추가
@@ -9203,11 +9219,7 @@ document.getElementById('kpi-laos-card').addEventListener('click', () => {
   document.getElementById('cf-search').value = '';
   document.getElementById('cf-amount-min').value = '';
   document.getElementById('cf-amount-max').value = '';
-  if (typeof cfUnassignedOnly !== 'undefined') {
-    cfUnassignedOnly = false;
-    const btn = document.getElementById('cf-unassigned-btn');
-    if (btn) { btn.textContent = '미분류만'; btn.style.background = ''; btn.style.color = 'var(--text2)'; btn.style.borderColor = ''; }
-  }
+  if (typeof cfUnassignedOnly !== 'undefined') { cfUnassignedOnly = ''; applyCFClassMode(); }
   cfPage = 1;
   buildCFFilterSelects();
   // select에 라오스 값이 없을 경우 직접 옵션 추가
