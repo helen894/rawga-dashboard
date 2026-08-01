@@ -80,8 +80,11 @@ if (fxRows.length) {
 if (todaySkipped) console.log(`\n오늘(${today})자 ${todaySkipped}건은 수집 미완성 가능성으로 제외 (--allow-today 로 포함)`);
 
 /* ── 5-b) 합계 교차검증 — API가 보고한 합계와 대조해 행 누락을 잡는다 ──
- *   외화 행은 API 합계에선 원화로 환산돼 들어가지만 우리는 제외하므로,
- *   외화가 없는 방향(대개 출금)에서 잔차가 크면 행 누락으로 보고 중단한다. */
+ *   잔차(API 합계 − 우리가 센 원화 합계)의 정상적인 원인은 두 가지뿐이다.
+ *     ① 외화 행 — API 합계엔 원화 환산으로 들어가지만 우리는 제외한다(환율 미상)
+ *     ② 취소·정정 거래 — 한 행이 입금·출금 레그를 같은 금액으로 달고 있어 양쪽을 똑같이 부풀린다
+ *   ②는 netRes(=입금잔차−출금잔차)에서 상쇄되므로 netRes 엔 ①의 환산 순액만 남아야 한다.
+ *   한 방향만 부풀리는 진짜 행 누락은 netRes 를 틀어 아래 판정에서 걸린다. */
 const expIn  = pages.reduce((s, p) => s + (Number(p?.inAmountSumKrw)  || 0), 0);
 const expOut = pages.reduce((s, p) => s + (Number(p?.outAmountSumKrw) || 0), 0);
 if (expIn || expOut) {
@@ -95,12 +98,29 @@ if (expIn || expOut) {
   console.log('\nAPI 합계 대조 (행 누락 감지)');
   console.log(`  입금  API ${won(expIn)} vs 원화계좌 ${won(krwIn)} → 잔차 ${won(resIn)}${fxIn ? ` (외화 ${fxIn} 환산분 포함)` : ''}`);
   console.log(`  출금  API ${won(expOut)} vs 원화계좌 ${won(krwOut)} → 잔차 ${won(resOut)}${fxOut ? ` (외화 ${fxOut} 환산분 포함)` : ''}`);
-  const bad = [];
-  if (!fxIn  && Math.abs(resIn)  > TOL) bad.push(`입금 잔차 ${won(resIn)}`);
-  if (!fxOut && Math.abs(resOut) > TOL) bad.push(`출금 잔차 ${won(resOut)}`);
-  if (bad.length) {
-    console.error(`\n⚠ 합계가 맞지 않습니다 (${bad.join(', ')}) — 응답 일부가 누락됐을 수 있습니다.`);
+  /* 방향별로 따로 보면 외화가 낀 쪽은 환율을 몰라 검사할 수가 없다(그 방향의 행 누락이 그대로
+   * 통과해 버린다). 그래서 양쪽을 netRes 하나로 합쳐서 판정한다 —— 취소 레그는 서로 상쇄되고
+   * 외화 환산분만 남으므로, 역산 환율이 상식 범위면 잔차가 ①②로 설명된 것으로 본다.
+   * 환율을 맞히려는 게 아니라 터무니없는 값(=한 방향만 부풀었다는 신호)을 걸러내는 용도다.
+   * 실제 사례: 2026-07-31 신한 140-013-243160 취소 220,000,000 (in=out)
+   * 한계: 외화 계좌가 두 통화 이상 섞이면 단일 환율 가정이 깨진다(현재는 USD뿐). */
+  const fxNet     = fxIn - fxOut;              // 외화 순액 (원금 통화)
+  const netRes    = resIn - resOut;
+  const rate      = fxNet ? netRes / fxNet : 0;
+  const hasRes    = Math.abs(resIn) > TOL || Math.abs(resOut) > TOL;
+  const explained = fxNet ? (rate > 5 && rate < 5000) : Math.abs(netRes) <= TOL;
+
+  if (hasRes && !explained) {
+    console.error(`\n⚠ 합계가 맞지 않습니다 (입금 잔차 ${won(resIn)}, 출금 잔차 ${won(resOut)}) — 한 방향만 부풀어 행 누락이 의심됩니다.`);
+    if (fxNet) console.error(`   외화 ${fxNet} 로 설명하려면 환율이 ${won(rate)}원이어야 해 비현실적입니다.`);
     if (!DRY) { console.error('적재를 중단합니다. 전체 페이지를 원본 그대로 저장해 다시 시도하세요.'); process.exit(2); }
+  } else if (hasRes) {
+    const cancelAmt = Math.min(Math.abs(resIn), Math.abs(resOut));   // 양쪽에 공통으로 낀 몫 = 취소 레그
+    if (cancelAmt > TOL) {
+      console.log(`\n⚠ 입·출금 양쪽에 동액 잔차 ${won(cancelAmt)} — 순액 0이라 적재를 계속합니다.`);
+      console.log('   취소·정정 거래가 클로브 집계에만 잡히고 행 목록에서 빠진 형태입니다.');
+    }
+    if (fxNet) console.log(`${cancelAmt > TOL ? '   ' : '\n'}외화 ${fxNet} 환산분 역산 ${won(rate)}원 — 잔차 설명됨`);
   }
 }
 
