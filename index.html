@@ -2888,6 +2888,11 @@ let _isOnline = false;       // 현재 Supabase 연결 상태 — offline 시 �
  * 마이그레이션 전(=version 을 못 읽은 상태)에는 종전대로 무조건 저장한다 — 점진 적용용. */
 let _cfVersion = null;       // 마지막으로 읽은 cf_data.version
 let _cfConflict = false;     // 충돌 감지 후 재로드 전까지 원격 저장 잠금
+let _arVersion = null;       // ar_data.version (구조는 cf_data 와 동일 — 단일 행)
+/* cat_data 는 key 별 행이라 version 도 key 별로 잡는다. 행이 서로 독립적이므로
+ * saveCatDataToSupabase(학습 매핑)와 saveArMeta·법인카드 복원 등 다른 호출부가
+ * 서로 다른 key 를 써도 충돌하지 않는다. */
+let _catVersions = {};       // { key: version }
 
 function initSupabase() {
   // Supabase JS v2 CDN (UMD)
@@ -3243,16 +3248,20 @@ async function loadDataFromSupabase() {
     // cf_data 는 낙관적 잠금용 version 을 함께 읽는다.
     // 컬럼이 아직 없으면(마이그레이션 전) 이 select 가 실패하므로 version 없이 한 번 더 시도해
     // 종전 동작을 그대로 유지한다 — 마이그레이션과 배포 순서에 의존하지 않게 하기 위함.
-    const [cfTry, arRes] = await Promise.all([
+    const [cfTry, arTry] = await Promise.all([
       _supa.from('cf_data').select('id, data, version').limit(1).single(),
-      _supa.from('ar_data').select('id, data').limit(1).single(),
+      _supa.from('ar_data').select('id, data, version').limit(1).single(),
     ]);
     const cfRes = cfTry.error
       ? await _supa.from('cf_data').select('id, data').limit(1).single()
       : cfTry;
+    const arRes = arTry.error
+      ? await _supa.from('ar_data').select('id, data').limit(1).single()
+      : arTry;
 
     // 낙관적 잠금 기준점 — version 을 못 읽었으면 null 로 두고 무조건 저장(종전 동작)
     _cfVersion  = cfRes.data?.version ?? null;
+    _arVersion  = arRes.data?.version ?? null;
     _cfConflict = false;
 
     // 기본 데이터 복원 정책:
@@ -3315,7 +3324,13 @@ async function loadDataFromSupabase() {
   // ── Section 2: 설정/카테고리 (cat_data) ──────────────────────────────────
   // 이 블록 실패 시 카테고리/설정만 localStorage fallback. cfData/arData는 절대 건드리지 않음.
   try {
-    const catRes = await _supa.from('cat_data').select('key, data');
+    // key 별 version 도 함께 읽는다(낙관적 잠금). 컬럼이 없으면 version 없이 폴백.
+    const catTry = await _supa.from('cat_data').select('key, data, version');
+    const catRes = catTry.error ? await _supa.from('cat_data').select('key, data') : catTry;
+    _catVersions = {};
+    if (catRes.data) for (const row of catRes.data) {
+      if (row.version != null) _catVersions[row.key] = row.version;
+    }
     if (catRes.data && catRes.data.length > 0) {
       for (const row of catRes.data) {
         if (row.key === 'mid_to_big') {
@@ -3532,8 +3547,20 @@ async function saveDataToSupabase(opts = {}) {
     if (cfUpd.data?.[0]?.version != null) _cfVersion = cfUpd.data[0].version;
 
     // AR이 구글시트 관리(읽기전용)면 브라우저는 ar_data를 저장하지 않음 — 시트 동기화(push)와 충돌·덮어쓰기 방지
+    // AR_READONLY 를 끄더라도 시트 동기화 Edge 와 겹칠 수 있으므로 cf_data 와 같은 낙관적 잠금을 건다.
     if (!AR_READONLY) {
-      await _supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id);
+      let arQ = _supa.from('ar_data')
+        .update({ data: arSnap, updated_at: new Date().toISOString() })
+        .eq('id', arRow.data.id);
+      if (_arVersion !== null) arQ = arQ.eq('version', _arVersion);
+      const arUpd = await arQ.select('version');
+      if (arUpd.error) throw arUpd.error;
+      if (_arVersion !== null && (!arUpd.data || arUpd.data.length === 0)) {
+        console.error('[saveData] ⚠️ ar_data 충돌 — 서버가 그새 변경되어 저장을 취소했습니다.');
+        showToast('⚠ 매출채권이 다른 곳에서 변경돼 저장하지 못했습니다. 새로고침해 주세요.', 'red');
+        return;
+      }
+      if (arUpd.data?.[0]?.version != null) _arVersion = arUpd.data[0].version;
     }
 
     // Supabase 저장 완료 후 localStorage 재갱신
@@ -3567,7 +3594,30 @@ async function saveCatDataToSupabase() {
       { key: 'settings',         data: { init_cash: INIT_CASH } },
       { key: 'recur_data',       data: recurData },
     ];
-    await _supa.from('cat_data').upsert(upserts, { onConflict: 'key' });
+    /* key 별 낙관적 잠금 — 여기 담긴 학습 매핑(desc_to_mid 등)이 분류 작업의 산출물이라
+     * 다른 탭이 덮어쓰면 손실이 크다. 행이 key 별로 독립적이라 saveArMeta·법인카드 복원 등
+     * 다른 key 를 쓰는 호출부와는 간섭하지 않는다.
+     * version 을 모르는 key(신규 또는 마이그레이션 전)는 종전대로 upsert 한다. */
+    const conflicted = [];
+    for (const u of upserts) {
+      const v = _catVersions[u.key];
+      if (v === undefined || v === null) {
+        const { error } = await _supa.from('cat_data').upsert([u], { onConflict: 'key' });
+        if (error) throw error;
+        continue;
+      }
+      const { data, error } = await _supa.from('cat_data')
+        .update({ data: u.data, updated_at: new Date().toISOString() })
+        .eq('key', u.key).eq('version', v)
+        .select('version');
+      if (error) throw error;
+      if (!data || data.length === 0) { conflicted.push(u.key); continue; }  // 그새 누가 씀 → 덮지 않음
+      _catVersions[u.key] = data[0].version;
+    }
+    if (conflicted.length) {
+      console.error('[saveCatData] ⚠️ 충돌 —', conflicted.join(', '), '— 서버가 그새 변경돼 해당 항목은 저장하지 않았습니다.');
+      showToast('⚠ 분류 설정이 다른 곳에서 변경돼 일부를 저장하지 못했습니다. 새로고침해 주세요.', 'red');
+    }
   } catch(e) {
     console.warn('카테고리 저장 실패:', e);
   }
@@ -3621,6 +3671,7 @@ function subscribeRealtime() {
       try {
         const newData = payload.new.data;
         arData = Array.isArray(newData) ? newData : JSON.parse(newData);
+        if (payload.new.version != null) _arVersion = payload.new.version;
         // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
         localStorage.setItem('ar_data', JSON.stringify(arData));
         // Realtime 갱신 후 존재하지 않는 ID는 선택 목록에서 제거
@@ -3634,7 +3685,12 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'cat_data' }, async () => {
       _isSyncing = true;
       try {
-        const catRes = await _supa.from('cat_data').select('key, data');
+        const catTry = await _supa.from('cat_data').select('key, data, version');
+        const catRes = catTry.error ? await _supa.from('cat_data').select('key, data') : catTry;
+        // 낙관적 잠금 기준점도 최신으로 — 안 하면 다음 저장이 충돌로 막힌다
+        if (catRes.data) for (const row of catRes.data) {
+          if (row.version != null) _catVersions[row.key] = row.version;
+        }
         if (catRes.data) {
           for (const row of catRes.data) {
             if (row.key === 'mid_to_big') {
