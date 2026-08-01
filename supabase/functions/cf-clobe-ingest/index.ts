@@ -57,21 +57,31 @@ Deno.serve(async (req) => {
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
   try {
-    // 1) 현재 cf_data 읽기
+    const today = todaySeoul();
+    const MAX_TRIES = 4;
+    let added = 0, skipped = 0, total = 0;
+
+    /* 낙관적 잠금 — cf_data 는 배열 전체가 한 행이라 마지막에 쓴 쪽이 이긴다.
+     * 읽은 version 일 때만 쓰고, 0행 갱신(=그새 대시보드 등이 씀)이면 덮어쓰지 않고
+     * 다시 읽어 재시도한다. append 만 하므로 재시도가 안전하다 — clobe_id 중복 판정이
+     * 다시 걸려 이중 추가되지 않는다. version 은 DB 트리거가 UPDATE 마다 +1 한다.
+     * version 컬럼이 없으면(마이그레이션 전) 조건 없이 써서 종전 동작을 유지한다. */
+    for (let attempt = 1; ; attempt++) {
+    // 1) 현재 cf_data 읽기 (select=* — version 컬럼이 없어도 깨지지 않게)
     const getRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/cf_data?select=id,data&limit=1`,
+      `${SUPABASE_URL}/rest/v1/cf_data?select=*&limit=1`,
       { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
     );
     if (!getRes.ok) throw new Error(`cf_data 읽기 실패: ${getRes.status}`);
     const arr = await getRes.json();
     if (!arr?.[0]) throw new Error("cf_data 행이 없습니다.");
     const rowId = arr[0].id;
+    const version = arr[0].version;
     const cfData: any[] = Array.isArray(arr[0].data)
       ? arr[0].data
       : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : []);
 
-    const today = todaySeoul();
-    let added = 0, skipped = 0;
+    added = 0; skipped = 0;
 
     for (const r of rows) {
       const date = String(r?.date || "").slice(0, 10);
@@ -112,20 +122,32 @@ Deno.serve(async (req) => {
 
     cfData.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
-    // 2) cf_data 쓰기 (append된 전체 배열로 갱신 — data 외 컬럼 불변)
-    const patch = await fetch(`${SUPABASE_URL}/rest/v1/cf_data?id=eq.${rowId}`, {
+    // 2) 조건부 쓰기 — 읽은 version 일 때만. return=representation 으로 실제 갱신 행 수를 본다.
+    const cond = (version === undefined || version === null) ? "" : `&version=eq.${version}`;
+    const patch = await fetch(`${SUPABASE_URL}/rest/v1/cf_data?id=eq.${rowId}${cond}`, {
       method: "PATCH",
       headers: {
         apikey: SERVICE_ROLE,
         Authorization: `Bearer ${SERVICE_ROLE}`,
         "Content-Type": "application/json",
-        Prefer: "return=minimal",
+        Prefer: "return=representation",
       },
       body: JSON.stringify({ data: cfData, updated_at: new Date().toISOString() }),
     });
     if (!patch.ok) throw new Error(`cf_data 저장 실패: ${patch.status} ${await patch.text()}`);
+    const updated = await patch.json();
+    if (Array.isArray(updated) && updated.length > 0) { total = cfData.length; break; }  // 성공
 
-    return json({ ok: true, added, skipped, total: cfData.length });
+    // 0행 갱신 = 내가 읽은 뒤 다른 주체가 썼다는 뜻 → 덮어쓰지 않고 다시 읽어 재시도
+    if (attempt >= MAX_TRIES) {
+      throw new Error(
+        `cf_data 동시 수정 충돌 — ${MAX_TRIES}회 재시도 실패. 대시보드를 닫고 다시 시도하세요.`,
+      );
+    }
+    await new Promise((res) => setTimeout(res, 200 * attempt));
+    }
+
+    return json({ ok: true, added, skipped, total });
   } catch (e) {
     return json({ ok: false, error: (e as Error).message }, 500);
   }

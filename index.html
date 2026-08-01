@@ -2881,6 +2881,14 @@ let _isSyncing = false;      // 원격 업데이트 수신 중 로컬 저장 방
 let _isInitialized = false;  // Supabase 초기 로드 완료 전 원격 저장 차단 (Race Condition 방지)
 let _isOnline = false;       // 현재 Supabase 연결 상태 — offline 시 위험 작업 차단에 사용
 
+/* 낙관적 잠금 (cf_data) — 배열 전체가 한 행이라 마지막에 쓴 쪽이 이긴다.
+ * 적재(Edge)와 대시보드가 동시에 쓰면 한쪽 변경이 조용히 사라진다(2026-08-01 실제 292건 유실).
+ * 읽은 시점의 version 을 기억했다가 그 값일 때만 쓰고, 아니면 저장을 취소한다.
+ * version 은 DB 트리거가 UPDATE 마다 +1 하므로, 아직 갱신 안 된 Edge 함수가 써도 충돌이 잡힌다.
+ * 마이그레이션 전(=version 을 못 읽은 상태)에는 종전대로 무조건 저장한다 — 점진 적용용. */
+let _cfVersion = null;       // 마지막으로 읽은 cf_data.version
+let _cfConflict = false;     // 충돌 감지 후 재로드 전까지 원격 저장 잠금
+
 function initSupabase() {
   // Supabase JS v2 CDN (UMD)
   const { createClient } = window.supabase;
@@ -3232,10 +3240,20 @@ async function loadDataFromSupabase() {
   try {
     setSyncStatus('connecting');
 
-    const [cfRes, arRes] = await Promise.all([
-      _supa.from('cf_data').select('id, data').limit(1).single(),
+    // cf_data 는 낙관적 잠금용 version 을 함께 읽는다.
+    // 컬럼이 아직 없으면(마이그레이션 전) 이 select 가 실패하므로 version 없이 한 번 더 시도해
+    // 종전 동작을 그대로 유지한다 — 마이그레이션과 배포 순서에 의존하지 않게 하기 위함.
+    const [cfTry, arRes] = await Promise.all([
+      _supa.from('cf_data').select('id, data, version').limit(1).single(),
       _supa.from('ar_data').select('id, data').limit(1).single(),
     ]);
+    const cfRes = cfTry.error
+      ? await _supa.from('cf_data').select('id, data').limit(1).single()
+      : cfTry;
+
+    // 낙관적 잠금 기준점 — version 을 못 읽었으면 null 로 두고 무조건 저장(종전 동작)
+    _cfVersion  = cfRes.data?.version ?? null;
+    _cfConflict = false;
 
     // 기본 데이터 복원 정책:
     //   row 자체가 없는 경우(첫 설치, _supa row 미생성) → getDefault*() 로 초기값 삽입
@@ -3457,6 +3475,14 @@ async function saveDataToSupabase(opts = {}) {
   // bypassSyncing: true(명시적 사용자 액션)일 때만 우회 — 자동 저장 경로는 항상 차단 유지
   if (_isSyncing && !bypassSyncing) return;
 
+  // ── Guard 2-b: cf_data 충돌 이후 잠금 ──
+  // 한 번 충돌하면 메모리의 cfData 는 서버보다 뒤처진 상태다. 새로고침이나 Realtime 재동기화로
+  // 최신 상태를 받기 전까지 원격 저장을 막는다 (막지 않으면 매 저장이 상대 변경분을 지운다).
+  if (_cfConflict) {
+    console.warn('[saveData] cf_data 충돌 상태 — 새로고침 전까지 원격 저장을 건너뜁니다.');
+    return;
+  }
+
   // ── Guard 3: 데이터 건수 급감 감지 — 자동 저장 경로에서 대량 손실 방지 ──
   if (!bypassCountCheck) {
     const prevCount = parseInt(localStorage.getItem('cf_data_safe_count') || '0');
@@ -3485,14 +3511,30 @@ async function saveDataToSupabase(opts = {}) {
       _supa.from('ar_data').select('id').limit(1).single(),
     ]);
 
-    const _updates = [
-      _supa.from('cf_data').update({ data: cfSnap, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id),
-    ];
+    // ── cf_data: 낙관적 잠금 ──
+    // 읽은 version 일 때만 쓴다. 0행 갱신 = 그새 다른 주체(적재 Edge 등)가 썼다는 뜻이므로
+    // 덮어쓰지 않고 취소한다. version 을 못 읽은 상태(마이그레이션 전)면 종전대로 무조건 저장.
+    let cfQ = _supa.from('cf_data')
+      .update({ data: cfSnap, updated_at: new Date().toISOString() })
+      .eq('id', cfRow.data.id);
+    if (_cfVersion !== null) cfQ = cfQ.eq('version', _cfVersion);
+    const cfUpd = await cfQ.select('version');
+
+    if (cfUpd.error) throw cfUpd.error;
+    if (_cfVersion !== null && (!cfUpd.data || cfUpd.data.length === 0)) {
+      _cfConflict = true;
+      setSyncStatus('error');
+      console.error('[saveData] ⚠️ cf_data 충돌 — 서버가 그새 변경되어 저장을 취소했습니다.',
+                    '내가 읽은 version:', _cfVersion);
+      showToast('⚠ 서버 데이터가 변경돼 저장하지 못했습니다. 새로고침 후 다시 작업해 주세요.', 'red');
+      return;   // 여기서 덮어썼다면 상대 변경분이 사라진다
+    }
+    if (cfUpd.data?.[0]?.version != null) _cfVersion = cfUpd.data[0].version;
+
     // AR이 구글시트 관리(읽기전용)면 브라우저는 ar_data를 저장하지 않음 — 시트 동기화(push)와 충돌·덮어쓰기 방지
     if (!AR_READONLY) {
-      _updates.push(_supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id));
+      await _supa.from('ar_data').update({ data: arSnap, updated_at: new Date().toISOString() }).eq('id', arRow.data.id);
     }
-    await Promise.all(_updates);
 
     // Supabase 저장 완료 후 localStorage 재갱신
     // → SELECT 대기 중 Realtime 에코가 localStorage를 덮어쓴 경우를 복원
@@ -3542,6 +3584,8 @@ function subscribeRealtime() {
       try {
         const newData = payload.new.data;
         cfData = Array.isArray(newData) ? newData : JSON.parse(newData);
+        if (payload.new.version != null) _cfVersion = payload.new.version;
+        _cfConflict = false;      // 최신 상태를 받았으므로 저장 잠금 해제
         ensureCFIds();
         // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
         localStorage.setItem('cf_data', JSON.stringify(cfData));
@@ -3550,6 +3594,26 @@ function subscribeRealtime() {
         for (const id of cfSelectedIds) { if (!validIdSet.has(id)) cfSelectedIds.delete(id); }
         renderAll();
         showToast('🔄 입출금 내역이 업데이트됐습니다.', 'green');
+      } catch (e) {
+        /* payload 누락·파싱 실패로 여기 걸리면 cfData 는 예전 값 그대로 남는다.
+         * 그 상태로 다음 저장이 돌면 서버의 최신 내용을 통째로 덮어써 유실된다(실제 발생 사례).
+         * 조용히 넘기지 말고 서버에서 다시 읽어 맞추고, 실패하면 저장을 잠근다. */
+        console.error('[realtime] cf_data 반영 실패 — 서버에서 재로드합니다:', e);
+        _cfConflict = true;
+        try {
+          const r = await _supa.from('cf_data').select('id, data, version').limit(1).single();
+          if (r.data) {
+            cfData = Array.isArray(r.data.data) ? r.data.data : JSON.parse(r.data.data);
+            _cfVersion = r.data.version ?? null;
+            ensureCFIds();
+            localStorage.setItem('cf_data', JSON.stringify(cfData));
+            _cfConflict = false;
+            renderAll();
+          }
+        } catch (e2) {
+          console.error('[realtime] 재로드도 실패 — 새로고침이 필요합니다:', e2);
+          showToast('⚠ 동기화에 실패했습니다. 새로고침해 주세요.', 'red');
+        }
       } finally { _isSyncing = false; }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ar_data' }, async (payload) => {
