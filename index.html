@@ -783,7 +783,14 @@
     </select>
     <input type="text" id="cf-search" placeholder="거래내용 검색..." style="min-width:160px">
     <button class="btn" id="cf-filter-btn">조회</button>
-    <button class="btn" id="cf-unassigned-btn" style="white-space:nowrap;color:var(--text2)" title="중분류가 없는 항목만 표시">미분류만</button>
+    <select id="cf-unassigned-btn" title="분류 상태로 필터" style="white-space:nowrap">
+      <option value="">분류 전체</option>
+      <option value="noMid">중분류 없음</option>
+      <option value="noBig">대분류 없음</option>
+      <option value="midOnly">중분류만 있음</option>
+      <option value="bigOnly">대분류만 있음</option>
+      <option value="done">분류완료(중+대)</option>
+    </select>
     <button class="btn" id="cf-autoclass-btn" style="white-space:nowrap;color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)" title="중분류 미분류 행을 학습된 매핑으로 자동 추천 → 검토 후 적용">✨ 자동분류 추천</button>
     <button class="btn" id="cf-overdue-btn" style="white-space:nowrap;color:var(--amber);border-color:var(--amber)" title="보고기준일 또는 오늘 이하인 예정 거래 목록 확인 및 전환">⚠ 만기 예정 확인</button>
   </div>
@@ -4789,9 +4796,15 @@ function getFilteredCF() {
     if (status && r.status !== status) return false;
     if (mid && r.mid_cat !== mid) return false;
     if (big && r.big_cat !== big) return false;
-    if (cfUnassignedOnly === 'noMid' && (r.mid_cat || '').trim()) return false;
-    if (cfUnassignedOnly === 'noBig' && (r.big_cat || '').trim()) return false;
-    if (cfUnassignedOnly === 'done'  && !((r.mid_cat || '').trim() && (r.big_cat || '').trim())) return false;
+    if (cfUnassignedOnly) {
+      const hasMid = !!(r.mid_cat || '').trim();
+      const hasBig = !!(r.big_cat || '').trim();
+      if (cfUnassignedOnly === 'noMid'   && hasMid) return false;
+      if (cfUnassignedOnly === 'noBig'   && hasBig) return false;
+      if (cfUnassignedOnly === 'midOnly' && !(hasMid && !hasBig)) return false;
+      if (cfUnassignedOnly === 'bigOnly' && !(hasBig && !hasMid)) return false;
+      if (cfUnassignedOnly === 'done'    && !(hasMid && hasBig))  return false;
+    }
     if (q && !r.desc.toLowerCase().includes(q)) return false;
     // 금액 필터: 입금 or 출금 중 하나라도 범위 내에 있으면 포함
     const amt = Math.max(r.in || 0, r.out || 0);
@@ -5208,28 +5221,21 @@ function cfAddSingleRow(row) {
 document.getElementById('cf-filter-btn').addEventListener('click', () => { cfPage = 1; renderCFTable(); });
 
 // 미분류만 보기 토글
-/* 분류 필터 4단 순환: 전체 → 중분류 없음 → 대분류 없음 → 분류완료(둘 다 있음) → 전체 */
-const CF_CLASS_MODES = [
-  { key: '',      label: '미분류만',       title: '클릭: 중분류 없는 항목만' },
-  { key: 'noMid', label: '중분류 없음',    title: '중분류가 비어 있는 항목만. 클릭: 대분류 없음' },
-  { key: 'noBig', label: '대분류 없음',    title: '대분류가 비어 있는 항목만. 클릭: 분류완료' },
-  { key: 'done',  label: '분류완료만',     title: '중분류·대분류가 모두 있는 항목만. 클릭: 전체 보기' },
-];
+/* 분류 상태 필터 — 선택값이 곧 cfUnassignedOnly
+ *  '' 전체 · noMid 중분류없음 · noBig 대분류없음 · midOnly 중분류만 · bigOnly 대분류만 · done 분류완료 */
 function applyCFClassMode() {
-  const btn = document.getElementById('cf-unassigned-btn');
-  if (!btn) return;
-  const m = CF_CLASS_MODES.find(x => x.key === (cfUnassignedOnly || '')) || CF_CLASS_MODES[0];
-  btn.textContent = m.label;
-  btn.title = m.title;
-  const on = !!cfUnassignedOnly;
+  const sel = document.getElementById('cf-unassigned-btn');
+  if (!sel) return;
+  sel.value = cfUnassignedOnly || '';
+  const on   = !!cfUnassignedOnly;
   const done = cfUnassignedOnly === 'done';
-  btn.style.background  = on ? (done ? 'var(--green2)' : 'var(--amber2)') : '';
-  btn.style.color       = on ? (done ? 'var(--green)'  : 'var(--amber)')  : 'var(--text2)';
-  btn.style.borderColor = on ? (done ? 'var(--green)'  : 'var(--amber)')  : '';
+  // 필터가 걸려 있으면 눈에 띄게 (분류완료=초록, 미분류 계열=앰버)
+  sel.style.background  = on ? (done ? 'var(--green2)' : 'var(--amber2)') : '';
+  sel.style.color       = on ? (done ? 'var(--green)'  : 'var(--amber)')  : '';
+  sel.style.borderColor = on ? (done ? 'var(--green)'  : 'var(--amber)')  : '';
 }
-document.getElementById('cf-unassigned-btn').addEventListener('click', () => {
-  const i = CF_CLASS_MODES.findIndex(x => x.key === (cfUnassignedOnly || ''));
-  cfUnassignedOnly = CF_CLASS_MODES[(i + 1) % CF_CLASS_MODES.length].key;
+document.getElementById('cf-unassigned-btn').addEventListener('change', e => {
+  cfUnassignedOnly = e.target.value;
   applyCFClassMode();
   cfPage = 1;
   renderCFTable();
