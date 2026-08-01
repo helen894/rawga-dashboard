@@ -785,6 +785,7 @@
     <button class="btn" id="cf-filter-btn">조회</button>
     <select id="cf-unassigned-btn" title="분류 상태로 필터" style="white-space:nowrap">
       <option value="">분류 전체</option>
+      <option value="none">둘 다 없음(미분류)</option>
       <option value="noMid">중분류 없음</option>
       <option value="noBig">대분류 없음</option>
       <option value="midOnly">중분류만 있음</option>
@@ -4799,6 +4800,7 @@ function getFilteredCF() {
     if (cfUnassignedOnly) {
       const hasMid = !!(r.mid_cat || '').trim();
       const hasBig = !!(r.big_cat || '').trim();
+      if (cfUnassignedOnly === 'none'    && (hasMid || hasBig)) return false;
       if (cfUnassignedOnly === 'noMid'   && hasMid) return false;
       if (cfUnassignedOnly === 'noBig'   && hasBig) return false;
       if (cfUnassignedOnly === 'midOnly' && !(hasMid && !hasBig)) return false;
