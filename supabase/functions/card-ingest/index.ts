@@ -23,10 +23,19 @@
  * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
  *   • 수정  { secret, patch: [{approval_id, memo}] }
- *   • 별칭 채우기 { secret, aliasFill: {"<card_no>": "<별칭>", ...} }
- *     별칭이 **빈 행에만** 채운다. 매핑 파일을 고쳐도 이미 적재된 행은 그대로라
+ *   • 별칭 채우기 { secret, aliasFill: {"<card_no>": "<별칭>", ...}, overwrite?: boolean }
+ *     기본은 별칭이 **빈 행에만** 채운다. 매핑 파일을 고쳐도 이미 적재된 행은 그대로라
  *     집계표에서 계속 빠지기 때문(2026-07 기준 2장 85건 3,868,021원 = 금액의 14.2%).
  *     이미 별칭이 있는 행은 건드리지 않는다 — 사람이 손으로 고쳐둔 걸 덮으면 안 된다.
+ *     overwrite:true 면 기존 별칭도 덮는다(표기 규칙을 바꿔 과거분까지 통일할 때).
+ *     ⚠ 되돌릴 수 없다. 변경 전 값은 응답의 byRewrite 에 '옛값 → 새값' 집계로만 남고
+ *       어느 행이었는지는 못 찾는다.
+ *     ⚠ 이 매핑은 '카드 1장 = 별칭 1개'를 전제한다. 실제 데이터는 같은 카드에 다른 별칭이
+ *       붙어 있을 수 있고(2026-08-02 실행 시 330건 중 72건이 그랬다), 그런 행은 덮어쓰기로
+ *       **집계표 열이 바뀐다** — 표기 통일이 아니라 귀속 변경이다.
+ *       overwrite 를 쓰기 전에 대상 카드들의 기존 별칭이 균일한지 반드시 먼저 확인할 것.
+ *       (지금은 매핑에 없는 카드만 unmatched[].aliases 로 보여준다 — 매칭되는 카드도
+ *        같이 보여주도록 고치는 게 맞다.)
  *     이미 적재된 행의 계정과목(memo)만 고친다. 클로브 memo 가
  *     '프리딕티브AGI: 2027 CES 참가비' 처럼 ':' 앞이 계정과목이 아닌 경우의 교정용.
  *     적재는 중복 차단 때문에 재실행으로 고칠 수 없어서 별도 경로가 필요하다.
@@ -140,30 +149,45 @@ Deno.serve(async (req) => {
       }
       if (!want.size) return json({ ok: false, error: 'aliasFill 에 쓸 값이 없습니다' }, 400);
 
+      const overwrite = body?.overwrite === true;
       const filled: Record<string, number> = {};
-      let skippedHasAlias = 0;
+      const rewritten: Record<string, number> = {};   // 기존 별칭을 덮은 건수 ('옛값→새값')
+      let skippedHasAlias = 0, unchanged = 0;
       // 매핑에 없는 카드번호를 모은다 — 수기 엑셀분은 카드번호 표기가 API와 달라
       // 매핑 키에 안 걸릴 수 있고, 그러면 소급이 조용히 빗나간다. 그걸 눈에 보이게.
-      const unmatched = new Map<string, { n: number; blank: number; sum: number; from: string; to: string }>();
+      const unmatched = new Map<string, { n: number; blank: number; sum: number; from: string; to: string; aliases: Set<string> }>();
       for (const r of cur) {
         const no = str(r.card_no);
         const al = want.get(no);
         if (!al) {
           const d = str(r.use_date).slice(0, 10);
-          const e = unmatched.get(no) || { n: 0, blank: 0, sum: 0, from: d, to: d };
+          const e = unmatched.get(no) || { n: 0, blank: 0, sum: 0, from: d, to: d, aliases: new Set<string>() };
           e.n++; e.sum += num(r.billing_amount);
-          if (!str(r.card_alias)) e.blank++;
+          const a = str(r.card_alias);
+          if (!a) e.blank++; else e.aliases.add(a);
           if (d && (!e.from || d < e.from)) e.from = d;
           if (d && (!e.to   || d > e.to))   e.to   = d;
           unmatched.set(no, e);
           continue;
         }
-        if (str(r.card_alias)) { skippedHasAlias++; continue; }   // 이미 있는 별칭은 안 건드린다
+        const curAlias = str(r.card_alias);
+        if (curAlias) {
+          if (!overwrite) { skippedHasAlias++; continue; }        // 기본: 있는 별칭은 안 건드린다
+          if (curAlias === al) { unchanged++; continue; }         // 이미 새 값이면 쓸 것도 없다
+          const k = `${curAlias} → ${al}`;
+          rewritten[k] = (rewritten[k] || 0) + 1;
+          r.card_alias = al;
+          continue;
+        }
         r.card_alias = al;
         filled[al] = (filled[al] || 0) + 1;
       }
-      const total = Object.values(filled).reduce((a, b) => a + b, 0);
-      const unmatchedList = [...unmatched].map(([card_no, e]) => ({ card_no, ...e })).sort((a, b) => b.n - a.n);
+      const nFilled = Object.values(filled).reduce((a, b) => a + b, 0);
+      const nRewritten = Object.values(rewritten).reduce((a, b) => a + b, 0);
+      const total = nFilled + nRewritten;   // 저장이 필요한 변경 건수
+      const unmatchedList = [...unmatched]
+        .map(([card_no, e]) => ({ ...e, card_no, aliases: [...e.aliases] }))
+        .sort((a, b) => b.n - a.n);
 
       if (total) {
         const put = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?on_conflict=key`, {
@@ -178,7 +202,13 @@ Deno.serve(async (req) => {
         });
         if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
       }
-      return json({ ok: true, mode: 'aliasFill', filled: total, byAlias: filled, skippedHasAlias, unmatched: unmatchedList, total: cur.length });
+      return json({
+        ok: true, mode: 'aliasFill', overwrite,
+        filled: nFilled, byAlias: filled,
+        rewritten: nRewritten, byRewrite: rewritten,
+        skippedHasAlias, unchanged,
+        unmatched: unmatchedList, total: cur.length,
+      });
     }
 
     const seenApproval = new Set(cur.map((r) => str(r.approval_id)).filter(Boolean));

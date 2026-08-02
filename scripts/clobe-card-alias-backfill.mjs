@@ -20,6 +20,7 @@
 import { readFileSync } from 'node:fs';
 
 const DRY = process.argv.includes('--dry-run');
+const OVERWRITE = process.argv.includes('--overwrite');   // 기존 별칭까지 덮는다 (표기 규칙 변경 시)
 
 const EDGE = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/card-ingest';
 const SECRET_FILE = 'C:/Users/RAWGA/AppData/Local/rawga/bank-sync.secret';
@@ -46,7 +47,7 @@ const res = await fetch(EDGE, {
     apikey: SUPA_PUBLISHABLE_KEY,
     Authorization: `Bearer ${SUPA_PUBLISHABLE_KEY}`,
   },
-  body: JSON.stringify({ secret, aliasFill }),
+  body: JSON.stringify({ secret, aliasFill, overwrite: OVERWRITE }),
 });
 const out = await res.json().catch(() => ({}));
 if (!res.ok || out.ok === false) {
@@ -56,9 +57,12 @@ if (!res.ok || out.ok === false) {
 
 const won = n => Math.round(n).toLocaleString('ko-KR');
 
-console.log(`\n완료 — 빈 별칭 ${out.filled}건 채움 / 카드내역 총 ${out.total}건`);
-for (const [al, n] of Object.entries(out.byAlias || {})) console.log(`     ${al}  ${n}건`);
-if (!out.filled) console.log('  (채울 빈 별칭이 없었습니다)');
+console.log(`\n완료 — 빈 별칭 ${out.filled}건 채움` +
+  (out.overwrite ? ` · 기존 별칭 ${out.rewritten}건 덮음 · 이미 같은 값 ${out.unchanged}건` : '') +
+  ` / 카드내역 총 ${out.total}건`);
+for (const [al, n] of Object.entries(out.byAlias || {}))   console.log(`     채움  ${al}  ${n}건`);
+for (const [k, n] of Object.entries(out.byRewrite || {}))  console.log(`     덮음  ${k}  ${n}건`);
+if (!out.filled && !out.rewritten) console.log('  (바꿀 게 없었습니다)');
 
 /* 매핑 키에 안 걸린 카드번호 — 수기 엑셀분은 카드번호 표기가 API와 달라
    소급이 조용히 빗나갈 수 있다. blank>0 이면 그만큼 집계표에서 빠져 있다는 뜻. */
@@ -71,5 +75,6 @@ if (um.length) {
   for (const u of um) {
     console.log('  ' + u.card_no.padEnd(22) + String(u.n).padStart(4) + String(u.blank).padStart(7) +
       won(u.sum).padStart(15) + `  ${u.from} ~ ${u.to}`);
+    if (u.aliases?.length) console.log('      기존 별칭: ' + u.aliases.join(' · '));
   }
 }
