@@ -14,6 +14,12 @@
  *      복합키 use_date|card_no|merchant|billing_amount 일치
  *   → 같은 기간을 다시 적재해도 수기분과 겹치지 않는다.
  *
+ * ⚠ 복합키는 **approval_id 없는 행에만** 적용한다.
+ *   같은 날 같은 카드로 같은 가맹점에서 같은 금액을 두 번 긁는 일이 실제로 있다
+ *   (하이파킹 132,000×2, 법원행정처 6,000×2 …). 이건 approval_id 가 다른 별개 거래인데
+ *   복합키를 전체에 걸면 뒤 건이 중복으로 버려진다 — 2026-07 적재에서 5건 534,900원 누락.
+ *   approval_id 가 있는 행끼리는 1)이 이미 정확히 막으므로 복합키를 볼 이유가 없다.
+ *
  * 두 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
  *   • 수정  { secret, patch: [{approval_id, memo}] }
@@ -116,7 +122,8 @@ Deno.serve(async (req) => {
     }
 
     const seenApproval = new Set(cur.map((r) => str(r.approval_id)).filter(Boolean));
-    const seenComposite = new Set(cur.map(compositeKey));
+    // 수기 업로드분(approval_id 없음)만 복합키 대상 — 위 주석의 오탈락 방지
+    const seenComposite = new Set(cur.filter((r) => !str(r.approval_id)).map(compositeKey));
 
     let added = 0, skipped = 0;
     const now = Date.now();
@@ -138,7 +145,7 @@ Deno.serve(async (req) => {
       if (seenComposite.has(ck)) { skipped++; continue; }   // 수기 업로드분과 중복
       cur.push(rec);
       if (rec.approval_id) seenApproval.add(rec.approval_id);
-      seenComposite.add(ck);
+      else seenComposite.add(ck);   // 방금 넣은 승인건까지 복합키에 넣으면 배치 안에서 또 오탈락한다
       added++;
     }
 
