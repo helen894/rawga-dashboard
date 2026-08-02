@@ -114,10 +114,19 @@ const suggestAcct = memo => {
 };
 /* 미분류(메모 없음)용 — 가맹점명 키워드. 식당·카페는 규칙에 없다(원리적으로 구분 불가).
    단 `aliases` 가 붙은 규칙은 카드 사용자로 갈린다 — 개인 명의 카드면 접대, 팀 카드면 복리후생처럼. */
-const suggestByMerchant = (name, alias) => {
+/* want: 'plain' = food 아닌 규칙만(주유소·우체국 등, 실측 97.9%)
+         'food' = food 규칙만(카드 사용자로 갈림, 실측 78.0%)
+   둘을 나눈 이유: 그 사이에 '이 가맹점의 실제 라벨 이력' 을 끼워야 하기 때문이다.
+   이력은 그 가게에 대한 직접 증거라 78% 짜리 일반 규칙보다 먼저 봐야 한다
+   (후토루분당수내점은 이력이 3건 전부 복리후생비인데 식음 규칙은 접대비로 민다). */
+const suggestByMerchant = (name, alias, want, isFoodMerchant = () => false) => {
   const s = String(name || '');
   for (const r of MERCHANT_RULES) {
-    if (!(r.keywords || []).some(k => s.includes(k))) continue;
+    if (want === 'plain' && r.food) continue;
+    if (want === 'food'  && !r.food) continue;
+    const kw = (r.keywords || []).some(k => s.includes(k));
+    // food 규칙은 키워드 외에 '이 가맹점이 식음으로 라벨된 이력' 도 인정한다 (가게 이름이 제각각이라)
+    if (!kw && !(r.food && isFoodMerchant(s))) continue;
     if (!r.aliases) return r.account;
     return r.aliases.includes(String(alias || '')) ? r.account : (r.elseAccount ?? null);
   }
@@ -275,13 +284,27 @@ if (KNOWN_ACCOUNTS.size) {
     return (tot >= 2 && n / tot >= 0.7) ? { acc, conf: n / tot, tot } : null;
   };
 
+  // 이 가맹점이 배치 안에서 주로 식음(복리후생비/접대비)으로 라벨됐나 — food 규칙의 두 번째 근거
+  const FOOD_ACCTS = new Set(['복리후생비', '업무추진비(접대비)']);
+  const isFoodMerchant = name => {
+    const c = hist.get(String(name || '').trim());
+    if (!c) return false;
+    let food = 0, other = 0;
+    for (const [a, n] of c) (FOOD_ACCTS.has(a) ? (food += n) : (other += n));
+    return food > other;
+  };
+
   const none = live.filter(r => acctOf(r.memo) === '미분류');
   if (none.length) {
+    // 근거가 강한 순: 가맹점명 확정 규칙 → 그 가맹점의 실제 라벨 이력 → 식음+사용자 규칙
     const picked = none.map(r => {
-      const byName = suggestByMerchant(r.memberStoreName, aliasOf(r.cardNo));
-      if (byName) return { r, acc: byName, how: '가맹점명' };
+      const alias = aliasOf(r.cardNo);
+      const plain = suggestByMerchant(r.memberStoreName, alias, 'plain');
+      if (plain) return { r, acc: plain, how: '가맹점명' };
       const h = histGuess(r.memberStoreName);
       if (h) return { r, acc: h.acc, how: `이력 ${Math.round(h.conf * 100)}%·${h.tot}건` };
+      const food = suggestByMerchant(r.memberStoreName, alias, 'food', isFoodMerchant);
+      if (food) return { r, acc: food, how: `식음·${alias || '별칭없음'}` };
       return { r, acc: null, how: null };
     });
     const got = picked.filter(x => x.acc);
