@@ -4608,8 +4608,13 @@ function renderCashChart() {
     allDates.push(d.toISOString().slice(0,10));
   }
 
+  /* 외화 환산손익을 기준선에 얹는다. 아래 세 기준선(running·last·preRunning)에 같은 상수를
+   * 더하므로 선의 모양은 변하지 않고 끝점만 현금 KPI·대조 카드와 맞는다.
+   * ⚠ 절충: 과거 시점 잔액도 '오늘 기준' 누적 환산손익을 안고 있게 된다. 기간별로 배분하는
+   *   게 정확하지만 그럴 근거 데이터가 없다. 대신 차트·KPI·리포트가 서로 어긋나지 않는다. */
+  computeFxAdj();
   // 기준일 이전 전체 데이터로 잔액 계산 (정확한 시작 잔액 위해)
-  let running = INIT_CASH;
+  let running = INIT_CASH + FX_ADJ;
   const dailyMap = {};
   for (const r of [...cfData].sort((a,b) => a.date.localeCompare(b.date))) {
     const _mid = r.mid_cat || '';
@@ -4620,11 +4625,11 @@ function renderCashChart() {
 
   const labels = [], vals = [];
   // minDate 직전까지의 마지막 잔액을 시작값으로
-  let last = INIT_CASH;
+  let last = INIT_CASH + FX_ADJ;
   const preMin = [...cfData]
     .filter(r => (r.status === '실제 입금' || r.status === '실제 지출') && r.date < minDate)
     .sort((a,b) => a.date.localeCompare(b.date));
-  let preRunning = INIT_CASH;
+  let preRunning = INIT_CASH + FX_ADJ;
   for (const r of preMin) {
     const _mid2 = r.mid_cat || '';
     if (r.status === '실제 입금') preRunning += r.in;
@@ -7632,8 +7637,9 @@ function renderMonthlyReport() {
     .reduce((s, r) => s + (r.status === '실제 입금' ? (r.in || 0)
                         : r.status === '실제 지출' ? -(r.out || 0) : 0), 0);
 
-  let pmEndCash = INIT_CASH;
-  let mEndCash = INIT_CASH;
+  computeFxAdj();          // 외화 환산손익 — 현금 KPI·차트·주간 리포트와 같은 기준
+  let pmEndCash = INIT_CASH + FX_ADJ;
+  let mEndCash = INIT_CASH + FX_ADJ;
   for (const r of cfData) {
     if (r.status === '실제 입금' && r.date <= pmEnd) pmEndCash += (r.in || 0);
     if (r.status === '실제 지출' && r.date <= pmEnd) pmEndCash -= (r.out || 0);
