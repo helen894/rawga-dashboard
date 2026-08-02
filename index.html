@@ -1583,6 +1583,7 @@
     </div>
     <!-- 필터 바 -->
     <div class="cctx-filter-bar" id="cctx-filter-bar">
+      <select id="cctx-month" style="width:130px"><option value="">전체 기간</option></select>
       <input type="date" id="cctx-from" style="width:120px">
       <span style="color:var(--text3);font-size:12px">~</span>
       <input type="date" id="cctx-to" style="width:120px">
@@ -10416,16 +10417,37 @@ function updateCCTxAliasFilter() {
   const aliases = [...new Set(corpCardTxData.map(r => r.card_alias).filter(Boolean))].sort();
   sel.innerHTML = `<option value="">카드 전체</option>` +
     aliases.map(a => `<option value="${a}"${a === current ? ' selected' : ''}>${a}</option>`).join('');
+  updateCCTxMonthFilter();   // 데이터가 바뀌면 두 선택기를 같이 갱신 (호출부가 여러 곳이라 여기에 묶음)
+}
+
+/* ===== 법인카드 사용내역 — 월별 필터 갱신 =====
+   데이터에 실제로 있는 달만 최신순으로 채운다(빈 달을 고르는 일이 없게).
+   기간 지정 수단이 월 선택기와 from/to 두 개라, 둘을 AND로 걸면
+   "7월을 골랐는데 아무것도 안 나온다"(from/to가 6월에 남아 있어서) 같은 혼란이 생긴다.
+   → 나중에 건드린 쪽이 이긴다: 월을 고르면 from/to를 비우고, from/to를 만지면 월을 푼다. */
+function updateCCTxMonthFilter() {
+  const sel = document.getElementById('cctx-month');
+  if (!sel) return;
+  const current = sel.value;
+  const months = [...new Set(corpCardTxData.map(r => String(r.use_date || '').slice(0, 7)).filter(m => m.length === 7))]
+    .sort().reverse();
+  const label = m => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
+  sel.innerHTML = `<option value="">전체 기간</option>` +
+    months.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${label(m)}</option>`).join('');
+  // 고르고 있던 달이 데이터에서 사라졌으면(전체 삭제·교체) 선택이 조용히 풀린다
+  if (current && !months.includes(current)) sel.value = '';
 }
 
 /* ===== 법인카드 청구내역 — 필터 ===== */
 function getCCTxFilteredRows() {
   // Step 1: 상단 기간·카드·가맹점 필터 (계정과목은 헤더 다중 선택 필터로 처리)
+  const month    = document.getElementById('cctx-month')?.value    || '';
   const from     = document.getElementById('cctx-from')?.value     || '';
   const to       = document.getElementById('cctx-to')?.value       || '';
   const alias    = document.getElementById('cctx-alias')?.value    || '';
   const merchant = (document.getElementById('cctx-merchant')?.value || '').trim().toLowerCase();
   let rows = corpCardTxData;
+  if (month)    rows = rows.filter(r => String(r.use_date || '').slice(0, 7) === month);
   if (from)     rows = rows.filter(r => (r.use_date || '') >= from);
   if (to)       rows = rows.filter(r => (r.use_date || '') <= to);
   if (alias)    rows = rows.filter(r => r.card_alias === alias);
@@ -11508,13 +11530,28 @@ document.getElementById('cctx-file-input').addEventListener('change', handleCCTx
 document.getElementById('cctx-modal-close').addEventListener('click', () => document.getElementById('cctx-upload-modal').classList.add('hidden'));
 document.getElementById('cctx-cancel-btn').addEventListener('click',  () => document.getElementById('cctx-upload-modal').classList.add('hidden'));
 document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxUpload);
-['cctx-from', 'cctx-to', 'cctx-alias', 'cctx-merchant'].forEach(id => {
+['cctx-month', 'cctx-from', 'cctx-to', 'cctx-alias', 'cctx-merchant'].forEach(id => {
   const el = document.getElementById(id);
   if (el) { el.addEventListener('input', renderCCTxTable); el.addEventListener('change', renderCCTxTable); }
+});
+// 기간 지정은 월 선택기와 from/to 중 나중에 건드린 쪽만 남긴다 (둘이 AND로 겹쳐 빈 결과가 나오는 걸 방지)
+document.getElementById('cctx-month')?.addEventListener('change', () => {
+  ['cctx-from', 'cctx-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderCCTxTable();
+});
+['cctx-from', 'cctx-to'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', () => {
+    const m = document.getElementById('cctx-month');
+    if (m && m.value && (document.getElementById('cctx-from')?.value || document.getElementById('cctx-to')?.value)) {
+      m.value = '';
+      renderCCTxTable();
+    }
+  });
 });
 document.getElementById('cctx-filter-reset').addEventListener('click', () => {
   ['cctx-from', 'cctx-to', 'cctx-merchant'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const sel = document.getElementById('cctx-alias'); if (sel) sel.value = '';
+  const mon = document.getElementById('cctx-month'); if (mon) mon.value = '';
   cctxPersonFilter = null;  // 사용자 필터 초기화
   cctxAccountFilter = null; // 계정과목 필터 초기화
   // 헤더 컬럼 필터 전체 초기화
