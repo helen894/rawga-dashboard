@@ -602,6 +602,9 @@
   <span id="kpi-next-month-cash" style="display:none"></span>
   <span id="kpi-next-month-range" style="display:none"></span>
 
+  <!-- 데이터 신선도 배지 (P0-2) — 소스별 커버리지·갱신 상태 -->
+  <div id="data-freshness"></div>
+
   <!-- 은행 실잔액 대조 (P0 잔액 정합성) — bank_snapshot 있을 때만 렌더 -->
   <div id="bank-recon"></div>
 
@@ -2672,6 +2675,105 @@ function computeFxAdj() {
   return FX_ADJ;
 }
 
+/* ===== 데이터 신선도 (P0-2) =====
+ * 소스마다 갱신 주기가 달라 임계도 다르게 잡는다.
+ *  · 은행잔액: 매일 자동(09:00)     → 24h/72h
+ *  · 입출금  : 매일 자동(09:20)     → 영업일 1/3일 (주말엔 거래가 없으므로 영업일 기준)
+ *  · 매출채권: 수동 시트 동기화      → 7일/14일
+ *  · 법인카드: 월 1회 업로드         → 40일/70일
+ * '커버리지'(데이터가 어디까지 반영됐나)를 우선 보여준다 — 갱신을 돌려도 원본이 없으면 소용없기 때문. */
+function bizDaysBetween(fromYmd, toYmd) {
+  const a = new Date(fromYmd + 'T00:00:00'), b = new Date(toYmd + 'T00:00:00');
+  if (isNaN(a) || isNaN(b) || a > b) return 0;
+  let n = 0;
+  for (const d = new Date(a); d < b; d.setDate(d.getDate() + 1)) {
+    const w = d.getDay();
+    if (w !== 0 && w !== 6) n++;
+  }
+  return n;
+}
+// _id에 박힌 생성시각 복원 (cf_<base36ms>_… / corp_card_<ms>_…) — 실제 적재·업로드 시각 추정용
+function idStamp(id, kind) {
+  const s = String(id || '');
+  let ms = 0;
+  if (kind === 'cf') { const m = s.match(/^cf_([0-9a-z]+)_/i); if (m) ms = parseInt(m[1], 36); }
+  else               { const m = s.match(/^corp_card_(\d+)_/);  if (m) ms = parseInt(m[1], 10); }
+  return (ms > 1577836800000 && ms < 2524608000000) ? ms : 0;   // 2020~2050 범위만 신뢰
+}
+function relTime(ms) {
+  const mins = Math.max(0, Math.floor((Date.now() - ms) / 60000));
+  return mins < 60 ? `${mins}분 전` : mins < 2880 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
+}
+
+function collectFreshness() {
+  const today = todayKST();
+  const md = d => (d && d.length >= 10) ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '—';
+  const out = [];
+
+  // 은행 잔액
+  if (bankSnapshot && bankSnapshot.asOf) {
+    const t = new Date(bankSnapshot.asOf).getTime();
+    const h = (Date.now() - t) / 3600000;
+    out.push({ name: '은행잔액', cover: relTime(t), lvl: h <= 24 ? 0 : (h <= 72 ? 1 : 2),
+               tip: `클로브 수집 ${new Date(t).toLocaleString('ko-KR')} · 자동 매일 09:00` });
+  } else {
+    out.push({ name: '은행잔액', cover: '없음', lvl: 2, tip: '스냅샷 없음 — 자동 갱신 미작동' });
+  }
+
+  // 입출금 — 실제 거래 커버리지(영업일 기준)
+  const actual = (cfData || []).filter(r => r.status === '실제 입금' || r.status === '실제 지출');
+  const cfMax = actual.map(r => r.date).filter(Boolean).sort().pop();
+  if (cfMax) {
+    const gap = bizDaysBetween(cfMax, today);
+    const ing = Math.max(0, ...(cfData || []).map(r => idStamp(r._id, 'cf')));
+    out.push({ name: '입출금', cover: `${md(cfMax)}까지`, lvl: gap <= 1 ? 0 : (gap <= 3 ? 1 : 2),
+               tip: `최근 실제거래 ${cfMax} (영업일 ${gap}일 경과)` + (ing ? ` · 마지막 적재 ${relTime(ing)}` : '') + ' · 자동 매일 09:20' });
+  } else out.push({ name: '입출금', cover: '없음', lvl: 2, tip: '실제 거래 없음' });
+
+  // 매출채권 — 시트 동기화 시각(arMeta)
+  const arDays = (() => {
+    const rows = (arMeta && arMeta.rows) ? Object.values(arMeta.rows) : [];
+    const last = rows.map(m => m.lastChanged || m.firstSeen).filter(Boolean).sort().pop();
+    return last ? { last, d: Math.floor((new Date(today + 'T00:00:00') - new Date(last + 'T00:00:00')) / 86400000) } : null;
+  })();
+  if (arDays) {
+    out.push({ name: '매출채권', cover: `${md(arDays.last)} 동기화`, lvl: arDays.d <= 7 ? 0 : (arDays.d <= 14 ? 1 : 2),
+               tip: `마지막 시트 동기화 ${arDays.last} (${arDays.d}일 전) · 수동(시트 메뉴에서 실행)` });
+  } else out.push({ name: '매출채권', cover: '—', lvl: 1, tip: '동기화 이력 없음' });
+
+  // 법인카드 — 사용내역 커버리지
+  const cc = corpCardTxData || [];
+  const ccMax = cc.map(r => r.use_date).filter(Boolean).sort().pop();
+  if (ccMax) {
+    const d = Math.floor((new Date(today + 'T00:00:00') - new Date(ccMax + 'T00:00:00')) / 86400000);
+    const up = Math.max(0, ...cc.map(r => idStamp(r._id, 'card')));
+    out.push({ name: '법인카드', cover: `${md(ccMax)}까지`, lvl: d <= 40 ? 0 : (d <= 70 ? 1 : 2),
+               tip: `최근 사용일 ${ccMax} (${d}일 전)` + (up ? ` · 마지막 업로드 ${relTime(up)}` : '') + ' · 월 1회 수동 업로드' });
+  } else out.push({ name: '법인카드', cover: '없음', lvl: 2, tip: '사용내역 없음' });
+
+  return out;
+}
+
+function renderFreshness() {
+  const el = document.getElementById('data-freshness');
+  if (!el) return;
+  let src = [];
+  try { src = collectFreshness(); } catch (e) { console.warn('[freshness]', e); el.innerHTML = ''; return; }
+  const COL = ['var(--green)', 'var(--amber)', 'var(--red)'];
+  const worst = Math.max(...src.map(s => s.lvl));
+  const chips = src.map(s =>
+    `<span title="${escapeHtml(s.tip)}" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:3px 9px;white-space:nowrap;cursor:default">
+      <span style="width:7px;height:7px;border-radius:50%;background:${COL[s.lvl]};flex:none"></span>
+      <b style="color:var(--text);font-weight:600">${s.name}</b> ${escapeHtml(s.cover)}
+    </span>`).join('');
+  el.innerHTML =
+    `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 12px;background:var(--bg3);border-radius:8px;border-left:3px solid ${COL[worst]}">
+      <span style="font-size:11.5px;font-weight:700;color:var(--text2);white-space:nowrap">📊 데이터 신선도</span>
+      ${chips}
+      ${worst > 0 ? `<span style="font-size:11px;color:${COL[worst]}">← 갱신이 밀린 소스가 있습니다</span>` : ''}
+    </div>`;
+}
+
 function renderBankRecon() {
   const el = document.getElementById('bank-recon');
   if (!el) return;
@@ -4346,6 +4448,7 @@ function renderKPIs() {
   const nmrEl = document.getElementById('kpi-next-month-range');
   if (nmrEl) nmrEl.textContent = `${k.ny2}년 ${k.nm2}월 예상`;
 
+  try { renderFreshness(); } catch (e) { console.warn('[freshness]', e); }    // 데이터 신선도 배지
   try { renderBankRecon(); } catch (e) { console.warn('[bank-recon]', e); }   // 은행 실잔액 대조
 }
 
