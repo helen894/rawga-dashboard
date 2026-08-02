@@ -20,9 +20,13 @@
  *   복합키를 전체에 걸면 뒤 건이 중복으로 버려진다 — 2026-07 적재에서 5건 534,900원 누락.
  *   approval_id 가 있는 행끼리는 1)이 이미 정확히 막으므로 복합키를 볼 이유가 없다.
  *
- * 두 가지 모드:
+ * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
  *   • 수정  { secret, patch: [{approval_id, memo}] }
+ *   • 별칭 채우기 { secret, aliasFill: {"<card_no>": "<별칭>", ...} }
+ *     별칭이 **빈 행에만** 채운다. 매핑 파일을 고쳐도 이미 적재된 행은 그대로라
+ *     집계표에서 계속 빠지기 때문(2026-07 기준 2장 85건 3,868,021원 = 금액의 14.2%).
+ *     이미 별칭이 있는 행은 건드리지 않는다 — 사람이 손으로 고쳐둔 걸 덮으면 안 된다.
  *     이미 적재된 행의 계정과목(memo)만 고친다. 클로브 memo 가
  *     '프리딕티브AGI: 2027 CES 참가비' 처럼 ':' 앞이 계정과목이 아닌 경우의 교정용.
  *     적재는 중복 차단 때문에 재실행으로 고칠 수 없어서 별도 경로가 필요하다.
@@ -62,8 +66,11 @@ Deno.serve(async (req) => {
 
   const rows  = Array.isArray(body?.rows)  ? body.rows  : [];
   const patch = Array.isArray(body?.patch) ? body.patch : [];
-  if (rows.length && patch.length) return json({ ok: false, error: 'rows 와 patch 는 함께 못 씁니다' }, 400);
-  if (!rows.length && !patch.length) return json({ ok: false, error: 'rows 또는 patch 없음' }, 400);
+  const aliasFill = (body?.aliasFill && typeof body.aliasFill === 'object' && !Array.isArray(body.aliasFill))
+    ? body.aliasFill as Record<string, unknown> : null;
+  const modes = [rows.length ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : ''].filter(Boolean);
+  if (modes.length > 1)  return json({ ok: false, error: `모드는 하나만: ${modes.join(', ')}` }, 400);
+  if (modes.length === 0) return json({ ok: false, error: 'rows / patch / aliasFill 없음' }, 400);
 
   try {
     // 1) 기존 데이터 읽기
@@ -119,6 +126,45 @@ Deno.serve(async (req) => {
         if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
       }
       return json({ ok: true, mode: 'patch', updated: changes.length, changes, notFound, total: cur.length });
+    }
+
+    /* ── 별칭 채우기 모드 ─────────────────────────────────────
+       빈 별칭만 채운다. 읽기가 비었으면 patch 와 같은 이유로 중단. */
+    if (aliasFill) {
+      if (!cur.length) return json({ ok: false, error: '기존 카드내역이 비어 있어 중단했습니다' }, 409);
+
+      const want = new Map<string, string>();
+      for (const [no, al] of Object.entries(aliasFill)) {
+        const k = str(no), v = str(al);
+        if (k && v) want.set(k, v);          // 빈 별칭으로 덮어쓰는 건 의미가 없으니 제외
+      }
+      if (!want.size) return json({ ok: false, error: 'aliasFill 에 쓸 값이 없습니다' }, 400);
+
+      const filled: Record<string, number> = {};
+      let skippedHasAlias = 0;
+      for (const r of cur) {
+        const al = want.get(str(r.card_no));
+        if (!al) continue;
+        if (str(r.card_alias)) { skippedHasAlias++; continue; }   // 이미 있는 별칭은 안 건드린다
+        r.card_alias = al;
+        filled[al] = (filled[al] || 0) + 1;
+      }
+      const total = Object.values(filled).reduce((a, b) => a + b, 0);
+
+      if (total) {
+        const put = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?on_conflict=key`, {
+          method: 'POST',
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+          body: JSON.stringify([{ key: 'corp_card_tx_data', data: cur }]),
+        });
+        if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
+      }
+      return json({ ok: true, mode: 'aliasFill', filled: total, byAlias: filled, skippedHasAlias, total: cur.length });
     }
 
     const seenApproval = new Set(cur.map((r) => str(r.approval_id)).filter(Boolean));
