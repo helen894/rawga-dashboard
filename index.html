@@ -10279,8 +10279,13 @@ function handleCCTxFileSelect(e) {
   reader.onload = evt => {
     try {
       const wb = XLSX.read(evt.target.result, { type: 'array' });
-      // 청구내역 시트 우선 찾기
-      const sheetName = wb.SheetNames.find(n => n.includes('청구내역')) || wb.SheetNames[0];
+      /* 시트 선택: 승인(사용) 축이 이 탭의 기준이므로 '승인' 시트를 먼저 찾는다.
+         (클로브 승인내역 파일은 첫 시트가 '카드 승인내역', 뒤는 카드별 시트)
+         '청구내역'은 UI 명칭이 청구내역이던 시절의 파일을 위해 남겨둔 2순위 폴백이고,
+         이걸로 잡히면 아래 축 확인에서 경고가 뜬다. */
+      const sheetName = wb.SheetNames.find(n => n.includes('승인'))
+                     || wb.SheetNames.find(n => n.includes('청구내역'))
+                     || wb.SheetNames[0];
 
       /* ── 축 확인: 이 탭은 '승인(사용)' 기준으로만 채운다 ──────────────────
          클로브는 같은 사용을 승인·매입·청구 세 시점으로 각각 내려준다. 헤더 구조가 같아서
