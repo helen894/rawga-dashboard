@@ -2741,14 +2741,18 @@ function collectFreshness() {
                tip: `마지막 시트 동기화 ${arDays.last} (${arDays.d}일 전) · 수동(시트 메뉴에서 실행)` });
   } else out.push({ name: '매출채권', cover: '—', lvl: 1, tip: '동기화 이력 없음' });
 
-  // 법인카드 — 사용내역 커버리지
+  // 법인카드 — 월 1회 업로드라 '며칠 지났나'가 아니라 '몇 달치가 비었나'로 판정한다.
+  //   (예: 8월 초에 6월까지만 있으면 7월 한 달이 통째로 비어 있는 것 → 33일밖에 안 지났어도 지연)
   const cc = corpCardTxData || [];
   const ccMax = cc.map(r => r.use_date).filter(Boolean).sort().pop();
   if (ccMax) {
-    const d = Math.floor((new Date(today + 'T00:00:00') - new Date(ccMax + 'T00:00:00')) / 86400000);
-    const up = Math.max(0, ...cc.map(r => idStamp(r._id, 'card')));
-    out.push({ name: '법인카드', cover: `${md(ccMax)}까지`, lvl: d <= 40 ? 0 : (d <= 70 ? 1 : 2),
-               tip: `최근 사용일 ${ccMax} (${d}일 전)` + (up ? ` · 마지막 업로드 ${relTime(up)}` : '') + ' · 월 1회 수동 업로드' });
+    const mIdx = s => Number(s.slice(0, 4)) * 12 + Number(s.slice(5, 7)) - 1;   // YYYY-MM → 월 인덱스
+    const gap  = (mIdx(today) - 1) - mIdx(ccMax);   // 전월까지 채워져 있으면 0
+    const d    = Math.floor((new Date(today + 'T00:00:00') - new Date(ccMax + 'T00:00:00')) / 86400000);
+    const up   = Math.max(0, ...cc.map(r => idStamp(r._id, 'card')));
+    const miss = gap > 0 ? ` · ${gap}개월치 미업로드` : '';
+    out.push({ name: '법인카드', cover: `${Number(ccMax.slice(5, 7))}월까지`, lvl: gap <= 0 ? 0 : (gap === 1 ? 1 : 2),
+               tip: `최근 사용일 ${ccMax} (${d}일 전)${miss}` + (up ? ` · 마지막 업로드 ${relTime(up)}` : '') + ' · 월 1회 수동 업로드' });
   } else out.push({ name: '법인카드', cover: '없음', lvl: 2, tip: '사용내역 없음' });
 
   return out;
