@@ -10281,6 +10281,22 @@ function handleCCTxFileSelect(e) {
       const wb = XLSX.read(evt.target.result, { type: 'array' });
       // 청구내역 시트 우선 찾기
       const sheetName = wb.SheetNames.find(n => n.includes('청구내역')) || wb.SheetNames[0];
+
+      /* ── 축 확인: 이 탭은 '승인(사용)' 기준으로만 채운다 ──────────────────
+         클로브는 같은 사용을 승인·매입·청구 세 시점으로 각각 내려준다. 헤더 구조가 같아서
+         매입내역을 올려도 열 매핑은 통과하고, 그대로 섞이면 이중계상이 된다.
+         파일명·시트명 어디에도 '승인'이 없으면 사람에게 확인받는다.
+         (매입내역 파일의 첫 시트 이름이 '전체'라 시트명만으로는 못 걸러진다) */
+      const axisHint = `${file.name || ''} ${sheetName}`;
+      if (!axisHint.includes('승인')) {
+        const other = /매입|청구/.test(axisHint) ? (axisHint.includes('매입') ? '매입' : '청구') : null;
+        const warn = other
+          ? `이 파일은 '${other}내역'으로 보입니다.\n\n법인카드 탭은 승인(사용) 기준으로만 집계합니다.` +
+            `\n${other}내역은 같은 사용을 다른 시점으로 본 것이라 함께 넣으면 이중계상됩니다.`
+          : `승인내역 파일인지 확인할 수 없습니다.\n\n법인카드 탭은 승인(사용) 기준으로만 집계합니다.`;
+        if (!confirm(`${warn}\n\n파일: ${file.name || '(이름 없음)'}\n시트: ${sheetName}\n\n그래도 진행할까요?`)) return;
+      }
+
       const ws = wb.Sheets[sheetName];
       const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
       if (!raw.length) { alert('시트에 데이터가 없습니다.'); return; }
