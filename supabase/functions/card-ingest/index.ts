@@ -23,6 +23,10 @@
  * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
  *   • 수정  { secret, patch: [{approval_id, memo}] }
+ *   • 조회 { secret, inspect: { approvalIds?: [...], from?, to?, cardNo?, merchant? } }
+ *     저장된 행을 그대로 돌려준다. 쓰기 없음. RLS 때문에 cat_data 를 직접 못 읽어서
+ *     '지금 계정과목이 뭔지' 확인할 방법이 없었고, 그 탓에 값을 확인하지 않고 덮어써
+ *     사람이 지정한 분류를 지운 적이 있다(2026-08-02). 그걸 막기 위한 최소 조회 경로.
  *   • 기간 지정 별칭 { secret, aliasRange: [{card_no, from, to, card_alias}], dryRun?: boolean }
  *     카드 1장이 기간에 따라 다른 열에 귀속되는 예외를 표현한다. aliasFill 은 카드 단위라
  *     이런 예외를 못 담는다(2026-06 에 비씨카드(김현민) 사용분을 SO 로 처리한 사례).
@@ -82,8 +86,10 @@ Deno.serve(async (req) => {
   const aliasFill = (body?.aliasFill && typeof body.aliasFill === 'object' && !Array.isArray(body.aliasFill))
     ? body.aliasFill as Record<string, unknown> : null;
   const aliasRange = Array.isArray(body?.aliasRange) ? body.aliasRange : [];
+  const inspect = (body?.inspect && typeof body.inspect === 'object' && !Array.isArray(body.inspect))
+    ? body.inspect as Record<string, unknown> : null;
   const modes = [rows.length ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : '',
-    aliasRange.length ? 'aliasRange' : ''].filter(Boolean);
+    aliasRange.length ? 'aliasRange' : '', inspect ? 'inspect' : ''].filter(Boolean);
   if (modes.length > 1)  return json({ ok: false, error: `모드는 하나만: ${modes.join(', ')}` }, 400);
   if (modes.length === 0) return json({ ok: false, error: 'rows / patch / aliasFill / aliasRange 없음' }, 400);
 
@@ -141,6 +147,27 @@ Deno.serve(async (req) => {
         if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
       }
       return json({ ok: true, mode: 'patch', updated: changes.length, changes, notFound, total: cur.length });
+    }
+
+    /* ── 조회 모드 (읽기 전용) ─────────────────────────────── */
+    if (inspect) {
+      const ids = new Set((Array.isArray(inspect.approvalIds) ? inspect.approvalIds : []).map((v) => str(v)));
+      const from = str(inspect.from), to = str(inspect.to);
+      const cardNo = str(inspect.cardNo), merchant = str(inspect.merchant);
+      const hit = cur.filter((r) => {
+        if (ids.size && !ids.has(str(r.approval_id))) return false;
+        const d = str(r.use_date).slice(0, 10);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        if (cardNo && str(r.card_no) !== cardNo) return false;
+        if (merchant && !str(r.merchant).includes(merchant)) return false;
+        return true;
+      }).map((r) => ({
+        approval_id: str(r.approval_id), use_date: str(r.use_date).slice(0, 10),
+        card_alias: str(r.card_alias), card_no: str(r.card_no),
+        merchant: str(r.merchant), billing_amount: num(r.billing_amount), memo: str(r.memo),
+      })).sort((a, b) => b.use_date.localeCompare(a.use_date));
+      return json({ ok: true, mode: 'inspect', matched: hit.length, rows: hit.slice(0, 500), total: cur.length });
     }
 
     /* ── 기간 지정 별칭 모드 ───────────────────────────────────
