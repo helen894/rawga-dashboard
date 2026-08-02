@@ -112,10 +112,15 @@ const suggestAcct = memo => {
   for (const r of ACCT_RULES) if ((r.keywords || []).some(k => d.includes(k))) return r.account;
   return null;
 };
-// 미분류(메모 없음)용 — 가맹점명 키워드. 식당·카페는 규칙에 없다(원리적으로 구분 불가).
-const suggestByMerchant = name => {
+/* 미분류(메모 없음)용 — 가맹점명 키워드. 식당·카페는 규칙에 없다(원리적으로 구분 불가).
+   단 `aliases` 가 붙은 규칙은 카드 사용자로 갈린다 — 개인 명의 카드면 접대, 팀 카드면 복리후생처럼. */
+const suggestByMerchant = (name, alias) => {
   const s = String(name || '');
-  for (const r of MERCHANT_RULES) if ((r.keywords || []).some(k => s.includes(k))) return r.account;
+  for (const r of MERCHANT_RULES) {
+    if (!(r.keywords || []).some(k => s.includes(k))) continue;
+    if (!r.aliases) return r.account;
+    return r.aliases.includes(String(alias || '')) ? r.account : (r.elseAccount ?? null);
+  }
   return null;
 };
 
@@ -273,7 +278,7 @@ if (KNOWN_ACCOUNTS.size) {
   const none = live.filter(r => acctOf(r.memo) === '미분류');
   if (none.length) {
     const picked = none.map(r => {
-      const byName = suggestByMerchant(r.memberStoreName);
+      const byName = suggestByMerchant(r.memberStoreName, aliasOf(r.cardNo));
       if (byName) return { r, acc: byName, how: '가맹점명' };
       const h = histGuess(r.memberStoreName);
       if (h) return { r, acc: h.acc, how: `이력 ${Math.round(h.conf * 100)}%·${h.tot}건` };
