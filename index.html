@@ -2641,14 +2641,46 @@ let bankSnapshot = (() => {
   return null;
 })();
 
+/* ===== 외화 환산손익 =====
+ * cf_data 는 외화 거래를 '거래일 환율'로 원화 환산해 기록한다. 반면 은행 실잔액의 외화는
+ * '현재 평가환율'로 환산된 값이다. 둘의 차이가 환산손익이고, 반영하지 않으면 대조에서
+ * 원인 불명의 차이로 남는다(2026-08-02 기준 −123,569,655 — 대조 차이의 사실상 전부).
+ *
+ *   환산손익 = 외화 실잔액(평가) − 외화 장부가(거래일 환율 누적)
+ *
+ * 장부가 = fx_usd 표시가 있는 행의 순증 + 그 이전 구간의 확정 상수(cat_data.fx_adjust_base).
+ * 2026-06-30 이전 외화 행은 clobe_id 가 없고 적요가 모호해(환전 건이 '주식회사 로가'로
+ * 여러 건, 환율도 모두 그럴듯함) 개별 식별이 불가능해 상수로 보관한다.
+ *
+ * ⚠ 적용 범위: 현재 시점 현금(대조 카드·현금 KPI·주간 리포트 기말잔액)에만 더한다.
+ *   추이 차트와 월간 지표는 과거 시점 잔액이라, 오늘 기준 누적 환산손익을 그대로 얹으면
+ *   과거를 왜곡한다. 기간별 배분이 필요한데 그럴 근거 데이터가 없어 반영하지 않았다. */
+let fxAdjustBase = (() => {
+  try { const v = JSON.parse(localStorage.getItem('fx_adjust_base')); if (v && typeof v === 'object') return v; } catch (e) {}
+  return null;
+})();
+let FX_ADJ = 0;
+
+function computeFxAdj() {
+  if (!bankSnapshot) { FX_ADJ = 0; return 0; }
+  const spot = Number(bankSnapshot.fxKrw) || 0;
+  let book = Number(fxAdjustBase && fxAdjustBase.pre_krw) || 0;
+  for (const r of (cfData || [])) {
+    if (r && r.fx_usd) book += (Number(r.in) || 0) - (Number(r.out) || 0);
+  }
+  FX_ADJ = Math.round(spot - book);
+  return FX_ADJ;
+}
+
 function renderBankRecon() {
   const el = document.getElementById('bank-recon');
   if (!el) return;
   const s = bankSnapshot;
   if (!s || !(Number(s.totalCash) > 0)) { el.innerHTML = ''; return; }
 
+  computeFxAdj();
   const today = todayKST();
-  let calc = INIT_CASH;
+  let calc = INIT_CASH + FX_ADJ;
   for (const r of (cfData || [])) {
     if (r.status === '실제 입금' && r.date <= today) calc += (r.in  || 0);
     if (r.status === '실제 지출' && r.date <= today) calc -= (r.out || 0);
@@ -2700,7 +2732,7 @@ function renderBankRecon() {
         <div style="background:var(--bg3);border-radius:8px;padding:11px 13px">
           <div style="font-size:10.5px;color:var(--text2);margin-bottom:4px">대시보드 계산</div>
           <div style="font-size:17px;font-weight:700;font-family:var(--mono)">${fmt(calc)}</div>
-          <div style="font-size:10.5px;color:var(--text3);margin-top:3px">기초 + 실제입금 − 실제지출</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:3px">기초 + 실제입금 − 실제지출${FX_ADJ ? ' + 환산손익' : ''}</div>
         </div>
         <div style="background:${bg};border-radius:8px;padding:11px 13px">
           <div style="font-size:10.5px;color:${col};margin-bottom:4px">차이</div>
@@ -2708,8 +2740,15 @@ function renderBankRecon() {
           <div style="font-size:10.5px;color:${col};margin-top:3px">${diff === 0 ? '완전 일치' : (diff < 0 ? '대시보드가 적게 잡음' : '대시보드가 많이 잡음')}</div>
         </div>
       </div>
-      ${fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:10px">외화 보유 ${escapeHtml(fxTxt)} → 원화환산 ${fmt(s.fxKrw || 0)}${Number(s.loan) ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(s.loan)}(현금 아님, 대조 제외)` : ''}</div>` : ''}
-      ${ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 외화 평가차(수집 환율과 거래시점 환율 차이) · 기초잔액 설정</div>` : ''}
+      ${FX_ADJ ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border2)">
+        <span style="font-size:11px;color:var(--text2)">🔄 외화 환산손익</span>
+        <span style="text-align:right">
+          <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${FX_ADJ < 0 ? 'var(--red)' : 'var(--green)'}">${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}</span>
+          <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
+        </span>
+      </div>` : ''}
+      ${fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:10px">외화 보유 ${escapeHtml(fxTxt)}${Number(s.loan) ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(s.loan)}(현금 아님, 대조 제외)` : ''}</div>` : ''}
+      ${ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : ''}
     </div>`;
 }
 
@@ -3369,6 +3408,11 @@ async function loadDataFromSupabase() {
           bankSnapshot = row.data;
           localStorage.setItem('bank_snapshot', JSON.stringify(bankSnapshot));
         }
+        // 외화 환산손익 계산용 — 2026-06-30 이전 외화 거래의 원화 환산 누적(확정 상수)
+        if (row.key === 'fx_adjust_base' && row.data && typeof row.data === 'object') {
+          fxAdjustBase = row.data;
+          localStorage.setItem('fx_adjust_base', JSON.stringify(fxAdjustBase));
+        }
         if (row.key === 'corp_card_tx_data') {
           // 방어적 파싱: JSONB 배열 또는 JSON 문자열 모두 처리
           let raw = row.data;
@@ -3752,6 +3796,11 @@ function subscribeRealtime() {
               localStorage.setItem('bank_snapshot', JSON.stringify(bankSnapshot));
               if (typeof renderBankRecon === 'function') { try { renderBankRecon(); } catch (e) {} }
             }
+            if (row.key === 'fx_adjust_base' && row.data && typeof row.data === 'object') {
+              fxAdjustBase = row.data;
+              localStorage.setItem('fx_adjust_base', JSON.stringify(fxAdjustBase));
+              if (typeof renderBankRecon === 'function') { try { renderBankRecon(); } catch (e) {} }
+            }
           }
           ['cf-midcat','edit-cf-midcat'].forEach(id => {
             const sel = document.getElementById(id);
@@ -4091,7 +4140,8 @@ function calcKPIs() {
   const mStart = monthStart(ref), mEnd = monthEnd(ref);
   const pmStart = prevMonthStart(ref), pmEnd = prevMonthEnd(ref);
 
-  let cash = INIT_CASH;
+  computeFxAdj();          // 외화 환산손익 — 현재 시점 현금에만 반영 (정의는 renderBankRecon 위 주석 참고)
+  let cash = INIT_CASH + FX_ADJ;
   let wIn = 0, wOut = 0;
   let mOut = 0, pmOut = 0;
   let pwIn = 0, pwOut = 0;
@@ -7834,7 +7884,8 @@ function renderWeeklyReport() {
   const wow   = wNet - pwNet;
 
   // 기말 잔액 계산 (INIT_CASH + 누적 실제 입출금)
-  let pwEndCash = INIT_CASH, wkEndCash = INIT_CASH;
+  computeFxAdj();          // 주간 리포트 기말잔액도 현금 KPI 와 같은 기준으로 맞춘다
+  let pwEndCash = INIT_CASH + FX_ADJ, wkEndCash = INIT_CASH + FX_ADJ;
   for (const r of cfData) {
     if (r.status === '실제 입금' && r.date <= pwEnd) pwEndCash += (r.in  || 0);
     if (r.status === '실제 지출' && r.date <= pwEnd) pwEndCash -= (r.out || 0);
@@ -8698,7 +8749,8 @@ function renderRegularReport(){
   var mS=monthStart(ref), pmS=prevMonthStart(ref), pmE=prevMonthEnd(ref);
   var day=parseInt(ref.slice(8,10),10);
 
-  var cash=INIT_CASH, inMTD=0, outMTD=0, inPrev=0;
+  computeFxAdj();          // 외화 환산손익 — 현금 KPI·대조 카드와 같은 기준
+  var cash=INIT_CASH + FX_ADJ, inMTD=0, outMTD=0, inPrev=0;
   var inDaily={}, outDaily={};
   for(var k=0;k<cfData.length;k++){ var r=cfData[k];
     var rin=Number(r.in||0), rout=Number(r.out||0);

@@ -719,10 +719,12 @@ serve(async (req: Request) => {
   }
 
   /* ⑦ 데이터 조회 (cf_data / ar_data / cat_data.settings) */
-  const [cfRes, arRes, initRes] = await Promise.all([
+  const [cfRes, arRes, initRes, snapRes, fxBaseRes] = await Promise.all([
     supa.from('cf_data').select('data').limit(1).single(),
     supa.from('ar_data').select('data').limit(1).single(),
     supa.from('cat_data').select('data').eq('key', 'settings').single(),
+    supa.from('cat_data').select('data').eq('key', 'bank_snapshot').single(),
+    supa.from('cat_data').select('data').eq('key', 'fx_adjust_base').single(),
   ]);
 
   if (cfRes.error) {
@@ -748,9 +750,28 @@ serve(async (req: Request) => {
   cfArr = cfArr.map(normalizeCFRowServer);
 
   // INIT_CASH: cat_data.settings.init_cash → 기본값 134838617 (앱과 동일)
-  const initCash = Number(
+  const initCashRaw = Number(
     (initRes.data?.data as Record<string, unknown>)?.init_cash ?? 134838617,
   );
+
+  /* 외화 환산손익 — 대시보드(index.html computeFxAdj)와 같은 정의를 서버에서도 계산한다.
+   * cf_data 는 외화를 '거래일 환율'로 원화 환산해 기록하는데 은행 실잔액의 외화는
+   * '현재 평가환율' 기준이라, 반영하지 않으면 리포트의 현금이 실제와 어긋난다.
+   *   환산손익 = 외화 실잔액(평가) − ( fx_adjust_base.pre_krw + Σ fx_usd 행의 in−out )
+   * ⚠ 대시보드와 정의가 갈리면 리포트와 화면 숫자가 달라진다. 한쪽만 고치지 말 것. */
+  const snap = snapRes.data?.data as Record<string, unknown> | undefined;
+  let fxAdj = 0;
+  if (snap) {
+    const spot = Number(snap.fxKrw) || 0;
+    let book = Number((fxBaseRes.data?.data as Record<string, unknown>)?.pre_krw) || 0;
+    for (const r of cfArr) {
+      if ((r as Record<string, unknown>).fx_usd) {
+        book += (Number((r as Record<string, unknown>).in) || 0) - (Number((r as Record<string, unknown>).out) || 0);
+      }
+    }
+    fxAdj = Math.round(spot - book);
+  }
+  const initCash = initCashRaw + fxAdj;
 
   /* ⑧ 주간 요약 — body 우선 → Supabase fallback
    *
