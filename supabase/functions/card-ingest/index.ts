@@ -142,14 +142,28 @@ Deno.serve(async (req) => {
 
       const filled: Record<string, number> = {};
       let skippedHasAlias = 0;
+      // 매핑에 없는 카드번호를 모은다 — 수기 엑셀분은 카드번호 표기가 API와 달라
+      // 매핑 키에 안 걸릴 수 있고, 그러면 소급이 조용히 빗나간다. 그걸 눈에 보이게.
+      const unmatched = new Map<string, { n: number; blank: number; sum: number; from: string; to: string }>();
       for (const r of cur) {
-        const al = want.get(str(r.card_no));
-        if (!al) continue;
+        const no = str(r.card_no);
+        const al = want.get(no);
+        if (!al) {
+          const d = str(r.use_date).slice(0, 10);
+          const e = unmatched.get(no) || { n: 0, blank: 0, sum: 0, from: d, to: d };
+          e.n++; e.sum += num(r.billing_amount);
+          if (!str(r.card_alias)) e.blank++;
+          if (d && (!e.from || d < e.from)) e.from = d;
+          if (d && (!e.to   || d > e.to))   e.to   = d;
+          unmatched.set(no, e);
+          continue;
+        }
         if (str(r.card_alias)) { skippedHasAlias++; continue; }   // 이미 있는 별칭은 안 건드린다
         r.card_alias = al;
         filled[al] = (filled[al] || 0) + 1;
       }
       const total = Object.values(filled).reduce((a, b) => a + b, 0);
+      const unmatchedList = [...unmatched].map(([card_no, e]) => ({ card_no, ...e })).sort((a, b) => b.n - a.n);
 
       if (total) {
         const put = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?on_conflict=key`, {
@@ -164,7 +178,7 @@ Deno.serve(async (req) => {
         });
         if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
       }
-      return json({ ok: true, mode: 'aliasFill', filled: total, byAlias: filled, skippedHasAlias, total: cur.length });
+      return json({ ok: true, mode: 'aliasFill', filled: total, byAlias: filled, skippedHasAlias, unmatched: unmatchedList, total: cur.length });
     }
 
     const seenApproval = new Set(cur.map((r) => str(r.approval_id)).filter(Boolean));

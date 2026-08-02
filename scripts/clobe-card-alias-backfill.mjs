@@ -54,6 +54,22 @@ if (!res.ok || out.ok === false) {
   process.exit(3);
 }
 
+const won = n => Math.round(n).toLocaleString('ko-KR');
+
 console.log(`\n완료 — 빈 별칭 ${out.filled}건 채움 / 카드내역 총 ${out.total}건`);
 for (const [al, n] of Object.entries(out.byAlias || {})) console.log(`     ${al}  ${n}건`);
 if (!out.filled) console.log('  (채울 빈 별칭이 없었습니다)');
+
+/* 매핑 키에 안 걸린 카드번호 — 수기 엑셀분은 카드번호 표기가 API와 달라
+   소급이 조용히 빗나갈 수 있다. blank>0 이면 그만큼 집계표에서 빠져 있다는 뜻. */
+const um = out.unmatched || [];
+if (um.length) {
+  const blankTot = um.reduce((s, u) => s + u.blank, 0);
+  console.log(`\n매핑에 없는 카드번호 ${um.length}종 (${um.reduce((s, u) => s + u.n, 0)}건)` +
+    (blankTot ? ` — 이 중 별칭 빈 행 ${blankTot}건은 집계표에서 빠집니다` : ''));
+  console.log('  카드번호'.padEnd(24) + '건수  별칭빈'.padStart(10) + '금액'.padStart(14) + '  기간');
+  for (const u of um) {
+    console.log('  ' + u.card_no.padEnd(22) + String(u.n).padStart(4) + String(u.blank).padStart(7) +
+      won(u.sum).padStart(15) + `  ${u.from} ~ ${u.to}`);
+  }
+}
