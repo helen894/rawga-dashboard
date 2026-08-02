@@ -8674,7 +8674,11 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
       const _previewSummaryData = _previewRawSum
         ? { summary: _previewRawSum.text, updated_at: _previewRawSum.updatedAt || null }
         : null;
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH, _previewSummaryData);
+      /* 외화 환산손익을 기초잔액에 얹어 넘긴다 — 서버(send-weekly-report)도
+       * initCash = initCashRaw + fxAdj 로 같은 처리를 한다. 한쪽만 바꾸면 미리보기와
+       * 실제 발송 메일의 숫자가 갈린다. */
+      computeFxAdj();
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH + FX_ADJ, _previewSummaryData);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(previewHtml);
