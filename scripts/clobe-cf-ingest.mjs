@@ -126,6 +126,10 @@ if (fxRows.length && fxRate) {
     outAmount: Math.round((Number(r.outAmount) || 0) * fxRate),
     accountName: `${r.accountNumber} (외화 원화환산 @${fxRate.toFixed(2)})`,
     businessEntityName: r.transactionName || r.businessEntityName || r.transactionDescription,
+    /* 외화 원금(통화 단위)을 그대로 실어 cf_data 에 남긴다 — 이 표시가 있어야 나중에
+     * "외화 실잔액 − 외화 행 순증" 으로 환산조정액을 계산할 수 있다. 원화 행과 섞이면
+     * 구분할 방법이 없다(계좌 정보는 cf_data 에 저장되지 않는다). */
+    _fxUsd: (Number(r.inAmount) || 0) + (Number(r.outAmount) || 0),
   }));
   console.log(`\n외화 ${fxRows.length}건 — 역산 환율 ${fxRate.toFixed(2)}원으로 환산해 함께 적재합니다:`);
   for (const r of fxKrwRows) console.log(`   ${dateOf(r)} ${r.businessEntityName} 입 ${won(r.inAmount)} 출 ${won(r.outAmount)}`);
@@ -175,6 +179,7 @@ const rows = target.map(r => {
     in: inA, out: outA,
     status: inA > 0 ? '실제 입금' : '실제 지출',
     clobe_id: String(r.transactionId),
+    ...(r._fxUsd ? { fx_usd: r._fxUsd } : {}),   // 외화 행에만 원금(통화 단위)을 남긴다
   };
 });
 

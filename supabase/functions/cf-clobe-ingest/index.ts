@@ -116,6 +116,10 @@ Deno.serve(async (req) => {
         big_cat: "",
       };
       if (clobeId) rec.clobe_id = clobeId; // 재적재 중복 차단용 고유키
+      /* 외화 원금(통화 단위). 이 표시가 있는 행만 모아 "외화 실잔액 − 순증" 으로
+       * 환산조정액을 계산한다. cf_data 에 계좌 정보가 없어 이것 말고는 구분할 방법이 없다. */
+      const fxUsd = Number(r?.fx_usd);
+      if (Number.isFinite(fxUsd) && fxUsd > 0) rec.fx_usd = fxUsd;
       cfData.push(rec);
       added++;
     }
