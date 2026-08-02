@@ -99,16 +99,23 @@ const detailOf = memo => {
    오는 경우 — 그 값이 그대로 계정과목이 된다. 세부문구 키워드로 진짜 계정과목을 추정해
    사람에게 보여준다. 자동 적용하지 않는 이유는 account-rules.json 의 _why_not_auto 참고. */
 const RULES_FILE = new URL('./account-rules.json', import.meta.url);
-let KNOWN_ACCOUNTS = new Set(), ACCT_RULES = [];
+let KNOWN_ACCOUNTS = new Set(), ACCT_RULES = [], MERCHANT_RULES = [];
 try {
   const cfg = JSON.parse(readFileSync(RULES_FILE, 'utf8'));
   KNOWN_ACCOUNTS = new Set(cfg.accounts || []);
   ACCT_RULES = cfg.rules || [];
+  MERCHANT_RULES = cfg.merchantRules || [];
 } catch { /* 규칙 파일이 없으면 제안 기능만 조용히 꺼진다 */ }
 const suggestAcct = memo => {
   const d = detailOf(memo);
   if (!d) return null;
   for (const r of ACCT_RULES) if ((r.keywords || []).some(k => d.includes(k))) return r.account;
+  return null;
+};
+// 미분류(메모 없음)용 — 가맹점명 키워드. 식당·카페는 규칙에 없다(원리적으로 구분 불가).
+const suggestByMerchant = name => {
+  const s = String(name || '');
+  for (const r of MERCHANT_RULES) if ((r.keywords || []).some(k => s.includes(k))) return r.account;
   return null;
 };
 
@@ -239,6 +246,55 @@ if (KNOWN_ACCOUNTS.size) {
       console.error(`     node scripts/clobe-card-patch.mjs ${cmd}`);
     }
     console.error('   ※ 제안일 뿐 적재값은 memo 원본대로 들어갑니다. 근본 해결은 클로브에서 memo 를 고치는 것.');
+  }
+
+  /* ── 미분류(메모 없음) 제안 ────────────────────────────
+     두 단계: ① 가맹점명 키워드(주유소·택시·우체국 …, 실측 정밀도 97.9%)
+              ② 같은 배치 안에서 그 가맹점이 어떤 계정과목으로 라벨됐는지 다수결(2건 이상·70% 이상)
+     식당·카페는 ①에 없고 ②에서도 대개 갈려서 안 잡힌다 — 혼밥/접대는 데이터에 없는 정보라
+     사람이 볼 수밖에 없다. 억지로 채우지 않는다. */
+  const hist = new Map();   // 가맹점 → Map(계정과목 → 건수)
+  for (const r of live) {
+    const a = acctOf(r.memo);
+    if (!KNOWN_ACCOUNTS.has(a) || a === '미분류') continue;
+    const m = String(r.memberStoreName || '').trim();
+    if (!hist.has(m)) hist.set(m, new Map());
+    const c = hist.get(m);
+    c.set(a, (c.get(a) || 0) + 1);
+  }
+  const histGuess = name => {
+    const c = hist.get(String(name || '').trim());
+    if (!c) return null;
+    const tot = [...c.values()].reduce((a, b) => a + b, 0);
+    const [acc, n] = [...c].sort((a, b) => b[1] - a[1])[0];
+    return (tot >= 2 && n / tot >= 0.7) ? { acc, conf: n / tot, tot } : null;
+  };
+
+  const none = live.filter(r => acctOf(r.memo) === '미분류');
+  if (none.length) {
+    const picked = none.map(r => {
+      const byName = suggestByMerchant(r.memberStoreName);
+      if (byName) return { r, acc: byName, how: '가맹점명' };
+      const h = histGuess(r.memberStoreName);
+      if (h) return { r, acc: h.acc, how: `이력 ${Math.round(h.conf * 100)}%·${h.tot}건` };
+      return { r, acc: null, how: null };
+    });
+    const got = picked.filter(x => x.acc);
+    const sumAll = none.reduce((s, r) => s + net(r), 0);
+    const sumGot = got.reduce((s, x) => s + net(x.r), 0);
+    console.error(`\n· 미분류(메모 없음) ${none.length}건 ${won(sumAll)}원 — 규칙으로 ${got.length}건 ${won(sumGot)}원 추정 가능`);
+    for (const x of got) {
+      console.error(`     ${dateOf(x.r)}  ${String(x.r.memberStoreName).slice(0, 20).padEnd(22)}` +
+        `${won(net(x.r)).padStart(11)}원  → 「${x.acc}」  [${x.how}]`);
+    }
+    const rest = none.length - got.length;
+    if (rest) console.error(`   나머지 ${rest}건 ${won(sumAll - sumGot)}원은 식당·카페 등이라 규칙으로 못 정합니다` +
+      ' — 같은 가게라도 혼자면 복리후생비, 거래처와면 접대비라 데이터에 단서가 없습니다.');
+    const cmd = got.map(x => `${x.r.approvalId} ${x.acc}`).join(' ');
+    if (cmd) {
+      console.error('\n   확인 후 아래로 적용하세요:');
+      console.error(`     node scripts/clobe-card-patch.mjs ${cmd}`);
+    }
   }
 }
 
