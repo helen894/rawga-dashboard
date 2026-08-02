@@ -88,6 +88,29 @@ const acctOf = memo => {
   const a = (s.includes(':') ? s.slice(0, s.indexOf(':')) : s).trim();
   return a || '미분류';
 };
+// ':' 뒤 세부문구 — 계정과목 제안은 여기서만 단서를 찾는다
+const detailOf = memo => {
+  const s = String(memo || '').trim();
+  return s.includes(':') ? s.slice(s.indexOf(':') + 1).trim() : '';
+};
+
+/* ── 계정과목 제안 (제안만, 적재값은 안 바꾼다) ──────────────
+   클로브 memo 가 '계정과목: 세부' 형식이 아닐 때 — 앞에 프로젝트명·팀명·사람 이름이
+   오는 경우 — 그 값이 그대로 계정과목이 된다. 세부문구 키워드로 진짜 계정과목을 추정해
+   사람에게 보여준다. 자동 적용하지 않는 이유는 account-rules.json 의 _why_not_auto 참고. */
+const RULES_FILE = new URL('./account-rules.json', import.meta.url);
+let KNOWN_ACCOUNTS = new Set(), ACCT_RULES = [];
+try {
+  const cfg = JSON.parse(readFileSync(RULES_FILE, 'utf8'));
+  KNOWN_ACCOUNTS = new Set(cfg.accounts || []);
+  ACCT_RULES = cfg.rules || [];
+} catch { /* 규칙 파일이 없으면 제안 기능만 조용히 꺼진다 */ }
+const suggestAcct = memo => {
+  const d = detailOf(memo);
+  if (!d) return null;
+  for (const r of ACCT_RULES) if ((r.keywords || []).some(k => d.includes(k))) return r.account;
+  return null;
+};
 
 /* ── 1) 파싱 · dedupe ──────────────────────────────────────── */
 const raw = JSON.parse(readFileSync(file, 'utf8'));
@@ -192,6 +215,32 @@ const rows = live.map(r => ({
 
 const acctCount = rows.reduce((m, r) => (m[r.memo] = (m[r.memo] || 0) + 1, m), {});
 console.log('\n계정과목:', Object.entries(acctCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(' · '));
+
+/* ── 계정과목 오라벨 제안 ─────────────────────────────────
+   ':' 앞이 알려진 계정과목이 아닌 행만 대상. 정상 라벨은 사람이 이미 판단한 값이라 건드리지 않는다. */
+if (KNOWN_ACCOUNTS.size) {
+  const odd = live
+    .map(r => ({ r, acct: acctOf(r.memo) }))
+    .filter(x => !KNOWN_ACCOUNTS.has(x.acct))
+    .map(x => ({ ...x, guess: suggestAcct(x.r.memo) }));
+  if (odd.length) {
+    const sum = odd.reduce((s, x) => s + net(x.r), 0);
+    const n = odd.filter(x => x.guess).length;
+    console.error(`\n⚠ 계정과목 자리에 계정과목이 아닌 값이 온 행 ${odd.length}건 ${won(sum)}원 — ${n}건은 추정됩니다.`);
+    console.error('   클로브 memo 가 \'계정과목: 세부\' 형식이 아니라 앞에 프로젝트명·팀명·사람 이름이 온 경우입니다.');
+    for (const x of odd) {
+      console.error(`     ${dateOf(x.r)}  ${String(x.r.memberStoreName).slice(0, 20).padEnd(22)}` +
+        `${won(net(x.r)).padStart(11)}원  「${x.acct}」→ ${x.guess ? `「${x.guess}」` : '추정 실패 — 직접 지정'}`);
+      console.error(`        memo: ${x.r.memo}`);
+    }
+    const cmd = odd.filter(x => x.guess).map(x => `${x.r.approvalId} ${x.guess}`).join(' ');
+    if (cmd) {
+      console.error('\n   확인 후 아래로 적용하세요 (추정이 틀린 건 계정과목만 바꿔서 실행):');
+      console.error(`     node scripts/clobe-card-patch.mjs ${cmd}`);
+    }
+    console.error('   ※ 제안일 뿐 적재값은 memo 원본대로 들어갑니다. 근본 해결은 클로브에서 memo 를 고치는 것.');
+  }
+}
 
 if (DRY) { console.log(`\n[dry-run] 적재하지 않았습니다. 대상 ${rows.length}건.`); process.exit(0); }
 
