@@ -10044,9 +10044,13 @@ function renderCorpCardTab() {
   const container = document.getElementById('corp-table-container');
   if (!container) return;
 
-  // ── 사용내역 기준 카드×계정과목 금액 집계 (보고기준일 귀속월만) ──────
+  // ── 사용내역 기준 카드×계정과목 금액 집계 (한 달치만) ──────────────
   // aliasAmounts[colName][accountName] = 청구금액 합계
-  const ym = String(refDate || todayKST()).slice(0, 7); // 'YYYY-MM' — 보고기준일 귀속월
+  // 기준 월은 아래 사용내역의 월 선택기를 따라간다. 선택이 없으면(=전체 기간)
+  // 종전대로 보고기준일 귀속월. 표는 한 달치만 보여주는 구조라 '전체 기간'에
+  // 대응하는 표시가 없어서, 그때는 기준일로 되돌아가는 게 자연스럽다.
+  const pickedMonth = document.getElementById('cctx-month')?.value || '';
+  const ym = pickedMonth || String(refDate || todayKST()).slice(0, 7); // 'YYYY-MM'
   const aliasAmounts = {};
   const unmapped = new Set();
   for (const row of corpCardTxData) {
@@ -10115,7 +10119,8 @@ function renderCorpCardTab() {
     `${totalCells}<td class="num corp-total-cell corp-grand-total">${grandTotal ? grandTotal.toLocaleString() : ''}</td></tr>`;
 
   container.innerHTML =
-    `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> (보고 기준일 귀속월)</div>` +
+    `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> ` +
+    `(${pickedMonth ? '아래 월별 필터' : '보고 기준일 귀속월'})</div>` +
     `<table class="corp-usage-table"><thead><tr>` +
     `<th class="corp-account-col">계정과목</th>${colThs}<th class="corp-total-cell">합계</th></tr></thead>` +
     `<tbody>${rows}${totalRow}</tbody></table>`;
@@ -10140,8 +10145,8 @@ function renderCorporateCardTab() {
   syncCorpCardColumnsFromTx();              // 신규 카드 열 자동 추가
   syncCorpCardAccountsFromTx();             // 신규 계정과목 자동 추가
   pruneEmptyCorpCardAccountsFromTx();       // 유효 거래 없는 계정과목 삭제
+  updateCCTxAliasFilter();                  // 집계표가 월 선택기를 읽으므로 선택기 갱신이 먼저다
   renderCorpCardTab();                      // 상단 카드×계정과목 집계 표
-  updateCCTxAliasFilter();
   renderCCTxTable();
 }
 
@@ -11535,8 +11540,10 @@ document.getElementById('cctx-apply-btn').addEventListener('click',   applyCCTxU
   if (el) { el.addEventListener('input', renderCCTxTable); el.addEventListener('change', renderCCTxTable); }
 });
 // 기간 지정은 월 선택기와 from/to 중 나중에 건드린 쪽만 남긴다 (둘이 AND로 겹쳐 빈 결과가 나오는 걸 방지)
+// 상단 집계표도 이 선택을 따라가므로, 월이 바뀌거나 풀릴 때마다 같이 다시 그린다.
 document.getElementById('cctx-month')?.addEventListener('change', () => {
   ['cctx-from', 'cctx-to'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderCorpCardTab();
   renderCCTxTable();
 });
 ['cctx-from', 'cctx-to'].forEach(id => {
@@ -11544,6 +11551,7 @@ document.getElementById('cctx-month')?.addEventListener('change', () => {
     const m = document.getElementById('cctx-month');
     if (m && m.value && (document.getElementById('cctx-from')?.value || document.getElementById('cctx-to')?.value)) {
       m.value = '';
+      renderCorpCardTab();   // 월이 풀렸으니 집계표는 보고기준일 귀속월로 돌아간다
       renderCCTxTable();
     }
   });
@@ -11559,6 +11567,7 @@ document.getElementById('cctx-filter-reset').addEventListener('click', () => {
   closeAllCCTxPopovers();
   cctxSortCol = 'use_date'; cctxSortDir = 'desc'; cctxSortIsDefault = true;
   renderCCTxFilterTags();
+  renderCorpCardTab();   // 월 선택도 풀렸으므로 집계표를 보고기준일 귀속월로 되돌린다
   renderCCTxTable();
 });
 // 팝오버 외부 클릭 시 닫기 (document 레벨)
