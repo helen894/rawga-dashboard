@@ -23,6 +23,10 @@
  * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
  *   • 수정  { secret, patch: [{approval_id, memo}] }
+ *   • 기간 지정 별칭 { secret, aliasRange: [{card_no, from, to, card_alias}], dryRun?: boolean }
+ *     카드 1장이 기간에 따라 다른 열에 귀속되는 예외를 표현한다. aliasFill 은 카드 단위라
+ *     이런 예외를 못 담는다(2026-06 에 비씨카드(김현민) 사용분을 SO 로 처리한 사례).
+ *     dryRun:true 면 대상 건수와 옛 별칭 분포만 돌려주고 저장하지 않는다 — 먼저 이걸로 확인할 것.
  *   • 별칭 채우기 { secret, aliasFill: {"<card_no>": "<별칭>", ...}, overwrite?: boolean }
  *     기본은 별칭이 **빈 행에만** 채운다. 매핑 파일을 고쳐도 이미 적재된 행은 그대로라
  *     집계표에서 계속 빠지기 때문(2026-07 기준 2장 85건 3,868,021원 = 금액의 14.2%).
@@ -77,9 +81,11 @@ Deno.serve(async (req) => {
   const patch = Array.isArray(body?.patch) ? body.patch : [];
   const aliasFill = (body?.aliasFill && typeof body.aliasFill === 'object' && !Array.isArray(body.aliasFill))
     ? body.aliasFill as Record<string, unknown> : null;
-  const modes = [rows.length ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : ''].filter(Boolean);
+  const aliasRange = Array.isArray(body?.aliasRange) ? body.aliasRange : [];
+  const modes = [rows.length ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : '',
+    aliasRange.length ? 'aliasRange' : ''].filter(Boolean);
   if (modes.length > 1)  return json({ ok: false, error: `모드는 하나만: ${modes.join(', ')}` }, 400);
-  if (modes.length === 0) return json({ ok: false, error: 'rows / patch / aliasFill 없음' }, 400);
+  if (modes.length === 0) return json({ ok: false, error: 'rows / patch / aliasFill / aliasRange 없음' }, 400);
 
   try {
     // 1) 기존 데이터 읽기
@@ -135,6 +141,50 @@ Deno.serve(async (req) => {
         if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
       }
       return json({ ok: true, mode: 'patch', updated: changes.length, changes, notFound, total: cur.length });
+    }
+
+    /* ── 기간 지정 별칭 모드 ───────────────────────────────────
+       card_no + use_date 범위로 행을 골라 별칭을 지정한다. 카드 단위 매핑으로는
+       담을 수 없는 '이 카드의 이 기간만 다른 열' 예외용. dryRun 이면 저장하지 않는다. */
+    if (aliasRange.length) {
+      if (!cur.length) return json({ ok: false, error: '기존 카드내역이 비어 있어 중단했습니다' }, 409);
+      const dryRun = body?.dryRun === true;
+
+      const specs = aliasRange.map((s: any) => ({
+        card_no: str(s?.card_no), from: str(s?.from), to: str(s?.to), card_alias: str(s?.card_alias),
+      })).filter((s) => s.card_no && s.from && s.to && s.card_alias);
+      if (!specs.length) return json({ ok: false, error: 'aliasRange 항목에 card_no/from/to/card_alias 가 모두 필요합니다' }, 400);
+
+      const results = specs.map((s) => ({ ...s, matched: 0, changed: 0, fromAlias: {} as Record<string, number> }));
+      for (const r of cur) {
+        const no = str(r.card_no), d = str(r.use_date).slice(0, 10);
+        for (let i = 0; i < specs.length; i++) {
+          const s = specs[i];
+          if (no !== s.card_no || d < s.from || d > s.to) continue;
+          const res = results[i];
+          res.matched++;
+          const old = str(r.card_alias) || '(빈값)';
+          res.fromAlias[old] = (res.fromAlias[old] || 0) + 1;
+          if (str(r.card_alias) !== s.card_alias) { res.changed++; if (!dryRun) r.card_alias = s.card_alias; }
+          break;   // 한 행은 첫 번째로 맞는 spec 에만 귀속
+        }
+      }
+      const changed = results.reduce((a, b) => a + b.changed, 0);
+
+      if (!dryRun && changed) {
+        const put = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?on_conflict=key`, {
+          method: 'POST',
+          headers: {
+            apikey: SERVICE_ROLE,
+            Authorization: `Bearer ${SERVICE_ROLE}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=merge-duplicates,return=minimal',
+          },
+          body: JSON.stringify([{ key: 'corp_card_tx_data', data: cur }]),
+        });
+        if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
+      }
+      return json({ ok: true, mode: 'aliasRange', dryRun, changed, results, total: cur.length });
     }
 
     /* ── 별칭 채우기 모드 ─────────────────────────────────────

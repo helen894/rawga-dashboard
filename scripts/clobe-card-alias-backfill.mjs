@@ -29,7 +29,9 @@ const SECRET_FILE = 'C:/Users/RAWGA/AppData/Local/rawga/bank-sync.secret';
 const SUPA_PUBLISHABLE_KEY = 'sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
 const MAP_FILE = new URL('./card-alias-map.json', import.meta.url);
 
-const map = JSON.parse(readFileSync(MAP_FILE, 'utf8')).map || {};
+const mapFile = JSON.parse(readFileSync(MAP_FILE, 'utf8'));
+const map = mapFile.map || {};
+const rangeExceptions = mapFile._rangeExceptions || [];
 const aliasFill = Object.fromEntries(Object.entries(map).filter(([, v]) => String(v || '').trim()));
 const blank = Object.entries(map).filter(([, v]) => !String(v || '').trim()).map(([k]) => k);
 
@@ -37,6 +39,14 @@ console.log('=== 법인카드 빈 별칭 채우기 ===');
 console.log(`매핑 ${Object.keys(map).length}장 중 별칭 있는 ${Object.keys(aliasFill).length}장을 대상으로 보냅니다.`);
 if (blank.length) console.log(`  (별칭 미정 ${blank.length}장은 제외: ${blank.join(', ')})`);
 if (!Object.keys(aliasFill).length) { console.error('보낼 매핑이 없습니다.'); process.exit(1); }
+/* overwrite 는 카드 단위라 기간 예외를 도로 평탄화한다. 실행 전에 눈에 띄게 알린다. */
+if (OVERWRITE && rangeExceptions.length) {
+  console.error(`\n⚠ 기간 예외 ${rangeExceptions.length}건이 등록돼 있습니다 — overwrite 가 이걸 덮어씁니다.`);
+  for (const e of rangeExceptions) {
+    console.error(`     ${e.card_no}  ${e.from}~${e.to} → 「${e.card_alias}」  ${e.why || ''}`);
+  }
+  console.error('   실행 후 clobe-card-alias-range.mjs 로 위 예외를 다시 적용하세요.\n');
+}
 if (DRY) { console.log('\n[dry-run] 호출하지 않았습니다.'); process.exit(0); }
 
 const secret = readFileSync(SECRET_FILE, 'utf8').trim();
