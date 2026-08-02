@@ -35,12 +35,32 @@ const MAP_FILE = new URL('./card-alias-map.json', import.meta.url);
 const won = n => Math.round(n).toLocaleString('ko-KR');
 const todayKST = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
-/* ── 별칭 매핑 (전체 일치 → 뒤 4자리 폴백) ─────────────────── */
+/* ── 별칭 매핑 (전체 일치 → 뒤 4자리 폴백) ───────────────────
+   폴백은 '마스킹 뒤에 노출된 끝자리 숫자'만 본다.
+   숫자를 전부 뽑아 이어붙이면 BIN 앞자리가 꼬리에 섞인다 —
+   `5566*********555` → 5566555 → '6555', `3792********921` → 3792921 → '2921'.
+   둘 다 실제 끝 4자리가 아니라서 엉뚱한 카드와 맞을 수 있다.
+   노출 자리가 4자리 미만이면 판별 불가로 보고 폴백하지 않는다(→ 미매핑 경고).
+   서로 다른 별칭이 같은 끝 4자리를 만들면 모호하므로 역시 폴백하지 않는다. */
 const aliasMap = JSON.parse(readFileSync(MAP_FILE, 'utf8')).map || {};
-const last4 = s => String(s || '').replace(/\D/g, '').slice(-4);
-const byLast4 = {};
-for (const [no, al] of Object.entries(aliasMap)) { const k = last4(no); if (k) byLast4[k] = al; }
-const aliasOf = no => (no in aliasMap) ? aliasMap[no] : (byLast4[last4(no)] ?? null);
+const tail4 = s => {
+  const t = String(s ?? '').match(/(\d+)$/)?.[1] ?? '';   // 끝에 붙어 있는 숫자만
+  return t.length >= 4 ? t.slice(-4) : null;
+};
+const AMBIGUOUS = Symbol('ambiguous');
+const byTail4 = new Map();
+for (const [no, al] of Object.entries(aliasMap)) {
+  const k = tail4(no);
+  if (!k) continue;
+  byTail4.set(k, byTail4.has(k) && byTail4.get(k) !== al ? AMBIGUOUS : al);
+}
+const aliasOf = no => {
+  if (no in aliasMap) return aliasMap[no];               // 전체 일치가 항상 우선
+  const k = tail4(no);
+  if (!k || !byTail4.has(k)) return null;
+  const hit = byTail4.get(k);
+  return hit === AMBIGUOUS ? null : hit;
+};
 
 /* ── 계정과목 추출 (대시보드 extractCCAccount 와 동일) ─────── */
 const acctOf = memo => {
@@ -82,7 +102,7 @@ if (expected && uniq.length !== expected) {
 console.log(`취소(순액 0) 제외 ${cancelled.length}건` + (todayRows.length && !ALLOW_TODAY ? ` · 오늘자 제외 ${todayRows.length}건` : ''));
 if (unmapped.length) {
   console.error(`\n⚠ 별칭 매핑에 없는 카드 ${unmapped.length}개: ${unmapped.join(', ')}`);
-  console.error('   scripts/card-alias-map.json 에 추가하세요. (매핑 없으면 집계표에서 빠집니다)');
+  console.error('   scripts/card-alias-map.json 에 위 문자열을 키로 그대로 추가하세요. (매핑 없으면 집계표에서 빠집니다)');
 }
 
 /* ── 4) 월별 요약 ──────────────────────────────────────────── */
