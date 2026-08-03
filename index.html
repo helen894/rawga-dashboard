@@ -9652,19 +9652,21 @@ async function saveLoanData(){
 }
 
 function loanSummary(){
-  let bal=0, mi=0, maxRate=0, maxRateBank='', immN=0, immSum=0, nextDue=null, nextDday=null;
+  let bal=0, mi=0, maxRate=0, maxRateBank='', minRate=null, immN=0, immSum=0, nextDue=null, nextDday=null;
   for(const L of loanData){
     const b=loanNum(L.balance), r=loanNum(L.rate);
     bal+=b; mi+=b*r/100/12;
     if(r>maxRate){ maxRate=r; maxRateBank=(L.bank||'')+' '+(L.product||''); }
+    if(r>0 && (minRate===null || r<minRate)) minRate=r;
     const dd=loanDday(L.dueDate);
     if(dd!=null && dd>=0){
       if(dd<=90){ immN++; immSum+=b; }
       if(nextDday==null || dd<nextDday){ nextDday=dd; nextDue=L.dueDate; }
     }
   }
+  // effRate = 잔액가중 평균금리 (Σ(잔액×금리)/Σ잔액). 단순평균은 소액 대출이 왜곡하므로 쓰지 않는다.
   const effRate = bal>0 ? (mi*12/bal*100) : 0;
-  return { count:loanData.length, bal, mi, maxRate, maxRateBank:maxRateBank.trim(), effRate, immN, immSum, nextDue, nextDday };
+  return { count:loanData.length, bal, mi, maxRate, maxRateBank:maxRateBank.trim(), minRate, effRate, immN, immSum, nextDue, nextDday };
 }
 
 function renderLoanTab(){
@@ -9748,8 +9750,11 @@ function renderLoanSummaryCard(){
       +`<div class="corp-card-value"${hot?' style="color:var(--red)"':''}>${val}${sub?` <span style="font-size:11px;font-weight:600;color:${hot?'var(--red)':'var(--text3)'}">${sub}</span>`:''}</div></div>`;
     grid.innerHTML =
       card('총 대출잔액', loanEok(s.bal)+'억', s.count+'건') +
-      card('월 이자(추정)', loanMan(s.mi)+'만', '실효 '+s.effRate.toFixed(1)+'%') +
-      card('최고 금리', s.maxRate?s.maxRate.toFixed(2)+'%':'—', '') +
+      card('월 이자(추정)', loanMan(s.mi)+'만', '연 '+loanMan(s.mi*12)+'만') +
+      // 평균 금리 = 잔액가중(effRate). 소액 대출이 왜곡하는 단순평균 대신 실제 조달비용률을 쓴다.
+      // 최고금리는 범위 부기로 남겨 '가장 비싼 건'도 계속 보이게 함.
+      card('평균 금리', s.effRate?s.effRate.toFixed(2)+'%':'—',
+           (s.minRate!=null && s.maxRate) ? s.minRate.toFixed(2)+'~'+s.maxRate.toFixed(2)+'%' : '') +
       card('임박 만기', s.immN>0?loanEok(s.immSum)+'억':'없음', s.immN>0?s.immN+'건':'', s.immN>0) +
       card('다음 만기', s.nextDday!=null?'D-'+s.nextDday:'—', s.nextDue?s.nextDue.slice(5):'');
   }
