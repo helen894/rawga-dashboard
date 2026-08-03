@@ -6,6 +6,14 @@
  *   · 중복 skip: clobe_id(=클로브 transactionId) 우선, 없으면 (거래일+거래내용+금액+상태)
  *   · mid(클로브 계정라벨) 있으면 mid_cat 으로 반영
  * 호출 주체: 로컬 스케줄 태스크가 scripts/clobe-cf-ingest.mjs 로 검증 후 POST
+ *
+ * 적요 갱신(desc refresh) — 클로브가 거래처를 나중에 매핑하는 문제 대응
+ *   당일 적재하면 거래처 매핑 전이라 은행 원본 문자열("동아_세진식품", "기업전용송금")이
+ *   desc 로 굳는다. 그래서 적재 시 클로브가 준 원본을 desc_src 에 함께 남기고,
+ *   재적재 때 desc === desc_src (= 사람이 안 건드림) 인 행만 새 적요로 갱신한다.
+ *   desc !== desc_src 면 대시보드에서 수기 수정한 것이므로 보호한다.
+ *   desc_src 가 없는 기존 행(이 기능 이전 적재분)은 판별 불가라 보수적으로 보호한다.
+ *   갱신이 일어나면 cat_data 의 학습 매핑 키도 새 적요로 복사해 분류 정확도를 유지한다.
  */
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -39,6 +47,70 @@ function defaultStatus(status: string, type: string, date: string, today: string
   return type === "입금" ? "입금 예정" : "지출 예정";
 }
 
+/* cat_data 의 학습 매핑에서 옛 적요 키의 값을 새 적요 키로 복사한다.
+ *   desc_to_mid      : { "동아_세진식품": "매출원가" }        → 키 자체가 적요
+ *   desc_type_to_mid : { "동아_세진식품::지출": "매출원가" }  → makeComboKey(desc,type) = desc+'::'+type
+ * 대시보드 saveCatDataToSupabase 와 같은 key 별 낙관적 잠금을 쓴다(다른 key 와 간섭 없음).
+ * 반환값: 사람이 볼 경고 문자열(문제 없으면 ""). */
+async function migrateCatKeys(renameMap: Map<string, string>): Promise<string> {
+  const notes: string[] = [];
+
+  for (const key of ["desc_to_mid", "desc_type_to_mid"]) {
+    const isCombo = key === "desc_type_to_mid";
+
+    for (let attempt = 1; ; attempt++) {
+      const getRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cat_data?select=*&key=eq.${key}&limit=1`,
+        { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+      );
+      if (!getRes.ok) throw new Error(`cat_data(${key}) 읽기 실패: ${getRes.status}`);
+      const arr = await getRes.json();
+      if (!arr?.[0]) break;                      // 아직 없는 key — 이관할 것도 없다
+
+      const version = arr[0].version;
+      const map: Record<string, string> =
+        (arr[0].data && typeof arr[0].data === "object") ? { ...arr[0].data }
+        : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : {});
+
+      let changed = 0;
+      for (const [from, to] of renameMap) {
+        if (isCombo) {
+          // "적요::구분" 형태라 접두사가 일치하는 키를 모두 훑는다(구분이 입금/지출 둘 다 있을 수 있음)
+          for (const k of Object.keys(map)) {
+            if (!k.startsWith(from + "::")) continue;
+            const nk = to + k.slice(from.length);
+            if (map[nk] === undefined && map[k]) { map[nk] = map[k]; changed++; }
+          }
+        } else if (map[from] && map[to] === undefined) {
+          map[to] = map[from];
+          changed++;
+        }
+      }
+      if (!changed) break;                       // 복사할 게 없으면 쓰지 않는다
+
+      const cond = (version === undefined || version === null) ? "" : `&version=eq.${version}`;
+      const patch = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?key=eq.${key}${cond}`, {
+        method: "PATCH",
+        headers: {
+          apikey: SERVICE_ROLE,
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({ data: map, updated_at: new Date().toISOString() }),
+      });
+      if (!patch.ok) throw new Error(`cat_data(${key}) 저장 실패: ${patch.status}`);
+      const updated = await patch.json();
+      if (Array.isArray(updated) && updated.length > 0) { notes.push(`${key} ${changed}건 이관`); break; }
+
+      // 0행 갱신 = 그새 대시보드가 씀 → 다시 읽어 재시도(복사만 하므로 재시도가 안전)
+      if (attempt >= 4) { notes.push(`${key} 동시 수정 충돌로 이관 실패 — 분류 정확도가 일시적으로 낮을 수 있습니다`); break; }
+      await new Promise((res) => setTimeout(res, 200 * attempt));
+    }
+  }
+  return notes.join(" / ");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -59,7 +131,8 @@ Deno.serve(async (req) => {
   try {
     const today = todaySeoul();
     const MAX_TRIES = 4;
-    let added = 0, skipped = 0, total = 0;
+    let added = 0, skipped = 0, total = 0, refreshed = 0;
+    let renames: Array<{ from: string; to: string }> = [];
 
     /* 낙관적 잠금 — cf_data 는 배열 전체가 한 행이라 마지막에 쓴 쪽이 이긴다.
      * 읽은 version 일 때만 쓰고, 0행 갱신(=그새 대시보드 등이 씀)이면 덮어쓰지 않고
@@ -81,7 +154,7 @@ Deno.serve(async (req) => {
       ? arr[0].data
       : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : []);
 
-    added = 0; skipped = 0;
+    added = 0; skipped = 0; refreshed = 0; renames = [];   // 재시도마다 새로 읽으므로 초기화
 
     for (const r of rows) {
       const date = String(r?.date || "").slice(0, 10);
@@ -99,15 +172,33 @@ Deno.serve(async (req) => {
       const mid = String(r?.mid ?? "").trim();
 
       // 중복 판정: clobe_id(고유) 있으면 그걸로, 없으면 기존 (거래일+거래내용+상태+금액)
-      const dup = clobeId
-        ? cfData.some((d) => String(d.clobe_id ?? "") === clobeId)
-        : cfData.some((d) => {
+      const dupIdx = clobeId
+        ? cfData.findIndex((d) => String(d.clobe_id ?? "") === clobeId)
+        : cfData.findIndex((d) => {
             if (d.date !== date || d.desc !== desc || d.status !== status) return false;
             const dAmt = (d.amount !== undefined && d.amount !== null)
               ? d.amount : ((d.in || 0) - (d.out || 0));
             return Math.abs(dAmt - amount) < 1;
           });
-      if (dup) { skipped++; continue; }
+
+      if (dupIdx >= 0) {
+        /* 이미 있는 행 — clobe_id 로 잡힌 건만 적요 갱신을 검토한다.
+         * (적요 기반 폴백 중복 판정은 desc 가 키에 들어가 있어 애초에 바뀐 적요를 못 잡는다.)
+         * 갱신 조건: desc_src 가 있고(= 이 기능 이후 적재분), 그 값이 현재 desc 와 같고
+         *          (= 사람이 수정한 적 없음), 새로 온 적요가 실제로 다를 때. */
+        const ex = cfData[dupIdx];
+        const exDesc = String(ex.desc ?? "");
+        const exSrc = ex.desc_src === undefined || ex.desc_src === null ? null : String(ex.desc_src);
+        if (clobeId && exSrc !== null && exSrc === exDesc && desc !== exDesc) {
+          ex.desc = desc;
+          ex.desc_src = desc;
+          renames.push({ from: exDesc, to: desc });
+          refreshed++;
+        } else {
+          skipped++;
+        }
+        continue;
+      }
 
       const rec: any = {
         _id: genId(),
@@ -115,7 +206,12 @@ Deno.serve(async (req) => {
         mid_cat: mid, // 클로브 계정라벨(있으면). 없으면 "" → 자동분류 추천 대상
         big_cat: "",
       };
-      if (clobeId) rec.clobe_id = clobeId; // 재적재 중복 차단용 고유키
+      if (clobeId) {
+        rec.clobe_id = clobeId;  // 재적재 중복 차단용 고유키
+        /* 클로브가 준 원본 적요. 이후 재적재 때 desc 와 비교해 "사람이 손댔는지" 를 가린다 —
+         * 이 표시가 없으면 수기 수정과 자동 적재분을 구분할 방법이 없다. */
+        rec.desc_src = desc;
+      }
       /* 외화 원금(통화 단위). 이 표시가 있는 행만 모아 "외화 실잔액 − 순증" 으로
        * 환산조정액을 계산한다. cf_data 에 계좌 정보가 없어 이것 말고는 구분할 방법이 없다. */
       const fxUsd = Number(r?.fx_usd);
@@ -151,7 +247,30 @@ Deno.serve(async (req) => {
     await new Promise((res) => setTimeout(res, 200 * attempt));
     }
 
-    return json({ ok: true, added, skipped, total });
+    /* 학습 매핑 키 이관 — 적요가 A→B 로 갱신되면 catDescToMid 의 키도 A 뿐이라
+     * classifyMid 의 정확일치가 깨진다(정규화 폴백으로 내려가 정확도 하락).
+     * 그래서 A 의 학습값을 B 키로 **복사**한다. 옮기지 않고 복사하는 이유:
+     * desc_src 가 없어 보호된 기존 행들이 여전히 A 를 쓰고 있어, A 를 지우면 그쪽 분류가 깨진다.
+     * 이미 B 키가 있으면 그쪽이 더 최신이므로 덮어쓰지 않는다.
+     * cf_data 는 이미 저장됐으므로 여기서 실패해도 전체를 실패시키지 않고 경고만 싣는다. */
+    let catNote = "";
+    if (renames.length) {
+      try {
+        const uniq = new Map<string, string>();
+        for (const { from, to } of renames) if (from && to && from !== to) uniq.set(from, to);
+        if (uniq.size) catNote = await migrateCatKeys(uniq);
+      } catch (e) {
+        catNote = `학습 매핑 이관 실패: ${(e as Error).message}`;
+      }
+    }
+
+    return json({
+      ok: true, added, skipped, refreshed, total,
+      ...(catNote ? { cat_sync: catNote } : {}),
+      /* 갱신된 적요를 그대로 실어 보낸다 — 스케줄 태스크가 요약·슬랙에 남겨
+       * 사람이 "무엇이 어떻게 바뀌었는지" 를 사후에 알아볼 수 있게 한다. */
+      ...(renames.length ? { renamed: renames.slice(0, 20) } : {}),
+    });
   } catch (e) {
     return json({ ok: false, error: (e as Error).message }, 500);
   }

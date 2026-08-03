@@ -5343,6 +5343,16 @@ function saveCFEdit() {
   });
   cfData.sort((a,b) => a.date.localeCompare(b.date));
 
+  /* 학습: 적요→중분류 (+ 적요::구분) — 자동분류 추천 적용(applyClassifyInbox)과 같은 규칙.
+   * 여기서 학습하지 않으면 개별 행 수정이 일회성으로 끝나 다음 유사 거래에 반영되지 않는다.
+   * mid 가 빈 값이면(분류 해제) 학습하지 않는다 — 기존 매핑을 지우는 건 카테고리 탭에서 할 일이다. */
+  if (desc && mid) {
+    const _t = inAmt > 0 ? '입금' : '지출';
+    catDescToMid[desc] = mid;
+    catDescTypeToMid[makeComboKey(desc, _t)] = mid;
+    saveCatData();
+  }
+
   // ④ AR 재생성 / 직접 업데이트
   let arMsg = creationRevertMsg;
   const updatedRow = cfData.find(x => x._id === cfEditId);
