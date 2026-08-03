@@ -22,7 +22,9 @@
  *
  * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
- *   • 수정  { secret, patch: [{approval_id, memo}] }
+ *   • 수정  { secret, patch: [{approval_id | _id, memo?, billing_amount?}] }
+ *     선택자는 approval_id 또는 _id. 수기 업로드분은 approval_id 가 없어 _id 로만 잡힌다
+ *     (_id 는 inspect 로 확인). 금액 수정은 청구 확정액으로 맞출 때 쓴다.
  *   • 조회 { secret, inspect: { approvalIds?: [...], from?, to?, cardNo?, merchant? } }
  *     저장된 행을 그대로 돌려준다. 쓰기 없음. RLS 때문에 cat_data 를 직접 못 읽어서
  *     '지금 계정과목이 뭔지' 확인할 방법이 없었고, 그 탓에 값을 확인하지 않고 덮어써
@@ -112,26 +114,43 @@ Deno.serve(async (req) => {
     if (patch.length) {
       if (!cur.length) return json({ ok: false, error: '기존 카드내역이 비어 있어 수정을 중단했습니다' }, 409);
 
-      const want = new Map<string, string>();
+      /* 선택자는 approval_id('a:') 또는 _id('i:'). 수기 업로드분은 approval_id 가 없어
+         _id 로만 잡을 수 있다. 지정한 필드만 바꾸고 나머지는 건드리지 않는다. */
+      const want = new Map<string, { memo?: string; billing_amount?: number }>();
       for (const p of patch) {
-        const id = str(p?.approval_id);
-        if (id) want.set(id, acctOf(p?.memo));
+        const aid = str(p?.approval_id), rid = str(p?._id);
+        const key = aid ? 'a:' + aid : (rid ? 'i:' + rid : '');
+        if (!key) continue;
+        const spec: { memo?: string; billing_amount?: number } = {};
+        if (p?.memo !== undefined && p?.memo !== null) spec.memo = acctOf(p.memo);
+        if (p?.billing_amount !== undefined && p?.billing_amount !== null) {
+          const v = num(p.billing_amount);
+          if (v <= 0) return json({ ok: false, error: `billing_amount 는 0보다 커야 합니다 (${key})` }, 400);
+          spec.billing_amount = v;
+        }
+        if (!Object.keys(spec).length) continue;
+        want.set(key, spec);
       }
-      if (!want.size) return json({ ok: false, error: 'patch 에 approval_id 가 없습니다' }, 400);
+      if (!want.size) return json({ ok: false, error: 'patch 에 선택자(approval_id/_id)나 바꿀 필드가 없습니다' }, 400);
 
       const changes: any[] = [];
       const hit = new Set<string>();
       for (const r of cur) {
-        const id = str(r.approval_id);
-        if (!id || !want.has(id)) continue;
-        hit.add(id);
-        const next = want.get(id)!;
-        const prev = str(r.memo);
-        if (prev === next) continue;              // 이미 그 값 — 재실행해도 안전
-        changes.push({ approval_id: id, merchant: str(r.merchant), use_date: str(r.use_date), from: prev, to: next });
-        r.memo = next;
+        const aid = str(r.approval_id), rid = str(r._id);
+        const key = (aid && want.has('a:' + aid)) ? 'a:' + aid : ((rid && want.has('i:' + rid)) ? 'i:' + rid : '');
+        if (!key) continue;
+        hit.add(key);
+        const spec = want.get(key)!;
+        const diff: any = {};
+        if (spec.memo !== undefined && str(r.memo) !== spec.memo) { diff.memo = { from: str(r.memo), to: spec.memo }; r.memo = spec.memo; }
+        if (spec.billing_amount !== undefined && num(r.billing_amount) !== spec.billing_amount) {
+          diff.billing_amount = { from: num(r.billing_amount), to: spec.billing_amount };
+          r.billing_amount = spec.billing_amount;
+        }
+        if (!Object.keys(diff).length) continue;   // 이미 그 값 — 재실행해도 안전
+        changes.push({ key, merchant: str(r.merchant), use_date: str(r.use_date), ...diff });
       }
-      const notFound = [...want.keys()].filter((id) => !hit.has(id));
+      const notFound = [...want.keys()].filter((k) => !hit.has(k));
 
       if (changes.length) {
         const put = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?on_conflict=key`, {
@@ -163,6 +182,7 @@ Deno.serve(async (req) => {
         if (merchant && !str(r.merchant).includes(merchant)) return false;
         return true;
       }).map((r) => ({
+        _id: str(r._id),                                  // patch 의 _id 선택자로 쓴다
         approval_id: str(r.approval_id), use_date: str(r.use_date).slice(0, 10),
         card_alias: str(r.card_alias), card_no: str(r.card_no),
         merchant: str(r.merchant), billing_amount: num(r.billing_amount), memo: str(r.memo),
