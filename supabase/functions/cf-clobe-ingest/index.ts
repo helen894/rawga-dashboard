@@ -14,6 +14,15 @@
  *   desc !== desc_src 면 대시보드에서 수기 수정한 것이므로 보호한다.
  *   desc_src 가 없는 기존 행(이 기능 이전 적재분)은 판별 불가라 보수적으로 보호한다.
  *   갱신이 일어나면 cat_data 의 학습 매핑 키도 새 적요로 복사해 분류 정확도를 유지한다.
+ *
+ * 모드 (하나만 골라 보낸다)
+ *   • 적재 { secret, action:"push", rows:[...] }                       — 종전과 동일
+ *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly? } }
+ *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat? }], midToBig?:{중분류:대분류} }
+ *
+ * 왜 patch 가 따로 있나: push 는 clobe_id 중복을 skip 하므로 재실행으로는 이미 적재된 행의
+ * 분류를 못 고친다. 대분류는 대시보드가 catMidToBig[중분류] 로 파생하므로, 새 중분류를
+ * 쓸 때는 midToBig 로 cat_data 매핑을 함께 넣어야 '기타' 로 떨어지지 않는다.
  */
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -111,6 +120,102 @@ async function migrateCatKeys(renameMap: Map<string, string>): Promise<string> {
   return notes.join(" / ");
 }
 
+const str = (v: unknown) => (v === undefined || v === null) ? "" : String(v).trim();
+
+/* cf_data 를 읽어 mutate 로 제자리 수정한 뒤 낙관적 잠금으로 저장한다.
+ * push 경로와 같은 규칙: 읽은 version 일 때만 쓰고, 0행 갱신(=그새 대시보드가 씀)이면
+ * 덮어쓰지 않고 다시 읽어 재시도한다. mutate 는 재시도마다 새로 읽은 배열에 다시 적용되므로
+ * 반드시 멱등이어야 한다(분류 대입은 멱등). */
+async function mutateCfData<T>(mutate: (rows: any[]) => T, maxTries = 4): Promise<{ result: T; total: number }> {
+  for (let attempt = 1; ; attempt++) {
+    const getRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cf_data?select=*&limit=1`,
+      { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+    );
+    if (!getRes.ok) throw new Error(`cf_data 읽기 실패: ${getRes.status}`);
+    const arr = await getRes.json();
+    if (!arr?.[0]) throw new Error("cf_data 행이 없습니다.");
+    const rowId = arr[0].id;
+    const version = arr[0].version;
+    const cfData: any[] = Array.isArray(arr[0].data)
+      ? arr[0].data
+      : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : []);
+    /* 빈 배열을 읽었는데 그대로 쓰면 전체가 날아간다(2026-08-01 292건 유실과 같은 모양).
+     * patch 는 append 와 달리 복구 근거가 없으므로 아예 중단한다. */
+    if (!cfData.length) throw new Error("cf_data 를 빈 배열로 읽었습니다 — 덮어쓰지 않고 중단합니다.");
+
+    const result = mutate(cfData);
+
+    const cond = (version === undefined || version === null) ? "" : `&version=eq.${version}`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/cf_data?id=eq.${rowId}${cond}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({ data: cfData, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error(`cf_data 저장 실패: ${res.status} ${await res.text()}`);
+    const updated = await res.json();
+    if (Array.isArray(updated) && updated.length > 0) return { result, total: cfData.length };
+
+    if (attempt >= maxTries) {
+      throw new Error(`cf_data 동시 수정 충돌 — ${maxTries}회 재시도 실패. 대시보드를 닫고 다시 시도하세요.`);
+    }
+    await new Promise((r) => setTimeout(r, 200 * attempt));
+  }
+}
+
+/* cat_data.mid_to_big 에 중분류→대분류 매핑을 병합한다(기존 값은 덮지 않는다).
+ * 대시보드 getBigCat 이 catMidToBig[중분류] || '기타' 라, 이 매핑이 없으면 새 중분류가 '기타'로 떨어진다.
+ * key 별 낙관적 잠금은 migrateCatKeys 와 동일. */
+async function mergeMidToBig(add: Record<string, string>): Promise<{ added: string[]; kept: string[] }> {
+  for (let attempt = 1; ; attempt++) {
+    const getRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/cat_data?select=*&key=eq.mid_to_big&limit=1`,
+      { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+    );
+    if (!getRes.ok) throw new Error(`cat_data(mid_to_big) 읽기 실패: ${getRes.status}`);
+    const arr = await getRes.json();
+    /* 없으면 새로 만들지 않는다 — 여기서 만들면 대시보드 기본 매핑 전체가 이 몇 건으로 대체된다. */
+    if (!arr?.[0]) throw new Error("cat_data 에 mid_to_big 행이 없습니다 — 대시보드에서 한 번 저장한 뒤 다시 시도하세요.");
+
+    const version = arr[0].version;
+    const map: Record<string, string> =
+      (arr[0].data && typeof arr[0].data === "object") ? { ...arr[0].data }
+      : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : {});
+
+    const added: string[] = [], kept: string[] = [];
+    for (const [mid, big] of Object.entries(add)) {
+      const m = str(mid), b = str(big);
+      if (!m || !b) continue;
+      if (map[m] === undefined) { map[m] = b; added.push(`${m}→${b}`); }
+      else kept.push(`${m}→${map[m]}`);      // 이미 있으면 기존 값 유지(무단 재매핑 방지)
+    }
+    if (!added.length) return { added, kept };
+
+    const cond = (version === undefined || version === null) ? "" : `&version=eq.${version}`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?key=eq.mid_to_big${cond}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({ data: map, updated_at: new Date().toISOString() }),
+    });
+    if (!res.ok) throw new Error(`cat_data(mid_to_big) 저장 실패: ${res.status}`);
+    const updated = await res.json();
+    if (Array.isArray(updated) && updated.length > 0) return { added, kept };
+
+    if (attempt >= 4) throw new Error("cat_data(mid_to_big) 동시 수정 충돌 — 4회 재시도 실패. 대시보드를 닫고 다시 시도하세요.");
+    await new Promise((r) => setTimeout(r, 200 * attempt));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "POST only" }, 405);
@@ -123,8 +228,92 @@ Deno.serve(async (req) => {
   if (!CF_SYNC_SECRET || body?.secret !== CF_SYNC_SECRET) {
     return json({ ok: false, error: "unauthorized (secret 불일치)" }, 401);
   }
+  const inspect = (body?.inspect && typeof body.inspect === "object" && !Array.isArray(body.inspect))
+    ? body.inspect as Record<string, unknown> : null;
+  const patchList = Array.isArray(body?.patch) ? body.patch : [];
+  const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
+    ? body.midToBig as Record<string, string> : null;
+
+  /* ── 조회 모드 ── 분류를 고치기 전에 대상 행과 현재 상태를 확인한다(_id 선택자도 여기서 얻는다). */
+  if (inspect) {
+    try {
+      const ids = new Set((Array.isArray(inspect.clobeIds) ? inspect.clobeIds : []).map((v) => str(v)).filter(Boolean));
+      const from = str(inspect.from), to = str(inspect.to), descQ = str(inspect.desc);
+      const unclassifiedOnly = inspect.unclassifiedOnly === true;
+
+      const getRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
+        { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+      );
+      if (!getRes.ok) throw new Error(`cf_data 읽기 실패: ${getRes.status}`);
+      const arr = await getRes.json();
+      const cur: any[] = Array.isArray(arr?.[0]?.data) ? arr[0].data
+        : (typeof arr?.[0]?.data === "string" ? JSON.parse(arr[0].data) : []);
+
+      const hit = cur.filter((r) => {
+        if (ids.size && !ids.has(str(r.clobe_id))) return false;
+        const d = str(r.date);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        if (descQ && !str(r.desc).includes(descQ)) return false;
+        if (unclassifiedOnly && str(r.mid_cat)) return false;
+        return true;
+      }).map((r) => ({
+        _id: str(r._id), clobe_id: str(r.clobe_id), date: str(r.date), desc: str(r.desc),
+        in: Number(r.in || 0), out: Number(r.out || 0), type: str(r.type),
+        mid_cat: str(r.mid_cat), big_cat: str(r.big_cat),
+      }));
+      return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
+
+  /* ── 수정 모드 ── 이미 적재된 행의 중분류/대분류만 고친다(금액·적요·날짜는 건드리지 않는다). */
+  if (patchList.length || midToBig) {
+    try {
+      let catNote: { added: string[]; kept: string[] } | null = null;
+      // 대분류 매핑을 먼저 넣는다 — 행만 고치고 매핑이 없으면 대시보드에서 '기타'로 보인다.
+      if (midToBig) catNote = await mergeMidToBig(midToBig);
+
+      let changes: any[] = [], notFound: string[] = [], total = 0;
+      if (patchList.length) {
+        const out = await mutateCfData((cur) => {
+          const ch: any[] = [], nf: string[] = [];
+          for (const p of patchList) {
+            const clobeId = str(p?.clobe_id), rid = str(p?._id);
+            if (!clobeId && !rid) { nf.push("(선택자 없음)"); continue; }
+            const idx = clobeId
+              ? cur.findIndex((r) => str(r.clobe_id) === clobeId)
+              : cur.findIndex((r) => str(r._id) === rid);
+            if (idx < 0) { nf.push(clobeId || rid); continue; }
+
+            const r = cur[idx];
+            const before = { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat) };
+            let touched = false;
+            if (p?.mid_cat !== undefined) { r.mid_cat = str(p.mid_cat); touched = true; }
+            if (p?.big_cat !== undefined) { r.big_cat = str(p.big_cat); touched = true; }
+            if (!touched) { nf.push(`${clobeId || rid} (바꿀 필드 없음)`); continue; }
+            ch.push({ clobe_id: str(r.clobe_id), _id: str(r._id), date: str(r.date), desc: str(r.desc),
+                      before, after: { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat) } });
+          }
+          return { ch, nf };
+        });
+        changes = out.result.ch; notFound = out.result.nf; total = out.total;
+      }
+      return json({
+        ok: true, mode: "patch", updated: changes.length, changes,
+        ...(notFound.length ? { notFound } : {}),
+        ...(catNote ? { midToBig: catNote } : {}),
+        ...(total ? { total } : {}),
+      });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
+
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action" }, 400);
+    return json({ ok: false, error: "unknown action (push / inspect / patch)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
