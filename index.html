@@ -333,6 +333,15 @@
   .ar-upd.chg  { background: var(--amber2); color: var(--amber); }
   .ar-upd.kept { background: var(--bg3); color: var(--text3); }
   .ar-memo-cell:hover { background: var(--bg3); }
+  /* 은행 실잔액 대조 — 보조 정보(환산손익·외화보유·원인) 접기.
+     평소엔 접어 카드를 가볍게 두고, 차이가 임계를 넘으면 자동으로 펼쳐 근거를 바로 보여준다. */
+  .recon-more { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border2); }
+  .recon-more > summary { cursor: pointer; font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 6px; list-style: none; }
+  .recon-more > summary::-webkit-details-marker { display: none; }
+  .recon-more > summary::before { content: '▸'; font-size: 9px; color: var(--text3); }
+  .recon-more[open] > summary::before { content: '▾'; }
+  .recon-more > summary:hover { color: var(--text); }
+  .recon-more > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
 
   /* 주간 요약 (textarea 에디터) */
   .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
@@ -2845,6 +2854,34 @@ function renderBankRecon() {
       (s.fxRate ? ` @ ${Number(s.fxRate).toLocaleString()}` : '')
     : '';
 
+  /* ── 보조 정보(환산손익·외화보유·원인) 접기 ──
+     평소엔 접어 두되, 차이가 '점검 필요'(1천만 초과)면 자동으로 펼쳐 근거를 바로 보여준다.
+     사용자가 직접 접었/폈던 상태는 localStorage 에 기억. */
+  const forceOpen = ad > 10000000;
+  let savedOpen = false;
+  try { savedOpen = localStorage.getItem('bank_recon_open') === '1'; } catch (e) {}
+  const openAttr = (forceOpen || savedOpen) ? ' open' : '';
+
+  const rowsHtml =
+    (FX_ADJ ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px">
+        <span style="font-size:11px;color:var(--text2)">🔄 외화 환산손익</span>
+        <span style="text-align:right">
+          <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${FX_ADJ < 0 ? 'var(--red)' : 'var(--green)'}">${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}</span>
+          <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
+        </span>
+      </div>` : '') +
+    (fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${escapeHtml(fxTxt)}${Number(s.loan) ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(s.loan)}(현금 아님, 대조 제외)` : ''}</div>` : '') +
+    (ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : '');
+
+  // 접힌 상태에서도 핵심 숫자는 보이게 요약 줄 구성
+  const sumBits = [];
+  if (FX_ADJ)            sumBits.push(`환산손익 ${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}`);
+  if (fxTxt)             sumBits.push(`외화 ${s.fx.map(x => `${x.ccy} ${Number(x.amount).toLocaleString()}`).join('+')}`);
+  if (Number(s.loan))    sumBits.push(`대출 ${fmt(s.loan)}`);
+  const moreHtml = rowsHtml
+    ? `<details class="recon-more"${openAttr}><summary>${escapeHtml(sumBits.join(' · ') || '세부 정보')}</summary>${rowsHtml}</details>`
+    : '';
+
   el.innerHTML =
     `<div class="chart-box" style="margin-bottom:20px;border-left:3px solid ${col}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -2870,16 +2907,14 @@ function renderBankRecon() {
           <div style="font-size:10.5px;color:${col};margin-top:3px">${diff === 0 ? '완전 일치' : (diff < 0 ? '대시보드가 적게 잡음' : '대시보드가 많이 잡음')}</div>
         </div>
       </div>
-      ${FX_ADJ ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border2)">
-        <span style="font-size:11px;color:var(--text2)">🔄 외화 환산손익</span>
-        <span style="text-align:right">
-          <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${FX_ADJ < 0 ? 'var(--red)' : 'var(--green)'}">${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}</span>
-          <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
-        </span>
-      </div>` : ''}
-      ${fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:10px">외화 보유 ${escapeHtml(fxTxt)}${Number(s.loan) ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(s.loan)}(현금 아님, 대조 제외)` : ''}</div>` : ''}
-      ${ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : ''}
+      ${moreHtml}
     </div>`;
+
+  // 접힘 상태 기억 (자동 펼침으로 열린 건 저장하지 않는다 — 사용자가 직접 접었/폈을 때만 기록)
+  const det = el.querySelector('.recon-more');
+  if (det) det.addEventListener('toggle', () => {
+    try { localStorage.setItem('bank_recon_open', det.open ? '1' : '0'); } catch (e) {}
+  });
 }
 
 // 거래처별 집계 스냅샷 { 거래처: {n, exp, col} }
