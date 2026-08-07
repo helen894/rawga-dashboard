@@ -674,13 +674,11 @@
     <div class="corp-card-grid">
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M01</div><div class="corp-card-value" id="corp-card-m01">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M02</div><div class="corp-card-value" id="corp-card-m02">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">M03</div><div class="corp-card-value" id="corp-card-m03">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">1본부</div><div class="corp-card-value" id="corp-card-hq1">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">2본부</div><div class="corp-card-value" id="corp-card-hq2">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">BX</div><div class="corp-card-value" id="corp-card-bx">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
     </div>
   </div>
@@ -2557,10 +2555,39 @@ let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // S
 let isInitCashHidden = localStorage.getItem('init_cash_hidden') === 'true'; // 숨김 상태 (localStorage 유지)
 
 /* ===== 법인카드 탭 — 열/행 설정 ===== */
-const DEFAULT_CORP_CARD_COLUMNS  = ['하경수','김현민','박우현','문성삼','M01','M02','M03','IL','BX','SO'];
+const DEFAULT_CORP_CARD_COLUMNS  = ['하경수','김현민','박우현','문성삼','1본부','2본부','IL','SO'];
 const DEFAULT_CORP_CARD_ACCOUNTS = ['교통비','식대','소모품비','접대비','출장비','통신비','기타'];
+
+/* ── 카드 코드 → 조직 이름 매핑 (2026-08-07) ──────────────────────────
+ * 저장된 card_alias 는 'M01'/'M03'/'BX' 그대로 두고 여기서만 조직명으로 옮긴다.
+ * 데이터를 다시 쓰지 않는 이유: M03 은 SO 와 같은 카드에 섞여 있어(카드
+ * 4140031850534957) 카드 단위 일괄변경을 쓰면 SO 건까지 끌려간다 —
+ * 2026-08-02 에 실제로 72건 귀속이 바뀐 사고와 같은 패턴.
+ * 카드사가 주는 내부 코드와 조직 이름을 분리해 두면 다음 조직 개편 때도
+ * 이 표만 고치면 된다. */
+const CC_ALIAS_TO_COLUMN = { 'M01': '1본부', 'M03': '2본부', 'BX': '2본부' };
+const CC_COLUMNS_VERSION = 2;   // 열 목록 마이그레이션 세대
+
 function loadCorpCardColumns() {
-  try { const v = JSON.parse(localStorage.getItem('corp_card_columns'));  return Array.isArray(v) && v.length > 0 ? v : [...DEFAULT_CORP_CARD_COLUMNS];  } catch { return [...DEFAULT_CORP_CARD_COLUMNS];  }
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem('corp_card_columns')); } catch (e) {}
+  if (!Array.isArray(v) || v.length === 0) v = [...DEFAULT_CORP_CARD_COLUMNS];
+  // 저장된 옛 열 목록(M01/M02/M03/BX)을 한 번만 옮긴다.
+  // 세대 플래그를 두는 이유: 사용자가 나중에 M02 를 다시 만들어도 지우지 않기 위해.
+  if (Number(localStorage.getItem('corp_card_columns_v') || 1) < CC_COLUMNS_VERSION) {
+    const out = [];
+    for (const c of v) {
+      const name = CC_ALIAS_TO_COLUMN[String(c).trim()] || String(c).trim();
+      if (!name || name === 'M02') continue;          // M02 = 사용 0건, 사용자 지정으로 제거
+      if (!out.includes(name)) out.push(name);        // M03·BX → 2본부 병합(중복 제거)
+    }
+    if (out.length) v = out;
+    try {
+      localStorage.setItem('corp_card_columns', JSON.stringify(v));
+      localStorage.setItem('corp_card_columns_v', String(CC_COLUMNS_VERSION));
+    } catch (e) {}
+  }
+  return v;
 }
 function loadCorpCardAccounts() {
   try { const v = JSON.parse(localStorage.getItem('corp_card_accounts')); return Array.isArray(v) && v.length > 0 ? v : [...DEFAULT_CORP_CARD_ACCOUNTS]; } catch { return [...DEFAULT_CORP_CARD_ACCOUNTS]; }
@@ -9999,37 +10026,56 @@ function saveCorpCardSettings() {
 }
 
 /* ── 카드 별칭 → corpCardColumns 매핑 규칙 ──────────────────────────────
+ * 0. 코드→조직 매핑 우선 적용 (CC_ALIAS_TO_COLUMN: M01→1본부, M03·BX→2본부)
  * 1. 정확 일치 (card_alias === col)
- * 2. 괄호 앞 접두어 추출: "SO(롯데카드)" → "SO", "BX(이신소)" → "BX"
- *    + M숫자 정규화:       "M1(김형석)"   → prefix "M1" → "M01"
+ * 2. 괄호 앞 접두어 추출: "SO(롯데카드)" → "SO", "BX(이신소)" → "BX"→2본부
+ *    + M숫자 정규화:       "M1(김형석)"   → prefix "M1" → "M01" → 1본부
  * 3. 괄호 안 내용 추출:   "비씨카드(김현민)" → inner "김현민"
  * 4. 문자열 포함 검사:    "하경수대표님" → col "하경수" ∈ alias
  * ── 미매핑 별칭은 null 반환 후 console.info로 보고 ─────────────────── */
+function ccResolveCol(name) {
+  const n = String(name ?? '').trim();
+  if (!n) return null;
+  if (corpCardColumns.includes(n)) return n;
+  const mapped = CC_ALIAS_TO_COLUMN[n];
+  return (mapped && corpCardColumns.includes(mapped)) ? mapped : null;
+}
 function normalizeCCTxAlias(alias) {
   if (!alias) return null;
   const a = String(alias).trim();
   if (!a) return null;
-  // 1. 정확 일치
-  if (corpCardColumns.includes(a)) return a;
+  // 1. 정확 일치 (+ 코드→조직 매핑)
+  const direct = ccResolveCol(a);
+  if (direct) return direct;
   // 2. 괄호 앞 접두어 (M숫자 정규화 포함)
   const prefixM = a.match(/^([^(]+)\(/);
   if (prefixM) {
-    let prefix = prefixM[1].trim();
+    const prefix = prefixM[1].trim();
     const mNorm = prefix.replace(/^M(\d)$/, (_, d) => 'M0' + d); // M1→M01
-    if (corpCardColumns.includes(mNorm))   return mNorm;
-    if (corpCardColumns.includes(prefix))  return prefix;
+    const byPrefix = ccResolveCol(mNorm) || ccResolveCol(prefix);
+    if (byPrefix) return byPrefix;
     // 3. 괄호 안 내용: "비씨카드(김현민)" → "김현민"
     const innerM = a.match(/\(([^)]+)\)/);
     if (innerM) {
-      const inner = innerM[1].trim();
-      if (corpCardColumns.includes(inner)) return inner;
+      const byInner = ccResolveCol(innerM[1]);
+      if (byInner) return byInner;
     }
   }
   // 4. 문자열 포함: "하경수대표님".includes("하경수") → true
   for (const col of corpCardColumns) {
     if (a.includes(col)) return col;
   }
+  //    옛 코드가 섞인 별칭도 같은 규칙으로: "BX팀" → 2본부
+  for (const code in CC_ALIAS_TO_COLUMN) {
+    const to = CC_ALIAS_TO_COLUMN[code];
+    if (a.includes(code) && corpCardColumns.includes(to)) return to;
+  }
   return null; // 미매핑
+}
+/* 화면에 보여줄 사용자 이름. 저장값은 그대로 두고 표시만 조직명으로 바꾼다.
+   매핑이 안 되는 별칭은 원본을 그대로 보여준다(숨기면 미매핑을 못 알아챈다). */
+function ccAliasDisplay(alias) {
+  return normalizeCCTxAlias(alias) || String(alias ?? '').trim();
 }
 
 /* ── 사용내역 card_alias → 카드 열(corpCardColumns) 자동 동기화 ────────
@@ -10513,7 +10559,8 @@ function updateCCTxAliasFilter() {
   const sel = document.getElementById('cctx-alias');
   if (!sel) return;
   const current = sel.value;
-  const aliases = [...new Set(corpCardTxData.map(r => r.card_alias).filter(Boolean))].sort();
+  // 표시명(조직명) 기준 — 저장값이 M03/BX 여도 '2본부' 한 항목으로 묶인다
+  const aliases = [...new Set(corpCardTxData.map(r => ccAliasDisplay(r.card_alias)).filter(Boolean))].sort();
   sel.innerHTML = `<option value="">카드 전체</option>` +
     aliases.map(a => `<option value="${a}"${a === current ? ' selected' : ''}>${a}</option>`).join('');
   updateCCTxMonthFilter();   // 데이터가 바뀌면 두 선택기를 같이 갱신 (호출부가 여러 곳이라 여기에 묶음)
@@ -10549,7 +10596,7 @@ function getCCTxFilteredRows() {
   if (month)    rows = rows.filter(r => String(r.use_date || '').slice(0, 7) === month);
   if (from)     rows = rows.filter(r => (r.use_date || '') >= from);
   if (to)       rows = rows.filter(r => (r.use_date || '') <= to);
-  if (alias)    rows = rows.filter(r => r.card_alias === alias);
+  if (alias)    rows = rows.filter(r => ccAliasDisplay(r.card_alias) === alias);
   if (merchant) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(merchant));
   // 사용자(카드열) 필터 — 별칭 여러 개를 normalizeCCTxAlias로 한 사람에 묶어 매칭
   if (cctxPersonFilter) rows = rows.filter(r => normalizeCCTxAlias(r.card_alias) === cctxPersonFilter);
@@ -10678,7 +10725,7 @@ function renderCCTxTable() {
       `<td style="width:32px;padding:4px 8px"><input type="checkbox" class="cctx-row-check" data-id="${r._id}" ${chk} style="cursor:pointer"></td>` +
       `<td>${r.use_date || ''}</td>` +
       `<td style="font-family:var(--mono);font-size:11px">${r.card_no || ''}</td>` +
-      `<td>${r.card_alias || '—'}</td>` +
+      `<td>${ccAliasDisplay(r.card_alias) || '—'}</td>` +
       `<td>${r.merchant || '—'}</td>` +
       `<td class="num">${fmt(r.billing_amount || 0)}</td>` +
       `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.memo || '—'}</td>` +
@@ -10746,9 +10793,13 @@ function renderCCTxTable() {
 // 전체 데이터 기준 고유값 목록 (드롭다운 옵션용, corpCardTxData 원본 기준)
 function getCCTxUniqueValues(field) {
   const INVALID_VALS = new Set(['nan', 'null', 'undefined', '-', 'n/a', 'na', '#n/a']);
+  // 사용자 열은 표시명(조직명) 기준으로 묶는다 — M03·BX 가 '2본부' 한 항목이 되도록.
+  const val = field === 'card_alias'
+    ? (r => ccAliasDisplay(r.card_alias))
+    : (r => String(r[field] ?? '').trim());
   return [...new Set(
     corpCardTxData
-      .map(r => String(r[field] ?? '').trim())
+      .map(val)
       .filter(v => v && !INVALID_VALS.has(v.toLowerCase()))
   )].sort((a, b) => a.localeCompare(b, 'ko-KR', { numeric: true }));
 }
@@ -10812,7 +10863,8 @@ function _matchCCTxColumnFilter(row, field, f) {
   }
   // 다중 선택 필터 (card_alias, card_no, memo) — OR 조건
   if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
-    const v = String(row[field] ?? '').trim();
+    // 사용자 열은 목록도 표시명으로 만들었으니 비교도 표시명으로 해야 짝이 맞는다
+    const v = field === 'card_alias' ? ccAliasDisplay(row.card_alias) : String(row[field] ?? '').trim();
     // 하위 호환: 기존 단일 선택 타입
     if (f.type === 'empty')     return v === '';
     if (f.type === 'not_empty') return v !== '';
@@ -11858,9 +11910,9 @@ function renderCorpCardDashboard() {
   }
   const idMap = {
     '하경수': 'corp-card-ha', '김현민': 'corp-card-kim',
-    'M01': 'corp-card-m01', 'M02': 'corp-card-m02', 'M03': 'corp-card-m03',
+    '1본부': 'corp-card-hq1', '2본부': 'corp-card-hq2',
     '박우현': 'corp-card-park', '문성삼': 'corp-card-moon',
-    'IL': 'corp-card-il', 'BX': 'corp-card-bx', 'SO': 'corp-card-so',
+    'IL': 'corp-card-il', 'SO': 'corp-card-so',
   };
   Object.keys(idMap).forEach(col => {
     const el = document.getElementById(idMap[col]);
