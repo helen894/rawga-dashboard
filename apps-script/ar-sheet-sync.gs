@@ -28,7 +28,7 @@ var EXCLUDE_TABS = ['인오가닉사업 전체현황', 'AR_preview'];
 //  - remaining 이 ''(빈값)이면 (예상-회수)로 자동 계산
 //  - start/due/collect 는 화면에서 추정한 값 — 미리보기로 확인 후 필요시 수정
 var TAB_CONFIG = {
-  'CNA':            { expected: '세금계산서 발행가액', collected: '실제 입금액',  remaining: '',       start: '송금날짜', due: '입금예정일', collect: '실제 입금날짜', zeroExpectedNearValues: [763760] },
+  'CNA':            { expected: '세금계산서 발행가액', collected: '실제 입금액',  remaining: '',       start: '송금날짜', due: '입금예정일', collect: '실제 입금날짜', zeroExpectedNearValues: [763760], keepNoEvidenceRows: true },
   '핀다':           { expected: '부가세 포함금액',     collected: '최종 회수액',  remaining: '미회수액', start: '송금날짜', due: '예상회수일', collect: '회수일' },
   'JHT':            { expected: '예상입금액',         collected: '실제 입금액',  remaining: '',       start: '송금일',   due: '예상 입금일', collect: '입금일' },
   '팬텀':           { expected: '총 회수예정액',       collected: '최종 회수액',  remaining: '',       start: '송금날짜', due: '예상회수일', collect: '회수일' },
@@ -229,6 +229,9 @@ function parseTab_(sh, cfg) {
   //     ⑵ 예상액이 '나머지 전 행의 합'과 일치(총계 행 고유 특징 — 하단 총계도 감지)
   //     ⑶ 회수예정일·실제회수일·회수액이 모두 없음 = 근거 없는 참고/잔여 행
   //        (지앤원 하단 2행처럼 시트 자체 합계에서도 빠져 있는 행)
+  //        ⚠ config 에 keepNoEvidenceRows: true 인 탭은 ⑶을 적용하지 않는다.
+  //          CNA 59행처럼 날짜가 하나도 없어도 시트 누적액에 잡히는 '실제 채권'이 있어서
+  //          (2026-08-07 사용자 확인, 30,757,119원). ⑴⑵(총계 행 판정)는 그대로 살아 있다.
   //   나머지 = 병합셀 연속행(같은 매입 건의 추가 매출/분할 회수) → 직전 행의 송금일 승계해 유지
   var totalExpAll = 0, skippedTotalRows = 0;
   for (var t = 0; t < cand.length; t++) totalExpAll += cand[t].expected;
@@ -239,7 +242,7 @@ function parseTab_(sh, cfg) {
     if (!c.hasStart) {
       var dueVal     = colMap.due     !== undefined ? String(c.row[colMap.due]     || '').trim() : '';
       var collectVal = colMap.collect !== undefined ? String(c.row[colMap.collect] || '').trim() : '';
-      var noEvidence = !dueVal && !collectVal && !(c.collected > 0);   // 회수 근거 전무
+      var noEvidence = !cfg.keepNoEvidenceRows && !dueVal && !collectVal && !(c.collected > 0); // 회수 근거 전무
       var isDropRow  = c.first || Math.abs(2 * c.expected - totalExpAll) <= 2 || noEvidence;
       if (isDropRow) { skippedTotalRows++; continue; }
     }
