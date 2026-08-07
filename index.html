@@ -182,6 +182,15 @@
   @media (max-width: 900px) { .corp-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px) { .corp-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* 법인카드 전용 8열 — 카드 8개를 한 줄에. 대출 카드(#loan-dash-grid)는 5개뿐이라
+     같은 규칙을 쓰면 8칸에 흩어지므로 클래스를 따로 둔다.
+     ⚠ 접는 기준이 900px 이면 칸이 ~100px 까지 좁아져 8자리 금액이 두 줄로 깨진다
+     → 1100px 에서 4열로 내린다. 아래 셀렉터는 위 규칙(0,1,0)보다 우선(0,2,0)이라
+     각 브레이크포인트를 전부 다시 써 줘야 한다. 넓은 폭부터 좁은 폭 순서 유지. */
+  .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  @media (max-width: 1100px) { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 680px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 460px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* 법인카드 탭 사용현황 표 */
   .corp-table-wrap { overflow: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
   .corp-usage-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -671,13 +680,14 @@
   <!-- 법인카드 -->
   <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
     <div class="chart-title" style="margin-bottom:12px">💳 법인카드 <span id="corp-card-period" style="font-size:12px;color:var(--text2);font-weight:400"></span></div>
-    <div class="corp-card-grid">
+    <!-- 순서: 개인 명의(딥그린) 4명 → 조직(라이트그린) 4개. 색이 두 덩어리로 나뉘게. -->
+    <div class="corp-card-grid corp-card-grid-8">
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">1본부</div><div class="corp-card-value" id="corp-card-hq1">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">2본부</div><div class="corp-card-value" id="corp-card-hq2">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">1본부</div><div class="corp-card-value" id="corp-card-hq1">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">2본부</div><div class="corp-card-value" id="corp-card-hq2">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
     </div>
