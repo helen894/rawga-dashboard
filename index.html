@@ -2734,6 +2734,21 @@ let fxAdjustBase = (() => {
 })();
 let FX_ADJ = 0;
 
+/* 대출잔액의 단일 출처 = `loan_data`(대출 탭).
+ * ⚠ `bank_snapshot.loan` 을 쓰면 안 된다. 그 값은 클로브 `summary.loanBalanceSum` 인데
+ *   기업은행 LOAN 계좌 4건(10.9억)을 통째로 빠뜨린다 — 2026-08-07 확인:
+ *   개별 LOAN 계좌 합 56.6억 / summary 45.7억 / 실제(수기 검증) 62.4억.
+ *   그대로 두면 같은 화면의 대출 카드(62.4억)와 대조 카드(45.7억) 숫자가 갈린다.
+ * 아직 안 불러왔으면 0 을 돌려 표시를 생략한다 — 틀린 값을 잠깐이라도 보여주지 않기 위해.
+ * (대출 데이터는 지연 로드라 renderLoanTab 끝에서 renderBankRecon 을 다시 부른다.)
+ * try/catch 는 선언 순서 때문 — 이 함수가 loanData 선언보다 앞서 실행될 수 있다(TDZ). */
+function loanBookTotal() {
+  try {
+    if (!_loanLoaded || !Array.isArray(loanData)) return 0;
+    return loanData.reduce((a, L) => a + loanNum(L.balance), 0);
+  } catch (e) { return 0; }
+}
+
 function computeFxAdj() {
   if (!bankSnapshot) { FX_ADJ = 0; return 0; }
   const spot = Number(bankSnapshot.fxKrw) || 0;
@@ -2890,6 +2905,7 @@ function renderBankRecon() {
     ? s.fx.map(x => `${x.ccy} ${Number(x.amount).toLocaleString()}`).join(' + ') +
       (s.fxRate ? ` @ ${Number(s.fxRate).toLocaleString()}` : '')
     : '';
+  const loanBal = loanBookTotal();
 
   /* ── 보조 정보(환산손익·외화보유·원인) 접기 ──
      평소엔 접어 두되, 차이가 '점검 필요'(1천만 초과)면 자동으로 펼쳐 근거를 바로 보여준다.
@@ -2907,14 +2923,14 @@ function renderBankRecon() {
           <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
         </span>
       </div>` : '') +
-    (fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${escapeHtml(fxTxt)}${Number(s.loan) ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(s.loan)}(현금 아님, 대조 제외)` : ''}</div>` : '') +
+    (fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${escapeHtml(fxTxt)}${loanBal ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(loanBal)}(현금 아님, 대조 제외)` : ''}</div>` : '') +
     (ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : '');
 
   // 접힌 상태에서도 핵심 숫자는 보이게 요약 줄 구성
   const sumBits = [];
   if (FX_ADJ)            sumBits.push(`환산손익 ${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}`);
   if (fxTxt)             sumBits.push(`외화 ${s.fx.map(x => `${x.ccy} ${Number(x.amount).toLocaleString()}`).join('+')}`);
-  if (Number(s.loan))    sumBits.push(`대출 ${fmt(s.loan)}`);
+  if (loanBal)           sumBits.push(`대출 ${fmt(loanBal)}`);
   const moreHtml = rowsHtml
     ? `<details class="recon-more"${openAttr}><summary>${escapeHtml(sumBits.join(' · ') || '세부 정보')}</summary>${rowsHtml}</details>`
     : '';
@@ -9799,6 +9815,8 @@ function renderLoanTab(){
   }
   // 대시보드 상단 요약(있으면)도 갱신
   if(typeof renderLoanSummaryCard==='function') try{ renderLoanSummaryCard(); }catch(e){}
+  // 잔액 대조 카드도 대출잔액을 loan_data 에서 읽는다 — 같이 다시 그려야 두 숫자가 안 갈린다
+  if(typeof renderBankRecon==='function') try{ renderBankRecon(); }catch(e){}
 }
 
 /* 대시보드 탭 상단 대출 요약 카드 (법인카드 위) */
