@@ -9689,14 +9689,27 @@ function loadRecurData() {
   const saved = localStorage.getItem('recur_data');
   recurData = saved ? JSON.parse(saved) : [];
 }
-function saveRecurData() {
+/* ⚠ Supabase 쿼리 빌더는 then() 만 가진 thenable 이라 .catch() 가 없다.
+   빌더에 바로 .catch() 를 걸면 TypeError 가 나면서 두 가지가 동시에 깨진다:
+     ⑴ then() 이 호출되지 않으므로 요청 자체가 전송되지 않는다(서버에 아무것도 안 감)
+     ⑵ 예외가 호출부로 튀어 그 다음 줄(renderRecurTable 등)이 실행되지 않는다
+   → 반복 거래를 삭제해도 화면에서 안 지워지고 서버에도 반영되지 않던 원인.
+   이벤트 리스너 안에서 던진 예외는 click() 호출부로 전파되지 않아 조용히 묻혔다.
+   await + { error } 검사로 바꾼다. 던지지 않고 { error } 를 돌려주므로 호출부가 되돌릴 수 있다. */
+async function saveRecurData() {
   localStorage.setItem('recur_data', JSON.stringify(recurData));
   // R-2: saveCatDataToSupabase()는 _isSyncing 가드로 Realtime 중 저장이 차단됨
   // 반복 거래는 사용자 액션이므로 cat_data의 recur_data 키를 직접 upsert (가드 우회)
-  if (_supa) {
-    _supa.from('cat_data')
-      .upsert([{ key: 'recur_data', data: recurData }], { onConflict: 'key' })
-      .catch(e => console.warn('[saveRecurData] Supabase 저장 실패:', e));
+  if (!_supa) return { error: null };
+  try {
+    const { error } = await _supa.from('cat_data')
+      .upsert([{ key: 'recur_data', data: recurData }], { onConflict: 'key' });
+    if (error) throw error;
+    return { error: null };
+  } catch (e) {
+    console.warn('[saveRecurData] Supabase 저장 실패:', e);
+    try { showToast('⚠ 반복 거래 서버 저장 실패 — 로컬에만 남았습니다', 'red'); } catch (e2) {}
+    return { error: e };
   }
 }
 
@@ -10029,17 +10042,20 @@ document.getElementById('rec-add-btn').addEventListener('click', () => {
   showToast(`✅ "${desc}" 반복 거래 등록됐습니다.`, 'green');
 });
 
-document.getElementById('rec-tbody').addEventListener('click', e => {
+document.getElementById('rec-tbody').addEventListener('click', async e => {
   // 삭제
   const delBtn = e.target.closest('.rec-del-btn');
   if (delBtn) {
     const idx = parseInt(delBtn.dataset.idx);
     const rec = recurData[idx];
+    if (!rec) { renderRecurTable(); return; }   // 목록이 어긋난 상태 — 다시 그려 맞춘다
     if (!confirm(`"${rec.desc}" (매월 ${rec.day}일) 반복 거래를 삭제하시겠습니까?\n이미 생성된 예정 항목은 유지됩니다.`)) return;
+    const backup = recurData.slice();
     recurData.splice(idx, 1);
-    saveRecurData();
-    renderRecurTable();
-    showToast('삭제됐습니다.', 'red');
+    renderRecurTable();                          // 화면부터 반영
+    const { error } = await saveRecurData();     // 서버 저장 실패면 되돌린다
+    if (error) { recurData = backup; localStorage.setItem('recur_data', JSON.stringify(recurData)); renderRecurTable(); }
+    else showToast('삭제됐습니다.', 'red');
     return;
   }
   // 수정
