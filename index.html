@@ -582,6 +582,7 @@
   <div class="tab" data-tab="reporting">리포팅</div>
   <div class="tab" data-tab="corp-card">법인카드</div>
   <div class="tab" data-tab="loan">대출 <span style="font-size:10px;color:var(--amber);font-weight:700">NEW</span></div>
+  <div class="tab" data-tab="check">수표 <span style="font-size:10px;color:var(--amber);font-weight:700">NEW</span></div>
   <div class="tab" data-tab="ar">매출채권(AR)</div>
   <div class="tab" data-tab="cashflow">입출금 내역</div>
   <div class="tab" data-tab="recurring">반복 거래</div>
@@ -648,6 +649,7 @@
 
   <!-- 은행 실잔액 대조 (P0 잔액 정합성) — bank_snapshot 있을 때만 렌더 -->
   <div id="bank-recon"></div>
+  <div id="check-dash-warn"></div>
 
   <!-- 예정 지출/입금 알림 -->
   <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
@@ -1586,6 +1588,112 @@
     </div>
   </div>
 </div><!-- /panel-loan -->
+
+<!-- ======== CHECK (수표 발행 대장) TAB ========
+     수표는 '지급수단'이라 은행에는 발행 사실만 남고 수취인·목적이 전혀 안 남는다.
+     2026-07 실측: 발행 14.91억 = 그달 대외 출금의 11.2%. 은행 데이터로는 어떤 자동화로도
+     복원할 수 없는 구간이라, 사람이 기재하는 대장이 유일한 경로다.
+     저장은 cat_data(check_data) — 대출 탭과 같은 자체 완결형 모듈. -->
+<div class="panel" id="panel-check">
+  <style>
+    #panel-check .chk-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+    #panel-check .chk-head h2{margin:0;font-size:18px;color:var(--text);}
+    #panel-check .chk-head .sub{font-size:12px;color:var(--text2);}
+    #panel-check .chk-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+    #panel-check .chk-sc{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:13px 10px;text-align:center;}
+    #panel-check .chk-sc .l{font-size:11.5px;color:var(--text2);font-weight:600;}
+    #panel-check .chk-sc .v{font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.02em;line-height:1.1;color:var(--text);}
+    #panel-check .chk-sc .s{font-size:10.5px;color:var(--text3);margin-top:2px;}
+    #panel-check .chk-sc.hot{background:var(--red2);border-color:transparent;}
+    #panel-check .chk-sc.hot .l,#panel-check .chk-sc.hot .v{color:var(--red);}
+    #panel-check .chk-sc.ok{background:var(--green2);border-color:transparent;}
+    #panel-check .chk-sc.ok .l,#panel-check .chk-sc.ok .v{color:var(--green);}
+    #panel-check .chk-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0;}
+    #panel-check .chk-btn{font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;}
+    #panel-check .chk-btn.primary{background:var(--blue);color:#fff;border-color:transparent;}
+    #panel-check .chk-btn.green{color:var(--green);border-color:var(--green);}
+    #panel-check .chk-toolbar select,#panel-check .chk-toolbar input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;}
+    #panel-check .chk-count{margin-left:auto;font-size:12.5px;color:var(--text2);}
+    #panel-check .chk-cand{border:1px solid var(--amber);background:var(--amber2);border-radius:12px;padding:14px 16px;margin-bottom:16px;}
+    #panel-check .chk-cand h3{margin:0 0 4px;font-size:14px;color:var(--amber);}
+    #panel-check .chk-cand p{margin:0 0 11px;font-size:12px;color:var(--text2);line-height:1.55;}
+    #panel-check .chk-cand-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
+    #panel-check .chk-cand-row .d{color:var(--text2);font-family:ui-monospace,Menlo,Consolas,monospace;}
+    #panel-check .chk-cand-row .a{font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;}
+    #panel-check .chk-cand-row .t{color:var(--text2);flex:1;min-width:120px;}
+    #panel-check .chk-kind{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--card);color:var(--text2);}
+    #panel-check .chk-kind.sure{background:var(--red2);color:var(--red);}
+    #panel-check .chk-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card);}
+    #panel-check table.chk-t{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+    #panel-check table.chk-t th{background:var(--bg3);color:var(--text2);font-size:11.5px;font-weight:700;text-align:left;padding:10px 12px;white-space:nowrap;border-bottom:1px solid var(--border);}
+    #panel-check table.chk-t td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+    #panel-check table.chk-t tr:last-child td{border-bottom:none;}
+    #panel-check table.chk-t td.num{text-align:right;font-weight:700;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;}
+    #panel-check table.chk-t .empty{text-align:center;color:var(--text3);padding:26px;}
+    #panel-check .miss{color:var(--red);font-weight:700;}
+    #panel-check .row-btn{font-size:12px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;margin-left:4px;}
+    #panel-check .row-btn.del{color:var(--red);border-color:var(--red2);}
+    #panel-check .st{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;}
+    #panel-check .st.issued{background:var(--amber2);color:var(--amber);}
+    #panel-check .st.cleared{background:var(--green2);color:var(--green);}
+    #panel-check .st.void{background:var(--bg3);color:var(--text3);}
+    #panel-check .chk-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;}
+    #panel-check .chk-modal.hidden{display:none;}
+    #panel-check .chk-modal-box{background:var(--card);border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.25);}
+    #panel-check .chk-modal-box h3{margin:0 0 4px;font-size:17px;color:var(--text);}
+    #panel-check .chk-modal-box .hint{margin:0 0 16px;font-size:12px;color:var(--text2);line-height:1.55;}
+    #panel-check .chk-form{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+    #panel-check .chk-form label{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:4px;}
+    #panel-check .chk-form label.wide{grid-column:1/-1;}
+    #panel-check .chk-form label.star::after{content:" ★";color:var(--blue);}
+    #panel-check .chk-form input,#panel-check .chk-form select,#panel-check .chk-form textarea{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:13px;width:100%;font-family:inherit;}
+    #panel-check .chk-modal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+  </style>
+
+  <div class="chk-head">
+    <h2>🧾 수표 발행 대장</h2>
+    <span class="sub">은행에는 발행 사실만 남습니다 — 수취인·목적은 여기에만 남습니다 · cat_data(check_data)</span>
+  </div>
+
+  <div class="chk-sum" id="chk-summary"></div>
+
+  <div class="chk-toolbar">
+    <button class="chk-btn primary" id="chk-add-btn">+ 수표 추가</button>
+    <button class="chk-btn green" id="chk-export-btn">엑셀 내보내기</button>
+    <select id="chk-filter-status">
+      <option value="">상태 전체</option>
+      <option value="발행">발행</option>
+      <option value="결제완료">결제완료</option>
+      <option value="폐기">폐기</option>
+    </select>
+    <select id="chk-filter-fill">
+      <option value="">기재 전체</option>
+      <option value="miss">미기재만</option>
+      <option value="done">기재완료만</option>
+    </select>
+    <input type="month" id="chk-filter-month" style="width:140px">
+    <button class="chk-btn" id="chk-filter-reset" style="color:var(--text2)">필터 초기화</button>
+    <span class="chk-count" id="chk-count"></span>
+  </div>
+
+  <div id="chk-cand-slot"></div>
+
+  <div class="chk-table-wrap">
+    <table class="chk-t" id="chk-table"><thead></thead><tbody></tbody></table>
+  </div>
+
+  <div class="chk-modal hidden" id="chk-modal">
+    <div class="chk-modal-box">
+      <h3 id="chk-modal-title">수표 기재</h3>
+      <p class="hint" id="chk-modal-hint"></p>
+      <div class="chk-form" id="chk-form"></div>
+      <div class="chk-modal-act">
+        <button class="chk-btn" id="chk-modal-cancel">취소</button>
+        <button class="chk-btn primary" id="chk-modal-save">저장</button>
+      </div>
+    </div>
+  </div>
+</div><!-- /panel-check -->
 
 <!-- ======== CORP CARD TAB ======== -->
 <div class="panel" id="panel-corp-card">
@@ -4568,6 +4676,7 @@ function renderKPIs() {
 
   try { renderFreshness(); } catch (e) { console.warn('[freshness]', e); }    // 데이터 신선도 배지
   try { renderBankRecon(); } catch (e) { console.warn('[bank-recon]', e); }   // 은행 실잔액 대조
+  try { renderCheckWarn(); } catch (e) { console.warn('[check-warn]', e); }   // 수표 미기재 경고
 }
 
 // Supabase 로드 전 KPI 카드 로딩 상태 표시
@@ -9965,6 +10074,292 @@ function exportLoanExcel(){
   const dashLink=document.getElementById('loan-dash-link'); if(dashLink) dashLink.addEventListener('click',()=>{ const t=document.querySelector('.tab[data-tab="loan"]'); if(t) t.click(); });
 })();
 
+/* ===================================================================
+   수표 발행 대장 (check) — 자체 완결형 모듈 (cat_data blob 'check_data')
+   ⚠ 왜 필요한가: 수표는 지급수단이라 은행 거래내역에 '자기앞수표발행' 또는
+     아예 빈 적요로만 남고 **수취인·목적이 전혀 남지 않는다**. 2026-07 실측으로
+     발행액이 그달 대외 출금의 11.2%(14.91억)였고, 은행이 주는 데이터만으로는
+     어떤 자동화로도 상대를 복원할 수 없다. 사람이 기재하는 대장이 유일한 경로.
+   ⚠ 자동 감지의 한계: 신한은 적요에 '자기앞수표발행'이 찍혀 확실히 잡히지만,
+     국민·기업은 적요가 비어 있어 수표인지 알 수 없다. 그래서 감지는 두 종류로
+     나눈다 — '수표'(확실) / '미상'(빈 적요 대형 출금, 사람이 판정).
+   =================================================================== */
+const CHK_BIG    = 10000000;   // 빈 적요 출금을 '정체 불명'으로 볼 임계 (1천만)
+const CHK_STATES = ['발행', '결제완료', '폐기'];
+let checkData   = [];
+let _chkLoaded  = false;
+let _chkLoading = false;
+let _chkEditIdx = null;        // 대장 수정 중인 인덱스 (null = 신규)
+let _chkPreset  = null;        // 후보에서 넘어온 초기값
+
+function chkWon(n){ return Math.round(Number(n)||0).toLocaleString('ko-KR'); }
+function chkEok(n){ return (Number(n||0)/1e8).toFixed(2); }
+/* cf 행과의 연결키 — clobe_id(클로브 transactionId)가 가장 안정적이고,
+   수기 입력 행은 _id 를 쓴다(_id 는 부여 후 저장되므로 로드 간 유지된다). */
+function chkLinkKey(r){ return r && r.clobe_id ? 'c:' + r.clobe_id : (r && r._id ? 'i:' + r._id : ''); }
+function chkIsFilled(c){ return !!(String(c.payee||'').trim() && String(c.purpose||'').trim()); }
+
+async function loadCheckData(){
+  if(_chkLoading) return; _chkLoading = true;
+  try{ const ls = JSON.parse(localStorage.getItem('check_data')||'null'); if(Array.isArray(ls)) checkData = ls; }catch(e){}
+  try{
+    if(typeof _supa!=='undefined' && _supa){
+      const { data, error } = await _supa.from('cat_data').select('data').eq('key','check_data').maybeSingle();
+      if(!error && data && Array.isArray(data.data)) checkData = data.data;
+    }
+  }catch(e){ console.warn('[check] 로드 실패', e); }
+  _chkLoaded = true; _chkLoading = false;
+  renderCheckTab();
+  renderCheckWarn();
+}
+
+async function saveCheckData(){
+  try{
+    if(typeof _supa!=='undefined' && _supa && (typeof _isInitialized==='undefined' || _isInitialized)){
+      const { error } = await _supa.from('cat_data').upsert([{ key:'check_data', data:checkData }], { onConflict:'key' });
+      if(error) throw error;
+    }
+    localStorage.setItem('check_data', JSON.stringify(checkData));
+    return { error:null };
+  }catch(e){
+    localStorage.setItem('check_data', JSON.stringify(checkData)); // 오프라인 보존
+    console.warn('[check] 저장 실패', e);
+    return { error:e };
+  }
+}
+
+/* 입출금 내역에서 수표(확실) / 정체 불명 대형 출금(미상) 후보를 뽑는다.
+   이미 대장에 등록된 건은 제외 — 남는 것이 곧 '기재해야 할 일감'이다. */
+function detectCheckCandidates(){
+  const known = new Set(checkData.map(c => c.link).filter(Boolean));
+  const out = [];
+  for (const r of (cfData || [])){
+    if (r.status !== '실제 지출') continue;
+    const amt  = Number(r.out) || 0;
+    if (amt <= 0) continue;
+    const desc = String(r.desc || '').trim();
+    const sure = /수표/.test(desc);
+    const dim  = (!desc || desc === '(거래내용 없음)') && amt >= CHK_BIG;
+    if (!sure && !dim) continue;
+    const link = chkLinkKey(r);
+    if (!link || known.has(link)) continue;
+    out.push({ link, date: r.date || '', amount: amt, desc: desc || '(적요 없음)', kind: sure ? '수표' : '미상' });
+  }
+  return out.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.amount - a.amount));
+}
+
+function checkSummary(){
+  const cand   = detectCheckCandidates();
+  const unfill = checkData.filter(c => !chkIsFilled(c));
+  const ym     = String(refDate || todayKST()).slice(0,7);
+  const month  = checkData.filter(c => String(c.issue_date||'').slice(0,7) === ym);
+  const live   = checkData.filter(c => c.status !== '폐기');
+  return {
+    candN: cand.length, candSum: cand.reduce((s,c)=>s+c.amount,0),
+    unfillN: unfill.length, unfillSum: unfill.reduce((s,c)=>s+(Number(c.amount)||0),0),
+    monthN: month.length, monthSum: month.reduce((s,c)=>s+(Number(c.amount)||0),0),
+    allN: live.length, allSum: live.reduce((s,c)=>s+(Number(c.amount)||0),0),
+    ym, cand,
+  };
+}
+
+function getCheckFiltered(){
+  const st = document.getElementById('chk-filter-status')?.value || '';
+  const fl = document.getElementById('chk-filter-fill')?.value   || '';
+  const mo = document.getElementById('chk-filter-month')?.value  || '';
+  return checkData.filter(c => {
+    if (st && (c.status||'발행') !== st) return false;
+    if (fl === 'miss' && chkIsFilled(c)) return false;
+    if (fl === 'done' && !chkIsFilled(c)) return false;
+    if (mo && String(c.issue_date||'').slice(0,7) !== mo) return false;
+    return true;
+  }).sort((a,b) => (a.issue_date < b.issue_date ? 1 : a.issue_date > b.issue_date ? -1 : 0));
+}
+
+function renderCheckTab(){
+  const wrap = document.getElementById('chk-table'); if(!wrap) return;
+  if(!_chkLoaded){ loadCheckData(); return; }   // 지연 로드
+  const s = checkSummary();
+
+  const card = (cls,l,v,sub) => `<div class="chk-sc ${cls}"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub||''}</div></div>`;
+  document.getElementById('chk-summary').innerHTML =
+    card(s.candN ? 'hot' : 'ok', '미등록 후보', s.candN + '건', s.candN ? chkEok(s.candSum)+'억 · 대장에 없음' : '모두 등록됨') +
+    card(s.unfillN ? 'hot' : 'ok', '수취인·목적 미기재', s.unfillN + '건', s.unfillN ? chkEok(s.unfillSum)+'억' : '모두 기재됨') +
+    card('', '당월 발행', chkEok(s.monthSum)+'억', `${s.ym} · ${s.monthN}건`) +
+    card('', '누적 발행(폐기 제외)', chkEok(s.allSum)+'억', s.allN + '건');
+
+  // 후보 — 기재해야 할 일감
+  const slot = document.getElementById('chk-cand-slot');
+  slot.innerHTML = !s.candN ? '' :
+    `<div class="chk-cand">
+       <h3>⚠ 대장에 없는 출금 ${s.candN}건 · ${chkWon(s.candSum)}원</h3>
+       <p>입출금 내역에서 자동으로 찾은 건입니다. <b>수표</b>는 적요에 '수표'가 찍힌 확실한 건,
+          <b>미상</b>은 적요가 비어 있고 ${chkWon(CHK_BIG)}원을 넘는 출금입니다(수표가 아닐 수도 있습니다).
+          기재하면 대장으로 옮겨지고 이 목록에서 사라집니다.</p>
+       ${s.cand.map(c => `<div class="chk-cand-row">
+          <span class="chk-kind ${c.kind==='수표'?'sure':''}">${c.kind}</span>
+          <span class="d">${c.date}</span>
+          <span class="a">${chkWon(c.amount)}</span>
+          <span class="t">${escapeHtml(c.desc)}</span>
+          <button class="chk-btn" data-cand="${escapeHtml(c.link)}">기재하기</button>
+        </div>`).join('')}
+     </div>`;
+  slot.querySelectorAll('[data-cand]').forEach(b => b.addEventListener('click', () => {
+    const c = s.cand.find(x => x.link === b.dataset.cand);
+    if (c) openCheckModal(null, c);
+  }));
+
+  // 대장
+  const rows = getCheckFiltered();
+  document.getElementById('chk-count').textContent =
+    `${rows.length}건 / 전체 ${checkData.length}건 · 합계 ${chkWon(rows.reduce((t,c)=>t+(Number(c.amount)||0),0))}원`;
+  wrap.querySelector('thead').innerHTML =
+    '<tr><th>발행일</th><th>발행 계좌</th><th style="text-align:right">금액</th><th>수취인</th><th>목적</th><th>대응 세금계산서</th><th>상태</th><th>비고</th><th style="text-align:right">관리</th></tr>';
+  wrap.querySelector('tbody').innerHTML = !rows.length
+    ? `<tr><td colspan="9" class="empty">${checkData.length ? '조건에 맞는 수표가 없습니다.' : '등록된 수표가 없습니다. 위 후보에서 기재하거나 + 수표 추가로 등록하세요.'}</td></tr>`
+    : rows.map(c => {
+        const i  = checkData.indexOf(c);
+        const st = c.status || '발행';
+        const cls = st === '결제완료' ? 'cleared' : st === '폐기' ? 'void' : 'issued';
+        const mk = v => v ? escapeHtml(v) : '<span class="miss">미기재</span>';
+        return `<tr>
+          <td>${escapeHtml(c.issue_date||'')}</td>
+          <td>${escapeHtml(c.bank||'')}</td>
+          <td class="num">${chkWon(c.amount)}</td>
+          <td>${mk(c.payee)}</td>
+          <td>${mk(c.purpose)}</td>
+          <td>${c.invoice ? escapeHtml(c.invoice) : '<span style="color:var(--text3)">—</span>'}</td>
+          <td><span class="st ${cls}">${st}</span></td>
+          <td style="color:var(--text2);font-size:12px">${escapeHtml(c.memo||'')}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="row-btn" onclick="openCheckModal(${i})">수정</button>
+            <button class="row-btn del" onclick="deleteCheck(${i})">삭제</button></td>
+        </tr>`;
+      }).join('');
+  renderCheckWarn();
+}
+
+/* 대시보드 경고 — 대장은 안 열어보면 그만이라, 미기재가 있으면 첫 화면에서 알린다 */
+function renderCheckWarn(){
+  const el = document.getElementById('check-dash-warn'); if(!el) return;
+  if(!_chkLoaded){ el.innerHTML = ''; loadCheckData(); return; }  // 지연 로드 (완료 시 재호출)
+  const s = checkSummary();
+  const n = s.candN + s.unfillN, amt = s.candSum + s.unfillSum;
+  if(!n){ el.innerHTML = ''; return; }
+  el.innerHTML =
+    `<div class="chart-box" style="margin-bottom:20px;border-left:3px solid var(--amber);background:var(--amber2);cursor:pointer" id="chk-warn-box">
+       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+         <span style="font-size:13px;font-weight:700;color:var(--amber)">🧾 수취인·목적이 안 적힌 출금 ${n}건 · ${chkWon(amt)}원</span>
+         <span style="font-size:11.5px;color:var(--text2)">
+           ${s.candN ? `대장 미등록 ${s.candN}건` : ''}${s.candN && s.unfillN ? ' · ' : ''}${s.unfillN ? `기재 미완 ${s.unfillN}건` : ''}
+           &nbsp;·&nbsp; 수표는 은행 데이터에 상대가 남지 않습니다 — 지금 적지 않으면 복원할 수 없습니다.
+         </span>
+         <span style="margin-left:auto;font-size:12px;color:var(--amber);font-weight:700">수표 대장 열기 →</span>
+       </div>
+     </div>`;
+  document.getElementById('chk-warn-box')?.addEventListener('click', () => activateTab('check'));
+}
+
+const CHK_FIELDS = [
+  { k:'issue_date', label:'발행일',        type:'date',   star:true },
+  { k:'bank',       label:'발행 계좌',      type:'text' },
+  { k:'amount',     label:'금액(원)',       type:'num',    star:true },
+  { k:'payee',      label:'수취인',         type:'text',   star:true },
+  { k:'purpose',    label:'목적·사유',      type:'text',   star:true, wide:true },
+  { k:'invoice',    label:'대응 세금계산서', type:'text',   wide:true },
+  { k:'status',     label:'상태',           type:'select', opts:CHK_STATES },
+  { k:'memo',       label:'비고',           type:'text' },
+];
+
+function openCheckModal(idx, cand){
+  _chkEditIdx = (idx === undefined || idx === null) ? null : idx;
+  _chkPreset  = cand || null;
+  const C = _chkEditIdx != null ? checkData[_chkEditIdx] : (cand ? {
+    issue_date: cand.date, amount: cand.amount, status: '발행',
+    memo: cand.kind === '미상' ? '적요 없는 대형 출금 — 수표 여부 확인 필요' : '',
+  } : { status:'발행' });
+  document.getElementById('chk-modal-title').textContent = _chkEditIdx != null ? '수표 수정' : '수표 기재';
+  document.getElementById('chk-modal-hint').innerHTML = cand
+    ? `입출금 <b>${escapeHtml(cand.date)} · ${chkWon(cand.amount)}원</b>(${escapeHtml(cand.desc)}) 건을 대장에 옮깁니다. <b>수취인과 목적</b>이 이 대장의 존재 이유입니다.`
+    : '은행에는 남지 않는 <b>수취인과 목적</b>을 반드시 적어 주세요.';
+  document.getElementById('chk-form').innerHTML = CHK_FIELDS.map(f => {
+    const v = C[f.k] ?? '';
+    const cls = (f.star?'star ':'') + (f.wide?'wide':'');
+    const inp = f.type === 'select'
+      ? `<select id="chkf-${f.k}">${f.opts.map(o=>`<option value="${o}"${o===(v||'발행')?' selected':''}>${o}</option>`).join('')}</select>`
+      : `<input id="chkf-${f.k}" type="${f.type==='num'?'number':f.type}" value="${escapeHtml(String(v))}"${f.type==='num'?' step="1"':''}>`;
+    return `<label class="${cls}">${f.label}${inp}</label>`;
+  }).join('');
+  document.getElementById('chk-modal').classList.remove('hidden');
+}
+
+async function saveCheckEntry(){
+  const obj = {};
+  for (const f of CHK_FIELDS){
+    const el = document.getElementById('chkf-' + f.k);
+    obj[f.k] = f.type === 'num' ? (Number(el.value)||0) : String(el.value||'').trim();
+  }
+  if(!obj.issue_date) return alert('발행일을 입력해 주세요.');
+  if(!(obj.amount > 0)) return alert('금액은 0보다 커야 합니다.');
+  if(!obj.payee || !obj.purpose)
+    if(!confirm('수취인 또는 목적이 비었습니다.\n이 대장의 목적이 바로 그 둘을 남기는 것입니다.\n\n그래도 저장할까요? (나중에 미기재로 표시됩니다)')) return;
+
+  const backup = structuredClone(checkData);
+  if(_chkEditIdx != null){
+    checkData[_chkEditIdx] = { ...checkData[_chkEditIdx], ...obj };
+  } else {
+    checkData.push({
+      _id: 'chk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7),
+      link: _chkPreset ? _chkPreset.link : '',
+      ...obj,
+    });
+  }
+  const { error } = await saveCheckData();
+  if(error){ checkData = backup; alert('저장 실패: ' + (error.message||error)); }
+  else { try{ logAudit('check_save', `수표 ${_chkEditIdx!=null?'수정':'등록'}: ${obj.issue_date} ${chkWon(obj.amount)}원 ${obj.payee||'(수취인 미기재)'}`); }catch(e){} }
+  document.getElementById('chk-modal').classList.add('hidden');
+  _chkEditIdx = null; _chkPreset = null;
+  renderCheckTab();
+}
+
+async function deleteCheck(idx){
+  const c = checkData[idx]; if(!c) return;
+  if(!confirm(`${c.issue_date} · ${chkWon(c.amount)}원 · ${c.payee||'(수취인 미기재)'}\n\n삭제할까요?\n연결된 입출금 건은 다시 '미등록 후보'로 돌아옵니다.`)) return;
+  const backup = structuredClone(checkData);
+  checkData.splice(idx,1);
+  const { error } = await saveCheckData();
+  if(error){ checkData = backup; alert('삭제 실패: ' + (error.message||error)); }
+  renderCheckTab();
+}
+
+function exportChecks(){
+  const rows = getCheckFiltered();
+  if(!rows.length) return showToast('내보낼 수표가 없습니다.', 'red');
+  const header = ['발행일','발행 계좌','금액','수취인','목적·사유','대응 세금계산서','상태','비고','기재상태'];
+  const aoa = [header, ...rows.map(c => [
+    c.issue_date||'', c.bank||'', Number(c.amount)||0, c.payee||'', c.purpose||'',
+    c.invoice||'', c.status||'발행', c.memo||'', chkIsFilled(c) ? '완료' : '미기재',
+  ])];
+  aoa.push([], ['합계','', rows.reduce((t,c)=>t+(Number(c.amount)||0),0), '','','','','','']);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:12},{wch:18},{wch:15},{wch:18},{wch:30},{wch:22},{wch:10},{wch:22},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '수표발행대장');
+  XLSX.writeFile(wb, `수표발행대장_${rows.length}건_${todayKST()}.xlsx`);
+  showToast(`✅ ${rows.length}건 내보내기 완료`, 'green');
+}
+
+document.getElementById('chk-add-btn')?.addEventListener('click', () => openCheckModal(null, null));
+document.getElementById('chk-export-btn')?.addEventListener('click', exportChecks);
+document.getElementById('chk-modal-cancel')?.addEventListener('click', () => { document.getElementById('chk-modal').classList.add('hidden'); _chkEditIdx=null; _chkPreset=null; });
+document.getElementById('chk-modal-save')?.addEventListener('click', saveCheckEntry);
+['chk-filter-status','chk-filter-fill','chk-filter-month'].forEach(id =>
+  document.getElementById(id)?.addEventListener('change', renderCheckTab));
+document.getElementById('chk-filter-reset')?.addEventListener('click', () => {
+  ['chk-filter-status','chk-filter-fill','chk-filter-month'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  renderCheckTab();
+});
+
 /* ===== 탭 전환 · 브라우저 히스토리(뒤로가기) 연동 =====
  * 탭 클릭 / 좌상단 로고 / 뒤로가기가 모두 activateTab()을 거친다.
  *  - push=false 는 popstate(뒤로가기) 전용 — 히스토리를 다시 쌓지 않기 위함
@@ -9991,6 +10386,7 @@ function activateTab(name, { push = true } = {}) {
   if (name === 'reporting')      renderActiveReportingSubTab();
   if (name === 'corp-card')      renderCorporateCardTab();
   if (name === 'loan')           renderLoanTab();
+  if (name === 'check')          renderCheckTab();
   if (name === 'category')       setTimeout(() => renderCategoryTab(), 0);
   if (name === 'recurring')      renderRecurringTab();
   if (name === 'admin')          renderAuditLog();
