@@ -8299,6 +8299,19 @@ function renderWeeklyReport() {
   const pwNet = pwIn - pwOut;
   const wow   = wNet - pwNet;
 
+  // 대분류별 순현금(입금−출금) — P1-8 퀵윈. renderDonutWeeklyChart()의 대분류 집계(지출만)와
+  // 같은 wCF·isInterAccount 기준을 쓰되, 입금도 더해 순현금으로 계산한다.
+  const bigCatNetMap = {};
+  wCF.forEach(r => {
+    if (isInterAccount(r) || !r.big_cat) return;
+    if (r.status === '실제 입금')      bigCatNetMap[r.big_cat] = (bigCatNetMap[r.big_cat] || 0) + (r.in  || 0);
+    else if (r.status === '실제 지출') bigCatNetMap[r.big_cat] = (bigCatNetMap[r.big_cat] || 0) - (r.out || 0);
+  });
+  const bigCatNetTop = Object.entries(bigCatNetMap)
+    .filter(([, v]) => v !== 0)
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .slice(0, 4);
+
   // 기말 잔액 계산 (INIT_CASH + 누적 실제 입출금)
   computeFxAdj();          // 주간 리포트 기말잔액도 현금 KPI 와 같은 기준으로 맞춘다
   let pwEndCash = INIT_CASH + FX_ADJ, wkEndCash = INIT_CASH + FX_ADJ;
@@ -8422,7 +8435,7 @@ function renderWeeklyReport() {
   // ── 주간 입출금 및 매출채권 요약 ─────────────────────────
   // ── 주간 요약 에디터 ──────────────────────────────────
   renderWeeklySummaryEditor({
-    wStart, wEnd, wIn, wOut, wNet,
+    wStart, wEnd, wIn, wOut, wNet, bigCatNetTop,
     wNewARCount: wNewAR.length, wColCount: wColCF.length,
     delayedTotal, delayedNormal, delayedDanger, delayedNrRate, delayedDrRate,
   });
@@ -8528,13 +8541,18 @@ function formatWeeklySummaryUpdatedAt(iso) {
   } catch { return '마지막 수정일: —'; }
 }
 function buildDefaultWeeklySummaryText(ctx) {
+  // P1-8: 대분류별 순현금(입금−출금) — 값이 없는 주(전부 0)는 문장 생략
+  const bigCatLine = ctx.bigCatNetTop && ctx.bigCatNetTop.length
+    ? `대분류별 순현금은 ${ctx.bigCatNetTop.map(([cat, v]) => `${cat} ${v >= 0 ? '+' : ''}${fmt(v)}원`).join(' · ')}입니다.`
+    : null;
   return [
     `이번 주(${ctx.wStart} ~ ${ctx.wEnd})는 입금 ${fmt(ctx.wIn)}원, 출금 ${fmt(ctx.wOut)}원으로 순현금은 ${ctx.wNet >= 0 ? '+' : ''}${fmt(ctx.wNet)}원입니다.`,
+    bigCatLine,
     `매출채권은 신규 ${ctx.wNewARCount}건, 회수 ${ctx.wColCount}건이며, 지연/미정 채권은 총 ${ctx.delayedTotal}건입니다.`,
     ctx.delayedDrRate >= 50
       ? `위험 등급 채권 비중이 ${ctx.delayedDrRate}%로 높아 회수 일정 점검이 필요합니다.`
       : `위험 등급 채권 비중은 ${ctx.delayedDrRate}%입니다.`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 function renderWeeklySummaryEditor(ctx) {
   _wkSummaryCtx = ctx;
