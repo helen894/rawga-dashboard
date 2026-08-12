@@ -1067,6 +1067,7 @@
       #rpt-panel-daily .dl-risk:last-child{border-bottom:0;}
       #rpt-panel-daily .dl-risk .dot{flex:none;width:6px;height:6px;border-radius:50%;margin-top:7px;}
       #rpt-panel-daily .dl-hint{font-size:11.5px;color:var(--text3);margin:-4px 0 10px;line-height:1.55;}
+      #rpt-panel-daily select.dl-bk{width:auto;min-width:104px;font-size:11.5px;padding:3px 6px;color:var(--text2);}
     </style>
 
     <div class="dl-nav">
@@ -1081,6 +1082,7 @@
     <div class="dl-tool">
       <label>안전선 <input type="number" id="dlrpt-floor" step="100000000" placeholder="예: 1500000000"></label>
       <label>승인 임계 <input type="number" id="dlrpt-thr" step="1000000" placeholder="10000000"></label>
+      <label title="큰 건은 하루이틀 전에 미리 결재받을 수 있게 앞날까지 포함합니다">보고 범위 오늘 +<input type="number" id="dlrpt-days" min="0" max="14" step="1" style="width:62px" placeholder="1">일</label>
       <button class="btn sm" id="dlrpt-refresh">다시 계산</button>
       <button class="btn sm" id="dlrpt-copy" style="color:var(--green);border-color:var(--green)">📋 메일용 텍스트 복사</button>
       <span id="dlrpt-saved" style="font-size:11.5px;color:var(--text3);margin-left:auto"></span>
@@ -9320,6 +9322,26 @@ function dlShift(base, days){
 function dlKey(r){ return r.clobe_id ? 'c:'+r.clobe_id : 'i:'+r._id; }
 function dlFloor(){ const v = Number(document.getElementById('dlrpt-floor')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_floor')) || 1500000000; }
 function dlThr(){ const v = Number(document.getElementById('dlrpt-thr')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_thr')) || 10000000; }
+function dlDays(){
+  const el = document.getElementById('dlrpt-days');
+  const v = el && el.value !== '' ? Number(el.value) : Number(localStorage.getItem('dl_days'));
+  return Number.isFinite(v) && v >= 0 ? Math.min(v, 14) : 1;   // 기본 오늘+1일
+}
+/* 어느 블록에 놓을지 — 임계는 기본값일 뿐이고 사람이 건별로 덮어쓴다.
+   'skip'(이번 보고 제외)은 표시만 빼고 **잔액에서는 뺀다** — 돈은 나가기 때문. */
+const DL_BUCKETS = { '': '자동', approve: '승인 요청', notify: '통보', skip: '보고 제외' };
+function dlBucket(r, note, thr){
+  const ov = note.items[dlKey(r)] && note.items[dlKey(r)].bucket;
+  if (ov === 'approve' || ov === 'notify' || ov === 'skip') return ov;
+  return (Number(r.out) || 0) >= thr ? 'approve' : 'notify';
+}
+function dlBucketSel(r, note, thr){
+  const cur = (note.items[dlKey(r)] && note.items[dlKey(r)].bucket) || '';
+  const auto = (Number(r.out)||0) >= thr ? '승인 요청' : '통보';
+  return `<select data-dk="${dlKey(r)}" data-df="bucket" class="dl-bk" title="임계 기준 자동: ${auto}">` +
+    Object.entries(DL_BUCKETS).map(([v,l]) =>
+      `<option value="${v}"${v===cur?' selected':''}>${v===''?`자동(${auto})`:l}</option>`).join('') + `</select>`;
+}
 
 async function loadDailyNotes(){
   try{ const ls = JSON.parse(localStorage.getItem('daily_notes')||'null'); if(ls && typeof ls==='object') dailyNotes = ls; }catch(e){}
@@ -9353,26 +9375,33 @@ function dlNote(d){ if(!dailyNotes[d]) dailyNotes[d] = { summary:'', items:{} };
 
 /* 보고서 데이터 산출 — 화면·복사 텍스트가 같은 값을 쓰도록 한 곳에서 만든다 */
 function buildDailyReport(){
-  const d = dlD(), thr = dlThr(), floor = dlFloor();
+  const d = dlD(), thr = dlThr(), floor = dlFloor(), days = dlDays();
+  const upto = dlShift(d, days);          // 보고 범위 끝 — 큰 건을 미리 결재받기 위해 앞날까지 본다
+  const note = dlNote(d);
   const cash = Number(bankSnapshot && bankSnapshot.totalCash) || 0;
   const rows = cfData || [];
 
   const doneIn  = rows.filter(r => r.status==='실제 입금' && r.date===d);
   const doneOut = rows.filter(r => r.status==='실제 지출' && r.date===d);
-  const planIn  = rows.filter(r => r.status==='입금 예정' && r.date<=d);
-  const planOut = rows.filter(r => r.status==='지출 예정' && r.date<=d);
-  const approve = planOut.filter(r => (Number(r.out)||0) >= thr).sort((a,b)=>(Number(b.out)||0)-(Number(a.out)||0));
-  const notify  = planOut.filter(r => (Number(r.out)||0) <  thr);
+  const planIn  = rows.filter(r => r.status==='입금 예정' && r.date<=upto);
+  const planOut = rows.filter(r => r.status==='지출 예정' && r.date<=upto);  // 연체(date<d)도 계속 포함
+  const byDate = (a,b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (Number(b.out)||0)-(Number(a.out)||0));
+  const approve = planOut.filter(r => dlBucket(r,note,thr)==='approve').sort(byDate);
+  const notify  = planOut.filter(r => dlBucket(r,note,thr)==='notify').sort(byDate);
+  const skipped = planOut.filter(r => dlBucket(r,note,thr)==='skip').sort(byDate);
 
   const sum = a => a.reduce((s,r)=>s+(Number(r.in)||0)+(Number(r.out)||0),0);
   const inPlan = planIn.reduce((s,r)=>s+(Number(r.in)||0),0);
   const notifySum  = notify.reduce((s,r)=>s+(Number(r.out)||0),0);
   const approveSum = approve.reduce((s,r)=>s+(Number(r.out)||0),0);
-  const after = cash + inPlan - notifySum - approveSum;
+  const skipSum    = skipped.reduce((s,r)=>s+(Number(r.out)||0),0);
+  // 보고에서 뺀 건도 돈은 나가므로 잔액에서는 뺀다
+  const after = cash + inPlan - notifySum - approveSum - skipSum;
 
   // 향후 7일 잔액 궤적 (확정·예정 모두 반영) — 최저점과 그 날짜
+  // 보고 범위(upto)까지는 위에서 이미 반영했으므로 그 다음날부터 이어 붙인다
   let run = after, low = { date:d, bal:after };
-  for(let i=1;i<=7;i++){
+  for(let i=days+1;i<=7;i++){
     const day = dlShift(d,i);
     for(const r of rows){
       if(r.date!==day) continue;
@@ -9399,8 +9428,8 @@ function buildDailyReport(){
     if(_loanLoaded){ const s = loanSummary(); if(s.immN) risks.push({ lv:'info', t:`90일 내 대출 만기 ${s.immN}건 · ${dlEok(s.immSum)}억 (가장 이른 만기 ${s.nextDue||'—'})` }); }
   }catch(e){}
 
-  return { d, thr, floor, cash, doneIn, doneOut, planIn, approve, notify,
-           inPlan, notifySum, approveSum, after, low, risks, sum };
+  return { d, thr, floor, days, upto, note, cash, doneIn, doneOut, planIn, approve, notify, skipped,
+           inPlan, notifySum, approveSum, skipSum, after, low, risks, sum };
 }
 
 function renderDailyReport(){
@@ -9410,31 +9439,36 @@ function renderDailyReport(){
 
   const fl = document.getElementById('dlrpt-floor'); if(fl && !fl.value) fl.value = R.floor;
   const th = document.getElementById('dlrpt-thr');   if(th && !th.value) th.value = R.thr;
+  const dy = document.getElementById('dlrpt-days');  if(dy && dy.value === '') dy.value = R.days;
   const wd = ['일','월','화','수','목','금','토'][new Date(d+'T00:00:00').getDay()];
   document.getElementById('dlrpt-title').textContent = `${d}(${wd}) 자금 보고`;
   document.getElementById('dlrpt-sub').textContent =
-    `승인 요청 ${R.approve.length}건 · ${dlWon(R.approveSum)}원 · 수신 대표님 / 참조 박상순 팀장`;
+    `승인 요청 ${R.approve.length}건 · ${dlWon(R.approveSum)}원 · 범위 ${R.days ? `${d} ~ ${R.upto}` : d} · 수신 대표님 / 참조 박상순 팀장`;
 
   const ok = R.after >= R.floor && R.low.bal >= R.floor;
   const blk = (n,l,inner) => `<div class="dl-blk"><div class="dl-hd"><i class="n">${n}</i><span class="l">${l}</span></div>${inner}</div>`;
   const row = (k,s,v,c) => `<div class="dl-row"><span class="k">${k}${s?`<small>${s}</small>`:''}</span><span class="v"${c?` style="color:${c}"`:''}>${v}</span></div>`;
 
   // ③ 승인 요청 — 자동으로 뽑되 목적·미집행 시·권고는 사람이 채운다
+  const dayTag = r => {
+    const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
+    return dd > 0 ? `· <b style="color:var(--red)">${dd}일 경과</b>` : dd === 0 ? '· 오늘' : `· D-${-dd}`;
+  };
   const itemHtml = R.approve.length ? R.approve.map(r => {
     const k = dlKey(r), it = note.items[k] || {};
-    const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
-    const late = dd > 0;
+    const late = r.date < d;
     return `<div class="dl-item ${late?'hot':''}">
       <div class="h"><span class="nm">${escapeHtml(r.desc||'(거래내용 없음)')}</span><span class="am">${dlWon(r.out)}</span></div>
-      <div class="meta">${r.date} ${late?`· <b style="color:var(--red)">${dd}일 경과</b>`:`· D-${-dd}`}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}</div>
+      <div class="meta">${r.date} ${dayTag(r)}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}</div>
       <div class="dl-f">
         <span>목적</span><input data-dk="${k}" data-df="purpose" value="${escapeHtml(it.purpose||'')}" placeholder="무엇을 위한 돈인가">
         <span>미집행 시</span><input data-dk="${k}" data-df="risk" value="${escapeHtml(it.risk||'')}" placeholder="안 하면 무슨 일이 생기는가">
         <span>권고</span><select data-dk="${k}" data-df="rec">
           ${['','승인','보류','분할 집행'].map(o=>`<option value="${o}"${o===(it.rec||'')?' selected':''}>${o||'— 선택 —'}</option>`).join('')}
         </select>
+        <span>분류</span>${dlBucketSel(r, note, R.thr)}
       </div></div>`;
-  }).join('') : `<div class="dl-empty">승인 임계(${dlWon(R.thr)}원) 이상 예정 출금이 없습니다.</div>`;
+  }).join('') : `<div class="dl-empty">이 범위에 승인이 필요한 예정 출금이 없습니다. (임계 ${dlWon(R.thr)}원 · 아래 통보 목록에서 개별 지정 가능)</div>`;
 
   host.innerHTML =
     blk(1,'결론',
@@ -9449,6 +9483,7 @@ function renderDailyReport(){
       row('예정 입금', `${R.planIn.length}건`, '+'+dlWon(R.inPlan), 'var(--green)') +
       row('확정 출금(통보)', `${R.notify.length}건 · 임계 미만`, '−'+dlWon(R.notifySum), 'var(--red)') +
       row('승인 요청분', `${R.approve.length}건`, '−'+dlWon(R.approveSum), 'var(--red)') +
+      (R.skipSum ? row('보고 제외분', `${R.skipped.length}건 · 메일에는 미표시`, '−'+dlWon(R.skipSum), 'var(--text3)') : '') +
       `<div class="dl-row tot"><span class="k">집행 후 예상 잔액</span><span class="v">${dlWon(R.after)}</span></div>` +
       row(`안전선 ${dlEok(R.floor)}억 대비`, '', (R.after>=R.floor?'+':'')+dlWon(R.after-R.floor), R.after>=R.floor?'var(--green)':'var(--red)') +
       (R.doneIn.length||R.doneOut.length ? `<div class="dl-hint" style="margin-top:10px">참고 · 오늘 이미 실행됨: 입금 ${R.doneIn.length}건 ${dlWon(R.sum(R.doneIn))} / 출금 ${R.doneOut.length}건 ${dlWon(R.sum(R.doneOut))}</div>` : '')) +
@@ -9456,10 +9491,19 @@ function renderDailyReport(){
     blk(3,'승인 요청 — 결정 필요', itemHtml) +
 
     blk(4,'통보 — 승인 불필요',
-      R.notify.length
-        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(r.desc||'(거래내용 없음)')}<small>${r.date}</small></span><span class="v">${dlWon(r.out)}</span></div>`).join('')
+      (R.notify.length
+        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(r.desc||'(거래내용 없음)')}<small>${r.date} ${dayTag(r).replace(/^· /,'')}</small></span>`
+            + `<span class="v" style="display:flex;align-items:center;gap:8px">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`).join('')
           + `<div class="dl-row tot"><span class="k">합계</span><span class="v">${dlWon(R.notifySum)}</span></div>`
-        : '<div class="dl-empty">임계 미만 예정 출금이 없습니다.</div>') +
+        : '<div class="dl-empty">이 범위에 통보할 예정 출금이 없습니다.</div>')
+      + (R.skipped.length
+        ? `<div class="dl-hint" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+             이번 보고에서 뺀 건 <b>${R.skipped.length}건 · ${dlWon(R.skipSum)}원</b> — 메일에는 안 나가지만 <b>집행 후 잔액에는 반영</b>돼 있습니다.
+             ${R.skipped.map(r=>`<div style="margin-top:4px;display:flex;justify-content:space-between;gap:10px;align-items:center">
+                <span>· ${escapeHtml(r.desc||'(거래내용 없음)')} <span style="color:var(--text3)">${r.date}</span></span>
+                <span style="display:flex;align-items:center;gap:8px;font-family:var(--mono)">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`).join('')}
+           </div>`
+        : '')) +
 
     blk(5,'위험 · 향후 7일',
       `<div class="dl-row"><span class="k">7일 내 최저 잔액</span><span class="v" style="color:${R.low.bal>=R.floor?'var(--green)':'var(--red)'}">${dlWon(R.low.bal)} <span style="color:var(--text3)">(${R.low.date})</span></span></div>` +
@@ -9467,12 +9511,13 @@ function renderDailyReport(){
         ? R.risks.map(x => `<div class="dl-risk"><i class="dot" style="background:${x.lv==='hot'?'var(--red)':x.lv==='warn'?'var(--amber)':'var(--soft,var(--text3))'}"></i><p style="margin:0;color:var(--text2)">${escapeHtml(x.t)}</p></div>`).join('')
         : '<div class="dl-empty">특이 위험 신호 없음.</div>'));
 
-  // 입력 → 저장
+  // 입력 → 저장. 분류(bucket)는 목록 구성을 바꾸므로 저장 후 다시 그린다.
   host.querySelectorAll('[data-dk]').forEach(el => el.addEventListener('input', () => {
     const n = dlNote(d), k = el.dataset.dk;
     if(!n.items[k]) n.items[k] = {};
     n.items[k][el.dataset.df] = el.value;
     saveDailyNotes();
+    if(el.dataset.df === 'bucket') renderDailyReport();
   }));
   host.querySelector('[data-dsum]')?.addEventListener('input', e => { dlNote(d).summary = e.target.value; saveDailyNotes(); });
 }
@@ -9483,7 +9528,9 @@ function dailyReportText(){
   const wd = ['일','월','화','수','목','금','토'][new Date(d+'T00:00:00').getDay()];
   const L = [];
   L.push(`[로가] ${d}(${wd}) 자금 보고 — 승인 요청 ${R.approve.length}건 / ${dlWon(R.approveSum)}원`);
-  L.push(`수신 대표님 · 참조 박상순 팀장`, '');
+  L.push(`수신 대표님 · 참조 박상순 팀장`);
+  if(R.days) L.push(`보고 범위 ${d} ~ ${R.upto}`);
+  L.push('');
   L.push(`■ 결론`);
   L.push(`승인 요청 ${R.approve.length}건 · ${dlWon(R.approveSum)}원`);
   L.push(`집행 후 예상 잔액 ${dlWon(R.after)}원 · 안전선 ${dlEok(R.floor)}억 대비 ${R.after>=R.floor?'+':''}${dlWon(R.after-R.floor)}원`);
@@ -9493,6 +9540,7 @@ function dailyReportText(){
   L.push(`예정 입금        +${dlWon(R.inPlan)} (${R.planIn.length}건)`);
   L.push(`확정 출금(통보)  −${dlWon(R.notifySum)} (${R.notify.length}건)`);
   L.push(`승인 요청분      −${dlWon(R.approveSum)} (${R.approve.length}건)`);
+  if(R.skipSum) L.push(`기타 확정 출금   −${dlWon(R.skipSum)} (${R.skipped.length}건)`);
   L.push(`집행 후 예상 잔액 ${dlWon(R.after)}`);
   L.push('', `■ 승인 요청 — 결정 필요`);
   if(!R.approve.length) L.push('(없음)');
@@ -9500,7 +9548,7 @@ function dailyReportText(){
     const it = note.items[dlKey(r)] || {};
     const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
     L.push(`${i+1}. ${r.desc||'(거래내용 없음)'} — ${dlWon(r.out)}원`);
-    L.push(`   기한 ${r.date}${dd>0?` (${dd}일 경과)`:` (D-${-dd})`}`);
+    L.push(`   기한 ${r.date}${dd>0?` (${dd}일 경과)`:dd===0?' (오늘)':` (D-${-dd})`}`);
     L.push(`   목적 ${it.purpose||'(미작성)'}`);
     L.push(`   미집행 시 ${it.risk||'(미작성)'}`);
     L.push(`   권고 ${it.rec||'(미선택)'}`);
@@ -9519,7 +9567,15 @@ function dailyReportText(){
 document.getElementById('dlrpt-prev')?.addEventListener('click', () => { dlDate = dlShift(dlD(), -1); renderDailyReport(); });
 document.getElementById('dlrpt-next')?.addEventListener('click', () => { dlDate = dlShift(dlD(),  1); renderDailyReport(); });
 document.getElementById('dlrpt-refresh')?.addEventListener('click', () => {
-  try{ localStorage.setItem('dl_floor', String(dlFloor())); localStorage.setItem('dl_thr', String(dlThr())); }catch(e){}
+  try{
+    localStorage.setItem('dl_floor', String(dlFloor()));
+    localStorage.setItem('dl_thr',   String(dlThr()));
+    localStorage.setItem('dl_days',  String(dlDays()));
+  }catch(e){}
+  renderDailyReport();
+});
+document.getElementById('dlrpt-days')?.addEventListener('change', () => {
+  try{ localStorage.setItem('dl_days', String(dlDays())); }catch(e){}
   renderDailyReport();
 });
 document.getElementById('dlrpt-copy')?.addEventListener('click', async () => {
