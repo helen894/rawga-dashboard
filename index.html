@@ -1591,11 +1591,16 @@
     #panel-loan .loan-warn{display:flex;align-items:center;gap:9px;background:var(--red2);color:var(--red);border-radius:9px;padding:9px 13px;font-size:13px;font-weight:600;margin-bottom:14px;}
     #panel-loan .loan-warn .d{margin-left:auto;font-weight:700;}
     #panel-loan .loan-sum-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+    /* 원 단위 전액 표기라 카드가 좁아지면 숫자가 넘친다 — 중간 구간에서 3열로 먼저 접는다 */
+    @media(max-width:1080px){#panel-loan .loan-sum-grid{grid-template-columns:repeat(3,1fr);}}
     @media(max-width:720px){#panel-loan .loan-sum-grid{grid-template-columns:repeat(2,1fr);}}
     #panel-loan .loan-sc{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:13px 10px;text-align:center;}
     #panel-loan .loan-sc .l{font-size:11.5px;color:var(--text2);font-weight:600;}
     #panel-loan .loan-sc .v{font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.02em;line-height:1.1;color:var(--text);}
     #panel-loan .loan-sc .s{font-size:10.5px;color:var(--text3);margin-top:2px;}
+    /* 원 단위 전액 표기 — 13자리("6,241,900,000")가 들어가야 해서 20px 로는 넘친다 */
+    #panel-loan .loan-sc .v.won{font-size:16px;letter-spacing:-.01em;font-family:ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;}
+    #panel-loan .loan-sc .v.won + .s{font-variant-numeric:tabular-nums;}
     #panel-loan .loan-sc.hot{background:var(--red2);border-color:transparent;} #panel-loan .loan-sc.hot .l,#panel-loan .loan-sc.hot .v{color:var(--red);}
     #panel-loan .loan-sc.warn{background:var(--amber2);border-color:transparent;} #panel-loan .loan-sc.warn .l,#panel-loan .loan-sc.warn .v{color:var(--amber);}
     #panel-loan .loan-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0;}
@@ -10348,8 +10353,8 @@ function renderLoanTab(){
   if(sumEl){
     sumEl.innerHTML =
       `<div class="loan-sum-grid">`
-      + `<div class="loan-sc"><div class="l">총 대출잔액</div><div class="v">${loanEok(s.bal)}억</div><div class="s">${s.count}건</div></div>`
-      + `<div class="loan-sc"><div class="l">월 이자</div><div class="v">${loanMan(s.mi)}만</div><div class="s">연 ${loanMan(s.mi*12)}만</div></div>`
+      + `<div class="loan-sc"><div class="l">총 대출잔액</div><div class="v won">${loanWon(s.bal)}</div><div class="s">${s.count}건</div></div>`
+      + `<div class="loan-sc"><div class="l">월 이자</div><div class="v won">${loanWon(s.mi)}</div><div class="s">연 ${loanWon(s.mi*12)}</div></div>`
       + `<div class="loan-sc"><div class="l">평균 금리</div><div class="v">${s.effRate?s.effRate.toFixed(2)+'%':'—'}</div><div class="s">${(s.minRate!=null&&s.maxRate)?s.minRate.toFixed(2)+'~'+s.maxRate.toFixed(2)+'%':''}</div></div>`
       + `<div class="loan-sc ${s.immN>0?'hot':''}"><div class="l">임박 만기</div><div class="v">${s.immN>0?loanEok(s.immSum)+'억':'없음'}</div><div class="s">3개월내 ${s.immN}건</div></div>`
       + `<div class="loan-sc ${s.nextDday!=null&&s.nextDday<=180?'warn':''}"><div class="l">다음 만기</div><div class="v">${s.nextDday!=null?'D-'+s.nextDday:'—'}</div><div class="s">${s.nextDue?s.nextDue.slice(5):'—'}</div></div>`
