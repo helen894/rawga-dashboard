@@ -316,8 +316,13 @@ if (KNOWN_ACCOUNTS.size) {
         `${won(net(x.r)).padStart(11)}원  → 「${x.acc}」  [${x.how}]`);
     }
     const rest = none.length - got.length;
-    if (rest) console.error(`   나머지 ${rest}건 ${won(sumAll - sumGot)}원은 식당·카페 등이라 규칙으로 못 정합니다` +
-      ' — 같은 가게라도 혼자면 복리후생비, 거래처와면 접대비라 데이터에 단서가 없습니다.');
+    if (rest) {
+      console.error(`   나머지 ${rest}건 ${won(sumAll - sumGot)}원은 식당·카페 등이라 가맹점명만으로는 못 정합니다` +
+        ' — 같은 가게라도 혼자면 복리후생비, 거래처와면 접대비입니다.');
+      /* 여기서 끝내지 말 것 — 가맹점에 '카드사용자' 를 더하면 이력으로 갈리는 게 있다(A등급 실측 96%).
+         적재 후 아래를 돌리면 그중 걸리는 건 자동으로 정리된다. */
+      console.error('   적재 후 `node scripts/clobe-card-suggest.mjs --from <이번달1일>` 로 이력 기반 분류를 돌리세요.');
+    }
     const cmd = got.map(x => `${x.r.approvalId} ${x.acc}`).join(' ');
     if (cmd) {
       console.error('\n   확인 후 아래로 적용하세요:');
