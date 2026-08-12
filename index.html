@@ -9333,7 +9333,14 @@ const DL_BUCKETS = { '': '자동', approve: '승인 요청', notify: '통보', s
 function dlBucket(r, note, thr){
   const ov = note.items[dlKey(r)] && note.items[dlKey(r)].bucket;
   if (ov === 'approve' || ov === 'notify' || ov === 'skip') return ov;
+  if (r._manual) return 'approve';            // 수기로 올린 건은 올린 의도가 곧 승인 요청
   return (Number(r.out) || 0) >= thr ? 'approve' : 'notify';
+}
+/* 표시명 — 적요가 비어 있거나 은행 표기가 잘린 건("(주)제이에스푸")을 보고서에서만 고쳐 쓴다.
+   cf_data 원본은 건드리지 않는다(고치려면 입출금 탭에서). */
+function dlLabel(r, note){
+  const it = note.items[dlKey(r)] || {};
+  return String(it.label || '').trim() || r.desc || '(거래내용 없음)';
 }
 function dlBucketSel(r, note, thr){
   const cur = (note.items[dlKey(r)] && note.items[dlKey(r)].bucket) || '';
@@ -9384,7 +9391,15 @@ function buildDailyReport(){
   const doneIn  = rows.filter(r => r.status==='실제 입금' && r.date===d);
   const doneOut = rows.filter(r => r.status==='실제 지출' && r.date===d);
   const planIn  = rows.filter(r => r.status==='입금 예정' && r.date<=upto);
-  const planOut = rows.filter(r => r.status==='지출 예정' && r.date<=upto);  // 연체(date<d)도 계속 포함
+  /* 수기 항목 — cf_data 에 예정 등록이 안 된 지출을 보고서에 직접 올린다.
+     실측(2026-08-12)상 예정 등록 누락이 많아 자동 목록만으로는 보고가 안 된다.
+     날짜 범위와 무관하게 항상 포함한다(사람이 올린 의도가 명시적이므로). */
+  const manual = (note.extra || []).map(e => ({
+    _id: e.id, date: e.date || d, desc: e.desc || '(수기 항목)',
+    out: Number(e.out) || 0, in: 0, status: '지출 예정', _manual: true,
+  }));
+  const planOut = rows.filter(r => r.status==='지출 예정' && r.date<=upto)   // 연체(date<d)도 계속 포함
+                      .concat(manual);
   const byDate = (a,b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (Number(b.out)||0)-(Number(a.out)||0));
   const approve = planOut.filter(r => dlBucket(r,note,thr)==='approve').sort(byDate);
   const notify  = planOut.filter(r => dlBucket(r,note,thr)==='notify').sort(byDate);
@@ -9454,21 +9469,41 @@ function renderDailyReport(){
     const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
     return dd > 0 ? `· <b style="color:var(--red)">${dd}일 경과</b>` : dd === 0 ? '· 오늘' : `· D-${-dd}`;
   };
-  const itemHtml = R.approve.length ? R.approve.map(r => {
-    const k = dlKey(r), it = note.items[k] || {};
-    const late = r.date < d;
-    return `<div class="dl-item ${late?'hot':''}">
-      <div class="h"><span class="nm">${escapeHtml(r.desc||'(거래내용 없음)')}</span><span class="am">${dlWon(r.out)}</span></div>
-      <div class="meta">${r.date} ${dayTag(r)}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}</div>
-      <div class="dl-f">
-        <span>목적</span><input data-dk="${k}" data-df="purpose" value="${escapeHtml(it.purpose||'')}" placeholder="무엇을 위한 돈인가">
-        <span>미집행 시</span><input data-dk="${k}" data-df="risk" value="${escapeHtml(it.risk||'')}" placeholder="안 하면 무슨 일이 생기는가">
-        <span>권고</span><select data-dk="${k}" data-df="rec">
-          ${['','승인','보류','분할 집행'].map(o=>`<option value="${o}"${o===(it.rec||'')?' selected':''}>${o||'— 선택 —'}</option>`).join('')}
-        </select>
-        <span>분류</span>${dlBucketSel(r, note, R.thr)}
-      </div></div>`;
-  }).join('') : `<div class="dl-empty">이 범위에 승인이 필요한 예정 출금이 없습니다. (임계 ${dlWon(R.thr)}원 · 아래 통보 목록에서 개별 지정 가능)</div>`;
+  const itemHtml =
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+       <button class="btn sm" id="dl-add-item">+ 항목 추가</button>
+       <span style="font-size:11.5px;color:var(--text3)">예정 등록이 안 된 지출은 여기서 직접 올릴 수 있습니다</span>
+     </div>` +
+    (R.approve.length ? R.approve.map(r => {
+      const k = dlKey(r), it = note.items[k] || {};
+      const mi = r._manual ? (note.extra||[]).findIndex(e => e.id === r._id) : -1;
+      const head = r._manual
+        ? `<div class="h">
+             <span class="nm" style="display:flex;align-items:center;gap:6px">
+               <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--blue2);color:var(--blue)">수기</span>
+               ${escapeHtml(r.desc)}</span>
+             <span style="display:flex;align-items:center;gap:8px">
+               <span class="am">${dlWon(r.out)}</span>
+               <button class="btn sm" data-dxdel="${mi}" style="color:var(--red);border-color:var(--red2);padding:2px 8px">삭제</button>
+             </span></div>
+           <div class="dl-f" style="margin-top:7px">
+             <span>날짜</span><input type="date" data-dx="${mi}" data-df="date" value="${escapeHtml(r.date)}">
+             <span>내용</span><input data-dx="${mi}" data-df="desc" value="${escapeHtml(r.desc)}" placeholder="지급처 · 건명">
+             <span>금액</span><input type="number" data-dx="${mi}" data-df="out" value="${Number(r.out)||0}" step="1000000">
+           </div>`
+        : `<div class="h"><span class="nm">${escapeHtml(dlLabel(r, note))}</span><span class="am">${dlWon(r.out)}</span></div>
+           <div class="meta">${r.date} ${dayTag(r)}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}${it.label?` · 원본 "${escapeHtml(r.desc||'')}"`:''}</div>`;
+      return `<div class="dl-item ${r.date < d && !r._manual ? 'hot':''}">${head}
+        <div class="dl-f">
+          ${r._manual ? '' : `<span>표시명</span><input data-dk="${k}" data-df="label" value="${escapeHtml(it.label||'')}" placeholder="비우면 원본 그대로 — 적요가 잘렸을 때만">`}
+          <span>목적</span><input data-dk="${k}" data-df="purpose" value="${escapeHtml(it.purpose||'')}" placeholder="무엇을 위한 돈인가">
+          <span>미집행 시</span><input data-dk="${k}" data-df="risk" value="${escapeHtml(it.risk||'')}" placeholder="안 하면 무슨 일이 생기는가">
+          <span>권고</span><select data-dk="${k}" data-df="rec">
+            ${['','승인','보류','분할 집행'].map(o=>`<option value="${o}"${o===(it.rec||'')?' selected':''}>${o||'— 선택 —'}</option>`).join('')}
+          </select>
+          <span>분류</span>${dlBucketSel(r, note, R.thr)}
+        </div></div>`;
+    }).join('') : `<div class="dl-empty">이 범위에 승인이 필요한 예정 출금이 없습니다. (임계 ${dlWon(R.thr)}원 · 아래 통보 목록에서 개별 지정하거나 위에서 직접 추가하세요)</div>`);
 
   host.innerHTML =
     blk(1,'결론',
@@ -9492,7 +9527,7 @@ function renderDailyReport(){
 
     blk(4,'통보 — 승인 불필요',
       (R.notify.length
-        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(r.desc||'(거래내용 없음)')}<small>${r.date} ${dayTag(r).replace(/^· /,'')}</small></span>`
+        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(dlLabel(r, note))}<small>${r.date} ${dayTag(r).replace(/^· /,'')}</small></span>`
             + `<span class="v" style="display:flex;align-items:center;gap:8px">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`).join('')
           + `<div class="dl-row tot"><span class="k">합계</span><span class="v">${dlWon(R.notifySum)}</span></div>`
         : '<div class="dl-empty">이 범위에 통보할 예정 출금이 없습니다.</div>')
@@ -9520,6 +9555,37 @@ function renderDailyReport(){
     if(el.dataset.df === 'bucket') renderDailyReport();
   }));
   host.querySelector('[data-dsum]')?.addEventListener('input', e => { dlNote(d).summary = e.target.value; saveDailyNotes(); });
+
+  // 수기 항목 — 추가 / 수정 / 삭제
+  host.querySelector('#dl-add-item')?.addEventListener('click', () => {
+    const n = dlNote(d);
+    if(!n.extra) n.extra = [];
+    n.extra.push({ id: 'x_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,6), date: d, desc: '', out: 0 });
+    saveDailyNotes();
+    renderDailyReport();
+    // 새 카드의 '내용'에 바로 커서
+    host.querySelector(`[data-dx="${n.extra.length-1}"][data-df="desc"]`)?.focus();
+  });
+  host.querySelectorAll('[data-dx]').forEach(el => el.addEventListener('input', () => {
+    const n = dlNote(d), i = Number(el.dataset.dx);
+    if(!n.extra || !n.extra[i]) return;
+    n.extra[i][el.dataset.df] = el.dataset.df === 'out' ? (Number(el.value)||0) : el.value;
+    saveDailyNotes();
+    // 금액·날짜는 잔액·정렬에 영향 → 다시 그린다. 내용은 타이핑 중이라 두고 blur 때 반영.
+    if(el.dataset.df !== 'desc') renderDailyReport();
+  }));
+  host.querySelectorAll('[data-dx][data-df="desc"]').forEach(el =>
+    el.addEventListener('blur', () => renderDailyReport()));
+  host.querySelectorAll('[data-dxdel]').forEach(el => el.addEventListener('click', () => {
+    const n = dlNote(d), i = Number(el.dataset.dxdel);
+    if(!n.extra || !n.extra[i]) return;
+    const e = n.extra[i];
+    if(!confirm(`${e.date} · ${dlWon(e.out)}원 · ${e.desc||'(내용 없음)'}\n\n이 수기 항목을 삭제할까요?`)) return;
+    delete n.items['i:' + e.id];
+    n.extra.splice(i,1);
+    saveDailyNotes();
+    renderDailyReport();
+  }));
 }
 
 /* 메일 본문용 평문 — 화면과 같은 산출값을 쓴다 */
@@ -9547,7 +9613,7 @@ function dailyReportText(){
   R.approve.forEach((r,i) => {
     const it = note.items[dlKey(r)] || {};
     const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
-    L.push(`${i+1}. ${r.desc||'(거래내용 없음)'} — ${dlWon(r.out)}원`);
+    L.push(`${i+1}. ${dlLabel(r, note)} — ${dlWon(r.out)}원`);
     L.push(`   기한 ${r.date}${dd>0?` (${dd}일 경과)`:dd===0?' (오늘)':` (D-${-dd})`}`);
     L.push(`   목적 ${it.purpose||'(미작성)'}`);
     L.push(`   미집행 시 ${it.risk||'(미작성)'}`);
@@ -9555,7 +9621,7 @@ function dailyReportText(){
   });
   L.push('', `■ 통보 — 승인 불필요`);
   if(!R.notify.length) L.push('(없음)');
-  R.notify.forEach(r => L.push(`· ${r.desc||'(거래내용 없음)'} ${dlWon(r.out)}원 (${r.date})`));
+  R.notify.forEach(r => L.push(`· ${dlLabel(r, note)} ${dlWon(r.out)}원 (${r.date})`));
   if(R.notify.length) L.push(`  합계 ${dlWon(R.notifySum)}원`);
   L.push('', `■ 위험 · 향후 7일`);
   L.push(`7일 내 최저 잔액 ${dlWon(R.low.bal)}원 (${R.low.date})`);
