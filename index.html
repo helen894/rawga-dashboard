@@ -1021,9 +1021,72 @@
 
   <!-- 리포팅 하위 탭 -->
   <div class="sheet-tabs" id="reporting-sub-tabs" style="margin-bottom:20px">
+    <div class="sheet-tab" data-reporting-sub="daily">일간 <span style="font-size:10px;color:var(--amber);font-weight:700">NEW</span></div>
     <div class="sheet-tab active" data-reporting-sub="weekly">주간</div>
     <div class="sheet-tab" data-reporting-sub="monthly">월간</div>
     <div class="sheet-tab" data-reporting-sub="regular">정기 보고 <span style="font-size:10px;color:var(--amber);font-weight:700">MVP</span></div>
+  </div>
+
+  <!-- ======== 일간 — 데일리 결제 승인 보고 초안 ========
+       대표님이 오늘 무엇을 집행할지 결정하시게 하는 게 유일한 목적.
+       숫자·잔액·D-day 는 자동으로 채우고, 목적·배경·권고는 팀장이 직접 쓴다
+       (자동 생성으로 채우면 형식만 남는다). 수기분은 cat_data(daily_notes)에 날짜별 저장. -->
+  <div id="rpt-panel-daily" style="display:none">
+    <style>
+      #rpt-panel-daily .dl-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding:14px 20px;background:var(--card);border:1px solid var(--border);border-radius:10px;}
+      #rpt-panel-daily .dl-nav .t{font-size:16px;font-weight:700;color:var(--text);}
+      #rpt-panel-daily .dl-nav .s{font-size:11.5px;color:var(--text2);margin-top:2px;}
+      #rpt-panel-daily .dl-tool{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;}
+      #rpt-panel-daily .dl-tool label{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;}
+      #rpt-panel-daily .dl-tool input[type=number]{width:130px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;font-family:var(--mono);}
+      #rpt-panel-daily .dl-blk{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:14px;}
+      #rpt-panel-daily .dl-hd{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+      #rpt-panel-daily .dl-hd .n{flex:none;width:19px;height:19px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;}
+      #rpt-panel-daily .dl-hd .l{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--text2);}
+      #rpt-panel-daily .dl-big{font-size:26px;font-weight:800;letter-spacing:-.03em;font-family:var(--mono);margin:4px 0 8px;}
+      #rpt-panel-daily .dl-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px dotted var(--border);}
+      #rpt-panel-daily .dl-row:last-child{border-bottom:0;}
+      #rpt-panel-daily .dl-row .k{font-size:12.5px;color:var(--text2);}
+      #rpt-panel-daily .dl-row .k small{display:block;font-size:10.5px;color:var(--text3);}
+      #rpt-panel-daily .dl-row .v{font-size:13.5px;font-family:var(--mono);white-space:nowrap;}
+      #rpt-panel-daily .dl-row.tot{border-top:1.5px solid var(--border2);border-bottom:0;margin-top:5px;padding-top:9px;}
+      #rpt-panel-daily .dl-row.tot .k{font-weight:700;color:var(--text);} #rpt-panel-daily .dl-row.tot .v{font-size:16px;font-weight:700;}
+      #rpt-panel-daily .dl-item{border-left:3px solid var(--border2);padding-left:12px;margin-bottom:14px;}
+      #rpt-panel-daily .dl-item:last-child{margin-bottom:0;}
+      #rpt-panel-daily .dl-item.hot{border-left-color:var(--red);}
+      #rpt-panel-daily .dl-item .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+      #rpt-panel-daily .dl-item .nm{font-size:13.5px;font-weight:700;}
+      #rpt-panel-daily .dl-item .am{font-size:13.5px;font-weight:700;font-family:var(--mono);white-space:nowrap;}
+      #rpt-panel-daily .dl-item .meta{font-size:11.5px;color:var(--text3);margin-top:2px;}
+      #rpt-panel-daily .dl-f{display:grid;grid-template-columns:64px 1fr;gap:5px 9px;margin-top:8px;align-items:center;}
+      #rpt-panel-daily .dl-f span{font-size:11.5px;color:var(--text3);font-weight:600;}
+      #rpt-panel-daily .dl-f input,#rpt-panel-daily .dl-f select{padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text);font-size:12.5px;width:100%;font-family:inherit;}
+      #rpt-panel-daily textarea.dl-note{width:100%;min-height:74px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.6;resize:vertical;}
+      #rpt-panel-daily .dl-empty{font-size:12.5px;color:var(--text3);padding:10px 0;}
+      #rpt-panel-daily .dl-risk{display:flex;gap:9px;padding:8px 0;border-bottom:1px dotted var(--border);font-size:12.5px;line-height:1.55;}
+      #rpt-panel-daily .dl-risk:last-child{border-bottom:0;}
+      #rpt-panel-daily .dl-risk .dot{flex:none;width:6px;height:6px;border-radius:50%;margin-top:7px;}
+      #rpt-panel-daily .dl-hint{font-size:11.5px;color:var(--text3);margin:-4px 0 10px;line-height:1.55;}
+    </style>
+
+    <div class="dl-nav">
+      <button id="dlrpt-prev" class="btn" style="font-size:13px">◀ 이전 날</button>
+      <div style="text-align:center">
+        <div class="t" id="dlrpt-title">—</div>
+        <div class="s" id="dlrpt-sub">—</div>
+      </div>
+      <button id="dlrpt-next" class="btn" style="font-size:13px">다음 날 ▶</button>
+    </div>
+
+    <div class="dl-tool">
+      <label>안전선 <input type="number" id="dlrpt-floor" step="100000000" placeholder="예: 1500000000"></label>
+      <label>승인 임계 <input type="number" id="dlrpt-thr" step="1000000" placeholder="10000000"></label>
+      <button class="btn sm" id="dlrpt-refresh">다시 계산</button>
+      <button class="btn sm" id="dlrpt-copy" style="color:var(--green);border-color:var(--green)">📋 메일용 텍스트 복사</button>
+      <span id="dlrpt-saved" style="font-size:11.5px;color:var(--text3);margin-left:auto"></span>
+    </div>
+
+    <div id="dlrpt-body"></div>
   </div>
 
   <!-- 주간 하위 패널 -->
@@ -9230,16 +9293,258 @@ document.addEventListener('input', function(ev){
 
 /* ---- 리포팅 하위 탭 이벤트 ---- */
 /* ---- 리포팅 하위 탭 이벤트 ---- */
+/* =============================================
+   일간 — 데일리 결제 승인 보고 초안
+   숫자·잔액·D-day 는 자동, 목적·배경·권고는 사람이 쓴다.
+   ⚠ 세금계산서는 여기서 못 읽는다 — 클로브 커넥터는 Claude 세션만 호출 가능이라
+     대시보드/Edge 에서 접근 불가. 그래서 '오늘 나갈 돈'은 cf_data 의 예정 출금이 기준이다.
+   ⚠ 실측(2026-08-12): 매입 세금계산서는 발행일 ≈ 지급일(영업일 0~1일)이라
+     어차피 선행 지표가 아니다. 중기 예정은 발주 단계 사전 등록으로 잡아야 한다.
+   ============================================= */
+let dailyNotes  = {};      // { 'YYYY-MM-DD': { summary, items: { key: {purpose,risk,rec} } } }
+let _dlLoaded   = false;
+let _dlSaveTimer = null;
+let dlDate = '';           // 보고 기준일 (빈값이면 refDate)
+
+function dlD(){ return dlDate || refDate || todayKST(); }
+function dlWon(n){ return Math.round(Number(n)||0).toLocaleString('ko-KR'); }
+function dlEok(n){ return (Number(n||0)/1e8).toFixed(1); }
+/* ⚠ toISOString() 을 쓰면 안 된다 — KST 자정이 UTC 로는 전날 15:00 이라 하루가 밀린다.
+   그러면 d+1 이 d 로 돌아와 당일 예정 출금을 두 번 빼고, 7일 창의 마지막 날이 빠진다. */
+function dlShift(base, days){
+  const t = new Date(base + 'T00:00:00');
+  t.setDate(t.getDate() + days);
+  const p = n => String(n).padStart(2,'0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+}
+function dlKey(r){ return r.clobe_id ? 'c:'+r.clobe_id : 'i:'+r._id; }
+function dlFloor(){ const v = Number(document.getElementById('dlrpt-floor')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_floor')) || 1500000000; }
+function dlThr(){ const v = Number(document.getElementById('dlrpt-thr')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_thr')) || 10000000; }
+
+async function loadDailyNotes(){
+  try{ const ls = JSON.parse(localStorage.getItem('daily_notes')||'null'); if(ls && typeof ls==='object') dailyNotes = ls; }catch(e){}
+  try{
+    if(typeof _supa!=='undefined' && _supa){
+      const { data, error } = await _supa.from('cat_data').select('data').eq('key','daily_notes').maybeSingle();
+      if(!error && data && data.data && typeof data.data === 'object') dailyNotes = data.data;
+    }
+  }catch(e){ console.warn('[daily] 로드 실패', e); }
+  _dlLoaded = true;
+  renderDailyReport();
+}
+
+function saveDailyNotes(){
+  clearTimeout(_dlSaveTimer);
+  const el = document.getElementById('dlrpt-saved');
+  if(el) el.textContent = '저장 중…';
+  _dlSaveTimer = setTimeout(async () => {
+    try{
+      localStorage.setItem('daily_notes', JSON.stringify(dailyNotes));
+      if(typeof _supa!=='undefined' && _supa && (typeof _isInitialized==='undefined' || _isInitialized)){
+        const { error } = await _supa.from('cat_data').upsert([{ key:'daily_notes', data:dailyNotes }], { onConflict:'key' });
+        if(error) throw error;
+      }
+      if(el) el.textContent = '저장됨 ' + new Date().toTimeString().slice(0,5);
+    }catch(e){ if(el) el.textContent = '⚠ 저장 실패(로컬만)'; console.warn('[daily] 저장 실패', e); }
+  }, 700);
+}
+
+function dlNote(d){ if(!dailyNotes[d]) dailyNotes[d] = { summary:'', items:{} }; if(!dailyNotes[d].items) dailyNotes[d].items = {}; return dailyNotes[d]; }
+
+/* 보고서 데이터 산출 — 화면·복사 텍스트가 같은 값을 쓰도록 한 곳에서 만든다 */
+function buildDailyReport(){
+  const d = dlD(), thr = dlThr(), floor = dlFloor();
+  const cash = Number(bankSnapshot && bankSnapshot.totalCash) || 0;
+  const rows = cfData || [];
+
+  const doneIn  = rows.filter(r => r.status==='실제 입금' && r.date===d);
+  const doneOut = rows.filter(r => r.status==='실제 지출' && r.date===d);
+  const planIn  = rows.filter(r => r.status==='입금 예정' && r.date<=d);
+  const planOut = rows.filter(r => r.status==='지출 예정' && r.date<=d);
+  const approve = planOut.filter(r => (Number(r.out)||0) >= thr).sort((a,b)=>(Number(b.out)||0)-(Number(a.out)||0));
+  const notify  = planOut.filter(r => (Number(r.out)||0) <  thr);
+
+  const sum = a => a.reduce((s,r)=>s+(Number(r.in)||0)+(Number(r.out)||0),0);
+  const inPlan = planIn.reduce((s,r)=>s+(Number(r.in)||0),0);
+  const notifySum  = notify.reduce((s,r)=>s+(Number(r.out)||0),0);
+  const approveSum = approve.reduce((s,r)=>s+(Number(r.out)||0),0);
+  const after = cash + inPlan - notifySum - approveSum;
+
+  // 향후 7일 잔액 궤적 (확정·예정 모두 반영) — 최저점과 그 날짜
+  let run = after, low = { date:d, bal:after };
+  for(let i=1;i<=7;i++){
+    const day = dlShift(d,i);
+    for(const r of rows){
+      if(r.date!==day) continue;
+      if(r.status==='입금 예정'||r.status==='실제 입금') run += (Number(r.in)||0);
+      if(r.status==='지출 예정'||r.status==='실제 지출') run -= (Number(r.out)||0);
+    }
+    if(run < low.bal) low = { date:day, bal:run };
+  }
+
+  // 위험 신호
+  const risks = [];
+  if(low.bal < floor) risks.push({ lv:'hot', t:`${low.date} 최저 잔액 ${dlEok(low.bal)}억 — 안전선 ${dlEok(floor)}억을 ${dlEok(floor-low.bal)}억 하회` });
+  else if(after < floor) risks.push({ lv:'hot', t:`집행 후 잔액이 안전선을 ${dlEok(floor-after)}억 하회` });
+  const overdue = planOut.filter(r => r.date < d);
+  if(overdue.length) risks.push({ lv:'warn', t:`기한이 지난 예정 출금 ${overdue.length}건 · ${dlWon(overdue.reduce((s,r)=>s+(Number(r.out)||0),0))}원 — 미처리 상태입니다` });
+  try{
+    const arLate = (arData||[]).filter(r => r.due_date && r.due_date < d && ((Number(r.expected)||0)-(Number(r.collected)||0)) > 0);
+    if(arLate.length) risks.push({ lv:'warn', t:`회수 예정일이 지난 매출채권 ${arLate.length}건 · ${dlWon(arLate.reduce((s,r)=>s+((Number(r.expected)||0)-(Number(r.collected)||0)),0))}원` });
+  }catch(e){}
+  try{
+    if(_chkLoaded){ const s = checkSummary(); if(s.candN+s.unfillN) risks.push({ lv:'warn', t:`수취인·목적이 안 적힌 출금 ${s.candN+s.unfillN}건 · ${dlWon(s.candSum+s.unfillSum)}원 (수표 대장)` }); }
+  }catch(e){}
+  try{
+    if(_loanLoaded){ const s = loanSummary(); if(s.immN) risks.push({ lv:'info', t:`90일 내 대출 만기 ${s.immN}건 · ${dlEok(s.immSum)}억 (가장 이른 만기 ${s.nextDue||'—'})` }); }
+  }catch(e){}
+
+  return { d, thr, floor, cash, doneIn, doneOut, planIn, approve, notify,
+           inPlan, notifySum, approveSum, after, low, risks, sum };
+}
+
+function renderDailyReport(){
+  const host = document.getElementById('dlrpt-body'); if(!host) return;
+  if(!_dlLoaded){ loadDailyNotes(); return; }
+  const R = buildDailyReport(), d = R.d, note = dlNote(d);
+
+  const fl = document.getElementById('dlrpt-floor'); if(fl && !fl.value) fl.value = R.floor;
+  const th = document.getElementById('dlrpt-thr');   if(th && !th.value) th.value = R.thr;
+  const wd = ['일','월','화','수','목','금','토'][new Date(d+'T00:00:00').getDay()];
+  document.getElementById('dlrpt-title').textContent = `${d}(${wd}) 자금 보고`;
+  document.getElementById('dlrpt-sub').textContent =
+    `승인 요청 ${R.approve.length}건 · ${dlWon(R.approveSum)}원 · 수신 대표님 / 참조 박상순 팀장`;
+
+  const ok = R.after >= R.floor && R.low.bal >= R.floor;
+  const blk = (n,l,inner) => `<div class="dl-blk"><div class="dl-hd"><i class="n">${n}</i><span class="l">${l}</span></div>${inner}</div>`;
+  const row = (k,s,v,c) => `<div class="dl-row"><span class="k">${k}${s?`<small>${s}</small>`:''}</span><span class="v"${c?` style="color:${c}"`:''}>${v}</span></div>`;
+
+  // ③ 승인 요청 — 자동으로 뽑되 목적·미집행 시·권고는 사람이 채운다
+  const itemHtml = R.approve.length ? R.approve.map(r => {
+    const k = dlKey(r), it = note.items[k] || {};
+    const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
+    const late = dd > 0;
+    return `<div class="dl-item ${late?'hot':''}">
+      <div class="h"><span class="nm">${escapeHtml(r.desc||'(거래내용 없음)')}</span><span class="am">${dlWon(r.out)}</span></div>
+      <div class="meta">${r.date} ${late?`· <b style="color:var(--red)">${dd}일 경과</b>`:`· D-${-dd}`}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}</div>
+      <div class="dl-f">
+        <span>목적</span><input data-dk="${k}" data-df="purpose" value="${escapeHtml(it.purpose||'')}" placeholder="무엇을 위한 돈인가">
+        <span>미집행 시</span><input data-dk="${k}" data-df="risk" value="${escapeHtml(it.risk||'')}" placeholder="안 하면 무슨 일이 생기는가">
+        <span>권고</span><select data-dk="${k}" data-df="rec">
+          ${['','승인','보류','분할 집행'].map(o=>`<option value="${o}"${o===(it.rec||'')?' selected':''}>${o||'— 선택 —'}</option>`).join('')}
+        </select>
+      </div></div>`;
+  }).join('') : `<div class="dl-empty">승인 임계(${dlWon(R.thr)}원) 이상 예정 출금이 없습니다.</div>`;
+
+  host.innerHTML =
+    blk(1,'결론',
+      `<div class="dl-big" style="color:${ok?'var(--green)':'var(--red)'}">${R.approve.length}건 · ${dlWon(R.approveSum)}원</div>
+       <div style="font-size:13px;color:var(--text2)">집행 후 예상 잔액 <b style="color:var(--text);font-family:var(--mono)">${dlWon(R.after)}</b>
+       · 안전선 ${dlEok(R.floor)}억 대비 <b style="color:${ok?'var(--green)':'var(--red)'}">${R.after>=R.floor?'+':''}${dlWon(R.after-R.floor)}</b></div>
+       <div class="dl-hint" style="margin-top:10px">아래는 팀장이 직접 씁니다 — 대표님이 결정하시려면 권고와 근거가 필요합니다.</div>
+       <textarea class="dl-note" data-dsum placeholder="예) 2건 승인 / 1건 보류 권고. 8/18 급여 지급 후 안전선을 0.9억 하회하나 핀다 회수 2억(8/15)이 예정대로면 해소됩니다.">${escapeHtml(note.summary||'')}</textarea>`) +
+
+    blk(2,'오늘의 자금 포지션',
+      row('현재 잔액', bankSnapshot && bankSnapshot.asOf ? String(bankSnapshot.asOf).replace('T',' ').slice(0,16)+' 수집' : '은행 스냅샷 없음', dlWon(R.cash)) +
+      row('예정 입금', `${R.planIn.length}건`, '+'+dlWon(R.inPlan), 'var(--green)') +
+      row('확정 출금(통보)', `${R.notify.length}건 · 임계 미만`, '−'+dlWon(R.notifySum), 'var(--red)') +
+      row('승인 요청분', `${R.approve.length}건`, '−'+dlWon(R.approveSum), 'var(--red)') +
+      `<div class="dl-row tot"><span class="k">집행 후 예상 잔액</span><span class="v">${dlWon(R.after)}</span></div>` +
+      row(`안전선 ${dlEok(R.floor)}억 대비`, '', (R.after>=R.floor?'+':'')+dlWon(R.after-R.floor), R.after>=R.floor?'var(--green)':'var(--red)') +
+      (R.doneIn.length||R.doneOut.length ? `<div class="dl-hint" style="margin-top:10px">참고 · 오늘 이미 실행됨: 입금 ${R.doneIn.length}건 ${dlWon(R.sum(R.doneIn))} / 출금 ${R.doneOut.length}건 ${dlWon(R.sum(R.doneOut))}</div>` : '')) +
+
+    blk(3,'승인 요청 — 결정 필요', itemHtml) +
+
+    blk(4,'통보 — 승인 불필요',
+      R.notify.length
+        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(r.desc||'(거래내용 없음)')}<small>${r.date}</small></span><span class="v">${dlWon(r.out)}</span></div>`).join('')
+          + `<div class="dl-row tot"><span class="k">합계</span><span class="v">${dlWon(R.notifySum)}</span></div>`
+        : '<div class="dl-empty">임계 미만 예정 출금이 없습니다.</div>') +
+
+    blk(5,'위험 · 향후 7일',
+      `<div class="dl-row"><span class="k">7일 내 최저 잔액</span><span class="v" style="color:${R.low.bal>=R.floor?'var(--green)':'var(--red)'}">${dlWon(R.low.bal)} <span style="color:var(--text3)">(${R.low.date})</span></span></div>` +
+      (R.risks.length
+        ? R.risks.map(x => `<div class="dl-risk"><i class="dot" style="background:${x.lv==='hot'?'var(--red)':x.lv==='warn'?'var(--amber)':'var(--soft,var(--text3))'}"></i><p style="margin:0;color:var(--text2)">${escapeHtml(x.t)}</p></div>`).join('')
+        : '<div class="dl-empty">특이 위험 신호 없음.</div>'));
+
+  // 입력 → 저장
+  host.querySelectorAll('[data-dk]').forEach(el => el.addEventListener('input', () => {
+    const n = dlNote(d), k = el.dataset.dk;
+    if(!n.items[k]) n.items[k] = {};
+    n.items[k][el.dataset.df] = el.value;
+    saveDailyNotes();
+  }));
+  host.querySelector('[data-dsum]')?.addEventListener('input', e => { dlNote(d).summary = e.target.value; saveDailyNotes(); });
+}
+
+/* 메일 본문용 평문 — 화면과 같은 산출값을 쓴다 */
+function dailyReportText(){
+  const R = buildDailyReport(), d = R.d, note = dlNote(d);
+  const wd = ['일','월','화','수','목','금','토'][new Date(d+'T00:00:00').getDay()];
+  const L = [];
+  L.push(`[로가] ${d}(${wd}) 자금 보고 — 승인 요청 ${R.approve.length}건 / ${dlWon(R.approveSum)}원`);
+  L.push(`수신 대표님 · 참조 박상순 팀장`, '');
+  L.push(`■ 결론`);
+  L.push(`승인 요청 ${R.approve.length}건 · ${dlWon(R.approveSum)}원`);
+  L.push(`집행 후 예상 잔액 ${dlWon(R.after)}원 · 안전선 ${dlEok(R.floor)}억 대비 ${R.after>=R.floor?'+':''}${dlWon(R.after-R.floor)}원`);
+  if(note.summary) L.push(note.summary);
+  L.push('', `■ 오늘의 자금 포지션`);
+  L.push(`현재 잔액        ${dlWon(R.cash)}${bankSnapshot&&bankSnapshot.asOf?` (${String(bankSnapshot.asOf).replace('T',' ').slice(0,16)} 수집)`:''}`);
+  L.push(`예정 입금        +${dlWon(R.inPlan)} (${R.planIn.length}건)`);
+  L.push(`확정 출금(통보)  −${dlWon(R.notifySum)} (${R.notify.length}건)`);
+  L.push(`승인 요청분      −${dlWon(R.approveSum)} (${R.approve.length}건)`);
+  L.push(`집행 후 예상 잔액 ${dlWon(R.after)}`);
+  L.push('', `■ 승인 요청 — 결정 필요`);
+  if(!R.approve.length) L.push('(없음)');
+  R.approve.forEach((r,i) => {
+    const it = note.items[dlKey(r)] || {};
+    const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
+    L.push(`${i+1}. ${r.desc||'(거래내용 없음)'} — ${dlWon(r.out)}원`);
+    L.push(`   기한 ${r.date}${dd>0?` (${dd}일 경과)`:` (D-${-dd})`}`);
+    L.push(`   목적 ${it.purpose||'(미작성)'}`);
+    L.push(`   미집행 시 ${it.risk||'(미작성)'}`);
+    L.push(`   권고 ${it.rec||'(미선택)'}`);
+  });
+  L.push('', `■ 통보 — 승인 불필요`);
+  if(!R.notify.length) L.push('(없음)');
+  R.notify.forEach(r => L.push(`· ${r.desc||'(거래내용 없음)'} ${dlWon(r.out)}원 (${r.date})`));
+  if(R.notify.length) L.push(`  합계 ${dlWon(R.notifySum)}원`);
+  L.push('', `■ 위험 · 향후 7일`);
+  L.push(`7일 내 최저 잔액 ${dlWon(R.low.bal)}원 (${R.low.date})`);
+  R.risks.forEach(x => L.push(`· ${x.t}`));
+  L.push('', `회신: 이 메일에 "1,2 승인"처럼 번호만 회신해 주시면 확정 처리 후 집행 결과를 오늘 중 보고드립니다.`);
+  return L.join('\n');
+}
+
+document.getElementById('dlrpt-prev')?.addEventListener('click', () => { dlDate = dlShift(dlD(), -1); renderDailyReport(); });
+document.getElementById('dlrpt-next')?.addEventListener('click', () => { dlDate = dlShift(dlD(),  1); renderDailyReport(); });
+document.getElementById('dlrpt-refresh')?.addEventListener('click', () => {
+  try{ localStorage.setItem('dl_floor', String(dlFloor())); localStorage.setItem('dl_thr', String(dlThr())); }catch(e){}
+  renderDailyReport();
+});
+document.getElementById('dlrpt-copy')?.addEventListener('click', async () => {
+  const txt = dailyReportText();
+  try{ await navigator.clipboard.writeText(txt); showToast('✅ 메일용 텍스트를 복사했습니다', 'green'); }
+  catch(e){
+    const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand('copy'); showToast('✅ 복사했습니다', 'green'); }catch(e2){ showToast('복사 실패 — 수동으로 선택해 주세요', 'red'); }
+    ta.remove();
+  }
+});
+
 function renderActiveReportingSubTab() {
   const active = document.querySelector('#reporting-sub-tabs .sheet-tab.active');
   const sub = active?.dataset.reportingSub || 'weekly';
+  const dailyPanel = document.getElementById('rpt-panel-daily');
   const weeklyPanel = document.getElementById('rpt-panel-weekly');
   const monthlyPanel = document.getElementById('rpt-panel-monthly');
   const regularPanel = document.getElementById('rpt-panel-regular');
+  if (dailyPanel) dailyPanel.style.display = sub === 'daily' ? '' : 'none';
   if (weeklyPanel) weeklyPanel.style.display = sub === 'weekly' ? '' : 'none';
   if (monthlyPanel) monthlyPanel.style.display = sub === 'monthly' ? '' : 'none';
   if (regularPanel) regularPanel.style.display = sub === 'regular' ? '' : 'none';
-  if (sub === 'monthly') renderMonthlyReport();
+  if (sub === 'daily') renderDailyReport();
+  else if (sub === 'monthly') renderMonthlyReport();
   else if (sub === 'regular') renderRegularReport();
   else renderWeeklyReport();
 }
