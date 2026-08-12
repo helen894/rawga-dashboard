@@ -1603,7 +1603,7 @@
     #panel-loan .loan-btn.primary{background:var(--blue);color:#fff;border-color:transparent;}
     #panel-loan .loan-count{margin-left:auto;font-size:12.5px;color:var(--text2);}
     #panel-loan .loan-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card);}
-    #panel-loan table.loan-t{width:100%;border-collapse:collapse;font-size:13px;min-width:860px;}
+    #panel-loan table.loan-t{width:100%;border-collapse:collapse;font-size:13px;min-width:1280px;}
     #panel-loan table.loan-t th{background:var(--bg3);color:var(--text2);font-size:11.5px;font-weight:700;text-align:left;padding:10px 12px;white-space:nowrap;border-bottom:1px solid var(--border);}
     #panel-loan table.loan-t td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);white-space:nowrap;vertical-align:middle;}
     #panel-loan table.loan-t tr:last-child td{border-bottom:none;}
@@ -10235,6 +10235,14 @@ const LOAN_FIELDS = [
   { k:'rateType',   label:'금리유형',     type:'select', opts:['','고정','변동'], xls:['금리유형'] },
   { k:'repay',      label:'상환방식',     type:'select', star:true, opts:['','만기일시','원금분할','원리금균등','마이너스한도'], xls:['상환방식'] },
   { k:'monthly',    label:'월상환액(원)', type:'num',    xls:['월상환액(원)','월상환액'] },
+  /* ── 이자 지급 정보 — 예정 출금 자동 생성의 재료 ──
+     은행 적요가 `이자-32-00033 다음납입예정일-20260827` 처럼 계좌 뒷자리와 다음 납입일을
+     같이 주므로, 대출계좌를 적어두면 실제 출금과 이 대출 건을 이어 붙일 수 있다.
+     월이자는 비워두면 `잔액 × 금리 ÷ 12` 로 추정하고, 적어두면 실측값이 우선한다. */
+  { k:'account',    label:'대출계좌',     type:'text',   xls:['대출계좌','계좌번호'] },
+  { k:'intAmount',  label:'월이자(원)',   type:'num',    xls:['월이자(원)','월이자'] },
+  { k:'intDay',     label:'이자 출금일',  type:'num',    xls:['이자 출금일','이자출금일'] },
+  { k:'intAccount', label:'이자 출금계좌', type:'text',  xls:['이자 출금계좌','이자출금계좌','월이자 출금 계좌'] },
   { k:'collateral', label:'담보/보증',    type:'text',   xls:['담보/보증'] },
   { k:'plan',       label:'차환·연장 계획',type:'text',  xls:['차환·연장 계획','차환/연장 계획'] },
   { k:'memo',       label:'비고',         type:'text',   xls:['비고'] },
@@ -10293,11 +10301,21 @@ async function saveLoanData(){
   }
 }
 
+/* 월이자 — 실측값(intAmount)이 있으면 그걸 쓰고, 없으면 잔액×금리÷12 로 추정.
+   은행에서 실제 빠져나간 금액을 적어두면 예정 생성이 추정이 아니라 확정이 된다. */
+function loanMonthlyInterest(L){
+  const v = loanNum(L.intAmount);
+  if (v > 0) return { amt: v, est: false };
+  return { amt: loanNum(L.balance) * loanNum(L.rate) / 100 / 12, est: true };
+}
+
 function loanSummary(){
-  let bal=0, mi=0, maxRate=0, maxRateBank='', minRate=null, immN=0, immSum=0, nextDue=null, nextDday=null;
+  let bal=0, mi=0, miCalc=0, maxRate=0, maxRateBank='', minRate=null, immN=0, immSum=0, nextDue=null, nextDday=null;
   for(const L of loanData){
     const b=loanNum(L.balance), r=loanNum(L.rate);
-    bal+=b; mi+=b*r/100/12;
+    bal+=b;
+    miCalc += b*r/100/12;                 // 금리 기준 — 평균금리 계산용
+    mi     += loanMonthlyInterest(L).amt; // 실측 우선 — 실제 나갈 돈
     if(r>maxRate){ maxRate=r; maxRateBank=(L.bank||'')+' '+(L.product||''); }
     if(r>0 && (minRate===null || r<minRate)) minRate=r;
     const dd=loanDday(L.dueDate);
@@ -10307,7 +10325,9 @@ function loanSummary(){
     }
   }
   // effRate = 잔액가중 평균금리 (Σ(잔액×금리)/Σ잔액). 단순평균은 소액 대출이 왜곡하므로 쓰지 않는다.
-  const effRate = bal>0 ? (mi*12/bal*100) : 0;
+  // ⚠ mi(실측 우선) 가 아니라 miCalc(금리 기준)로 계산한다 — 실측 이자에는 원금·수수료가 섞일 수 있어
+  //   그걸로 나누면 '평균 금리'가 아니게 된다.
+  const effRate = bal>0 ? (miCalc*12/bal*100) : 0;
   return { count:loanData.length, bal, mi, maxRate, maxRateBank:maxRateBank.trim(), minRate, effRate, immN, immSum, nextDue, nextDday };
 }
 
@@ -10329,8 +10349,8 @@ function renderLoanTab(){
     sumEl.innerHTML =
       `<div class="loan-sum-grid">`
       + `<div class="loan-sc"><div class="l">총 대출잔액</div><div class="v">${loanEok(s.bal)}억</div><div class="s">${s.count}건</div></div>`
-      + `<div class="loan-sc"><div class="l">월 이자(추정)</div><div class="v">${loanMan(s.mi)}만</div><div class="s">연 실효 ${s.effRate.toFixed(1)}%</div></div>`
-      + `<div class="loan-sc"><div class="l">최고 금리</div><div class="v">${s.maxRate?s.maxRate.toFixed(2)+'%':'—'}</div><div class="s">${s.maxRateBank||'—'}</div></div>`
+      + `<div class="loan-sc"><div class="l">월 이자</div><div class="v">${loanMan(s.mi)}만</div><div class="s">연 ${loanMan(s.mi*12)}만</div></div>`
+      + `<div class="loan-sc"><div class="l">평균 금리</div><div class="v">${s.effRate?s.effRate.toFixed(2)+'%':'—'}</div><div class="s">${(s.minRate!=null&&s.maxRate)?s.minRate.toFixed(2)+'~'+s.maxRate.toFixed(2)+'%':''}</div></div>`
       + `<div class="loan-sc ${s.immN>0?'hot':''}"><div class="l">임박 만기</div><div class="v">${s.immN>0?loanEok(s.immSum)+'억':'없음'}</div><div class="s">3개월내 ${s.immN}건</div></div>`
       + `<div class="loan-sc ${s.nextDday!=null&&s.nextDday<=180?'warn':''}"><div class="l">다음 만기</div><div class="v">${s.nextDday!=null?'D-'+s.nextDday:'—'}</div><div class="s">${s.nextDue?s.nextDue.slice(5):'—'}</div></div>`
       + `</div>`;
@@ -10343,23 +10363,28 @@ function renderLoanTab(){
   // 표 (만기일 오름차순)
   const thead=document.querySelector('#loan-table thead');
   const tbody=document.querySelector('#loan-table tbody');
-  if(thead) thead.innerHTML = `<tr><th>금융기관</th><th>상품명</th><th>구분</th><th>만기일</th><th style="text-align:right">현재잔액</th><th style="text-align:right">금리</th><th>상환방식</th><th>차환 계획</th><th></th></tr>`;
+  if(thead) thead.innerHTML = `<tr><th>금융기관</th><th>상품명</th><th>구분</th><th>대출계좌</th><th>만기일</th><th style="text-align:right">현재잔액</th><th style="text-align:right">금리</th><th style="text-align:right">월이자</th><th>이자 출금일</th><th>이자 출금계좌</th><th>상환방식</th><th>차환 계획</th><th></th></tr>`;
   if(tbody){
     if(!loanData.length){
-      tbody.innerHTML = `<tr><td colspan="9" class="empty">등록된 대출이 없습니다. <b>+ 대출 추가</b> 또는 <b>엑셀 업로드</b>로 시작하세요.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="empty">등록된 대출이 없습니다. <b>+ 대출 추가</b> 또는 <b>엑셀 업로드</b>로 시작하세요.</td></tr>`;
     } else {
       const idx = loanData.map((L,i)=>i).sort((a,b)=>{
         const da=loanData[a].dueDate||'9999', db=loanData[b].dueDate||'9999'; return da<db?-1:da>db?1:0;
       });
       tbody.innerHTML = idx.map(i=>{
         const L=loanData[i];
+        const mi=loanMonthlyInterest(L);
         return `<tr>
           <td>${escapeHtml(L.bank)||'—'}</td>
           <td>${escapeHtml(L.product)||'—'}</td>
           <td>${escapeHtml(L.type)||'—'}</td>
+          <td style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px">${escapeHtml(L.account)||'<span style="color:var(--text3);font-family:inherit">미입력</span>'}</td>
           <td>${L.dueDate||'—'}${loanDdayBadge(L.dueDate)}</td>
           <td class="num">${loanNum(L.balance)?loanWon(L.balance):'—'}</td>
           <td class="num">${loanNum(L.rate)?loanNum(L.rate).toFixed(3)+'%':'—'}</td>
+          <td class="num">${mi.amt?loanWon(mi.amt):'—'}${mi.amt&&mi.est?'<span style="font-weight:400;color:var(--text3);font-size:10.5px;margin-left:3px" title="잔액×금리÷12 로 추정한 값입니다. 실제 출금액을 입력하면 그 값이 우선합니다">추정</span>':''}</td>
+          <td>${loanNum(L.intDay)?'매월 '+loanNum(L.intDay)+'일':'<span style="color:var(--text3)">미입력</span>'}</td>
+          <td style="font-size:11.5px;color:var(--text2)">${escapeHtml(L.intAccount)||'<span style="color:var(--text3)">미입력</span>'}</td>
           <td>${escapeHtml(L.repay)||'—'}</td>
           <td style="color:var(--text2);white-space:normal;max-width:220px">${escapeHtml(L.plan)||'—'}</td>
           <td style="text-align:right;white-space:nowrap"><button class="row-btn" onclick="openLoanModal(${i})">수정</button><button class="row-btn del" onclick="deleteLoan(${i})">삭제</button></td>
