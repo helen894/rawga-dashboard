@@ -352,6 +352,17 @@
   .recon-more > summary:hover { color: var(--text); }
   .recon-more > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
 
+  /* 수표 발행 대장 — 입출금 탭에 접이식 섹션으로 흡수(원래 별도 탭이었음, 월 6건 규모라 상시 탭은 과함).
+     평소엔 접어 두고, 미등록 후보·미기재가 있으면 자동으로 펼친다(은행 실잔액 대조 카드와 같은 패턴). */
+  .check-details { margin-bottom: 20px; }
+  .check-details > summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; list-style: none; padding: 2px 0; }
+  .check-details > summary::-webkit-details-marker { display: none; }
+  .check-details > summary::before { content: '▸'; font-size: 11px; color: var(--text3); }
+  .check-details[open] > summary::before { content: '▾'; }
+  .check-details > summary:hover { color: var(--blue); }
+  .check-details > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+  .check-details #panel-check { margin-top: 14px; }
+
   /* 주간 요약 (textarea 에디터) */
   .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
   .weekly-summary-updated { font-size: 11px; color: var(--text3); }
@@ -582,7 +593,6 @@
   <div class="tab" data-tab="reporting">리포팅</div>
   <div class="tab" data-tab="corp-card">법인카드</div>
   <div class="tab" data-tab="loan">대출 <span style="font-size:10px;color:var(--amber);font-weight:700">NEW</span></div>
-  <div class="tab" data-tab="check">수표 <span style="font-size:10px;color:var(--amber);font-weight:700">NEW</span></div>
   <div class="tab" data-tab="ar">매출채권(AR)</div>
   <div class="tab" data-tab="cashflow">입출금 내역</div>
   <div class="tab" data-tab="recurring">반복 거래</div>
@@ -797,6 +807,116 @@
         양식 다운로드
       </button>
     </div>
+  </div>
+
+  <!-- ======== 수표 발행 대장 (접이식 섹션) ========
+       원래 별도 최상단 탭이었으나 월 6건 규모라 상시 탭 자리를 내주기엔 과해 입출금 탭으로 흡수(2026-08-13).
+       평소엔 접혀 있고, 대장에 없는 후보나 수취인·목적 미기재가 있으면 자동으로 펼쳐진다
+       (은행 실잔액 대조 카드의 recon-more 와 같은 패턴). 기능·저장(cat_data.check_data)은 그대로. -->
+  <div class="chart-box check-details-box">
+    <details class="check-details" id="check-details">
+      <summary id="check-summary-line">🧾 수표 발행 대장</summary>
+      <div id="panel-check">
+        <style>
+          #panel-check .chk-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+          #panel-check .chk-head h2{margin:0;font-size:18px;color:var(--text);}
+          #panel-check .chk-head .sub{font-size:12px;color:var(--text2);}
+          #panel-check .chk-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+          #panel-check .chk-sc{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:13px 10px;text-align:center;}
+          #panel-check .chk-sc .l{font-size:11.5px;color:var(--text2);font-weight:600;}
+          #panel-check .chk-sc .v{font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.02em;line-height:1.1;color:var(--text);}
+          #panel-check .chk-sc .s{font-size:10.5px;color:var(--text3);margin-top:2px;}
+          #panel-check .chk-sc.hot{background:var(--red2);border-color:transparent;}
+          #panel-check .chk-sc.hot .l,#panel-check .chk-sc.hot .v{color:var(--red);}
+          #panel-check .chk-sc.ok{background:var(--green2);border-color:transparent;}
+          #panel-check .chk-sc.ok .l,#panel-check .chk-sc.ok .v{color:var(--green);}
+          #panel-check .chk-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0;}
+          #panel-check .chk-btn{font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;}
+          #panel-check .chk-btn.primary{background:var(--blue);color:#fff;border-color:transparent;}
+          #panel-check .chk-btn.green{color:var(--green);border-color:var(--green);}
+          #panel-check .chk-toolbar select,#panel-check .chk-toolbar input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;}
+          #panel-check .chk-count{margin-left:auto;font-size:12.5px;color:var(--text2);}
+          #panel-check .chk-cand{border:1px solid var(--amber);background:var(--amber2);border-radius:12px;padding:14px 16px;margin-bottom:16px;}
+          #panel-check .chk-cand h3{margin:0 0 4px;font-size:14px;color:var(--amber);}
+          #panel-check .chk-cand p{margin:0 0 11px;font-size:12px;color:var(--text2);line-height:1.55;}
+          #panel-check .chk-cand-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
+          #panel-check .chk-cand-row .d{color:var(--text2);font-family:ui-monospace,Menlo,Consolas,monospace;}
+          #panel-check .chk-cand-row .a{font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;}
+          #panel-check .chk-cand-row .t{color:var(--text2);flex:1;min-width:120px;}
+          #panel-check .chk-kind{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--card);color:var(--text2);}
+          #panel-check .chk-kind.sure{background:var(--red2);color:var(--red);}
+          #panel-check .chk-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card);}
+          #panel-check table.chk-t{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+          #panel-check table.chk-t th{background:var(--bg3);color:var(--text2);font-size:11.5px;font-weight:700;text-align:left;padding:10px 12px;white-space:nowrap;border-bottom:1px solid var(--border);}
+          #panel-check table.chk-t td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+          #panel-check table.chk-t tr:last-child td{border-bottom:none;}
+          #panel-check table.chk-t td.num{text-align:right;font-weight:700;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;}
+          #panel-check table.chk-t .empty{text-align:center;color:var(--text3);padding:26px;}
+          #panel-check .miss{color:var(--red);font-weight:700;}
+          #panel-check .row-btn{font-size:12px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;margin-left:4px;}
+          #panel-check .row-btn.del{color:var(--red);border-color:var(--red2);}
+          #panel-check .st{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;}
+          #panel-check .st.issued{background:var(--amber2);color:var(--amber);}
+          #panel-check .st.cleared{background:var(--green2);color:var(--green);}
+          #panel-check .st.void{background:var(--bg3);color:var(--text3);}
+          #panel-check .chk-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;}
+          #panel-check .chk-modal.hidden{display:none;}
+          #panel-check .chk-modal-box{background:var(--card);border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.25);}
+          #panel-check .chk-modal-box h3{margin:0 0 4px;font-size:17px;color:var(--text);}
+          #panel-check .chk-modal-box .hint{margin:0 0 16px;font-size:12px;color:var(--text2);line-height:1.55;}
+          #panel-check .chk-form{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+          #panel-check .chk-form label{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:4px;}
+          #panel-check .chk-form label.wide{grid-column:1/-1;}
+          #panel-check .chk-form label.star::after{content:" ★";color:var(--blue);}
+          #panel-check .chk-form input,#panel-check .chk-form select,#panel-check .chk-form textarea{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:13px;width:100%;font-family:inherit;}
+          #panel-check .chk-modal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+        </style>
+
+        <div class="chk-head">
+          <h2>🧾 수표 발행 대장</h2>
+          <span class="sub">은행에는 발행 사실만 남습니다 — 수취인·목적은 여기에만 남습니다 · cat_data(check_data)</span>
+        </div>
+
+        <div class="chk-sum" id="chk-summary"></div>
+
+        <div class="chk-toolbar">
+          <button class="chk-btn primary" id="chk-add-btn">+ 수표 추가</button>
+          <button class="chk-btn green" id="chk-export-btn">엑셀 내보내기</button>
+          <select id="chk-filter-status">
+            <option value="">상태 전체</option>
+            <option value="발행">발행</option>
+            <option value="결제완료">결제완료</option>
+            <option value="폐기">폐기</option>
+          </select>
+          <select id="chk-filter-fill">
+            <option value="">기재 전체</option>
+            <option value="miss">미기재만</option>
+            <option value="done">기재완료만</option>
+          </select>
+          <input type="month" id="chk-filter-month" style="width:140px">
+          <button class="chk-btn" id="chk-filter-reset" style="color:var(--text2)">필터 초기화</button>
+          <span class="chk-count" id="chk-count"></span>
+        </div>
+
+        <div id="chk-cand-slot"></div>
+
+        <div class="chk-table-wrap">
+          <table class="chk-t" id="chk-table"><thead></thead><tbody></tbody></table>
+        </div>
+
+        <div class="chk-modal hidden" id="chk-modal">
+          <div class="chk-modal-box">
+            <h3 id="chk-modal-title">수표 기재</h3>
+            <p class="hint" id="chk-modal-hint"></p>
+            <div class="chk-form" id="chk-form"></div>
+            <div class="chk-modal-act">
+              <button class="chk-btn" id="chk-modal-cancel">취소</button>
+              <button class="chk-btn primary" id="chk-modal-save">저장</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="filter-bar">
@@ -1658,112 +1778,6 @@
     </div>
   </div>
 </div><!-- /panel-loan -->
-
-<!-- ======== CHECK (수표 발행 대장) TAB ========
-     수표는 '지급수단'이라 은행에는 발행 사실만 남고 수취인·목적이 전혀 안 남는다.
-     2026-07 실측: 발행 14.91억 = 그달 대외 출금의 11.2%. 은행 데이터로는 어떤 자동화로도
-     복원할 수 없는 구간이라, 사람이 기재하는 대장이 유일한 경로다.
-     저장은 cat_data(check_data) — 대출 탭과 같은 자체 완결형 모듈. -->
-<div class="panel" id="panel-check">
-  <style>
-    #panel-check .chk-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
-    #panel-check .chk-head h2{margin:0;font-size:18px;color:var(--text);}
-    #panel-check .chk-head .sub{font-size:12px;color:var(--text2);}
-    #panel-check .chk-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
-    #panel-check .chk-sc{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:13px 10px;text-align:center;}
-    #panel-check .chk-sc .l{font-size:11.5px;color:var(--text2);font-weight:600;}
-    #panel-check .chk-sc .v{font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.02em;line-height:1.1;color:var(--text);}
-    #panel-check .chk-sc .s{font-size:10.5px;color:var(--text3);margin-top:2px;}
-    #panel-check .chk-sc.hot{background:var(--red2);border-color:transparent;}
-    #panel-check .chk-sc.hot .l,#panel-check .chk-sc.hot .v{color:var(--red);}
-    #panel-check .chk-sc.ok{background:var(--green2);border-color:transparent;}
-    #panel-check .chk-sc.ok .l,#panel-check .chk-sc.ok .v{color:var(--green);}
-    #panel-check .chk-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0;}
-    #panel-check .chk-btn{font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;}
-    #panel-check .chk-btn.primary{background:var(--blue);color:#fff;border-color:transparent;}
-    #panel-check .chk-btn.green{color:var(--green);border-color:var(--green);}
-    #panel-check .chk-toolbar select,#panel-check .chk-toolbar input{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;}
-    #panel-check .chk-count{margin-left:auto;font-size:12.5px;color:var(--text2);}
-    #panel-check .chk-cand{border:1px solid var(--amber);background:var(--amber2);border-radius:12px;padding:14px 16px;margin-bottom:16px;}
-    #panel-check .chk-cand h3{margin:0 0 4px;font-size:14px;color:var(--amber);}
-    #panel-check .chk-cand p{margin:0 0 11px;font-size:12px;color:var(--text2);line-height:1.55;}
-    #panel-check .chk-cand-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;}
-    #panel-check .chk-cand-row .d{color:var(--text2);font-family:ui-monospace,Menlo,Consolas,monospace;}
-    #panel-check .chk-cand-row .a{font-weight:700;font-family:ui-monospace,Menlo,Consolas,monospace;}
-    #panel-check .chk-cand-row .t{color:var(--text2);flex:1;min-width:120px;}
-    #panel-check .chk-kind{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--card);color:var(--text2);}
-    #panel-check .chk-kind.sure{background:var(--red2);color:var(--red);}
-    #panel-check .chk-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card);}
-    #panel-check table.chk-t{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
-    #panel-check table.chk-t th{background:var(--bg3);color:var(--text2);font-size:11.5px;font-weight:700;text-align:left;padding:10px 12px;white-space:nowrap;border-bottom:1px solid var(--border);}
-    #panel-check table.chk-t td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
-    #panel-check table.chk-t tr:last-child td{border-bottom:none;}
-    #panel-check table.chk-t td.num{text-align:right;font-weight:700;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;}
-    #panel-check table.chk-t .empty{text-align:center;color:var(--text3);padding:26px;}
-    #panel-check .miss{color:var(--red);font-weight:700;}
-    #panel-check .row-btn{font-size:12px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;margin-left:4px;}
-    #panel-check .row-btn.del{color:var(--red);border-color:var(--red2);}
-    #panel-check .st{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;}
-    #panel-check .st.issued{background:var(--amber2);color:var(--amber);}
-    #panel-check .st.cleared{background:var(--green2);color:var(--green);}
-    #panel-check .st.void{background:var(--bg3);color:var(--text3);}
-    #panel-check .chk-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;}
-    #panel-check .chk-modal.hidden{display:none;}
-    #panel-check .chk-modal-box{background:var(--card);border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.25);}
-    #panel-check .chk-modal-box h3{margin:0 0 4px;font-size:17px;color:var(--text);}
-    #panel-check .chk-modal-box .hint{margin:0 0 16px;font-size:12px;color:var(--text2);line-height:1.55;}
-    #panel-check .chk-form{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
-    #panel-check .chk-form label{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:4px;}
-    #panel-check .chk-form label.wide{grid-column:1/-1;}
-    #panel-check .chk-form label.star::after{content:" ★";color:var(--blue);}
-    #panel-check .chk-form input,#panel-check .chk-form select,#panel-check .chk-form textarea{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:13px;width:100%;font-family:inherit;}
-    #panel-check .chk-modal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
-  </style>
-
-  <div class="chk-head">
-    <h2>🧾 수표 발행 대장</h2>
-    <span class="sub">은행에는 발행 사실만 남습니다 — 수취인·목적은 여기에만 남습니다 · cat_data(check_data)</span>
-  </div>
-
-  <div class="chk-sum" id="chk-summary"></div>
-
-  <div class="chk-toolbar">
-    <button class="chk-btn primary" id="chk-add-btn">+ 수표 추가</button>
-    <button class="chk-btn green" id="chk-export-btn">엑셀 내보내기</button>
-    <select id="chk-filter-status">
-      <option value="">상태 전체</option>
-      <option value="발행">발행</option>
-      <option value="결제완료">결제완료</option>
-      <option value="폐기">폐기</option>
-    </select>
-    <select id="chk-filter-fill">
-      <option value="">기재 전체</option>
-      <option value="miss">미기재만</option>
-      <option value="done">기재완료만</option>
-    </select>
-    <input type="month" id="chk-filter-month" style="width:140px">
-    <button class="chk-btn" id="chk-filter-reset" style="color:var(--text2)">필터 초기화</button>
-    <span class="chk-count" id="chk-count"></span>
-  </div>
-
-  <div id="chk-cand-slot"></div>
-
-  <div class="chk-table-wrap">
-    <table class="chk-t" id="chk-table"><thead></thead><tbody></tbody></table>
-  </div>
-
-  <div class="chk-modal hidden" id="chk-modal">
-    <div class="chk-modal-box">
-      <h3 id="chk-modal-title">수표 기재</h3>
-      <p class="hint" id="chk-modal-hint"></p>
-      <div class="chk-form" id="chk-form"></div>
-      <div class="chk-modal-act">
-        <button class="chk-btn" id="chk-modal-cancel">취소</button>
-        <button class="chk-btn primary" id="chk-modal-save">저장</button>
-      </div>
-    </div>
-  </div>
-</div><!-- /panel-check -->
 
 <!-- ======== CORP CARD TAB ======== -->
 <div class="panel" id="panel-corp-card">
@@ -10728,6 +10742,23 @@ function renderCheckTab(){
             <button class="row-btn del" onclick="deleteCheck(${i})">삭제</button></td>
         </tr>`;
       }).join('');
+
+  // 접기/펼치기 — 대장 미등록 후보나 수취인·목적 미기재가 있으면 강제로 펼침(안 열어보면 놓친다),
+  // 없으면 사용자가 마지막으로 둔 상태를 따른다(은행 실잔액 대조 카드와 같은 패턴).
+  // ⚠ .open 을 스크립트로 바꾸면 네이티브 toggle 이벤트가 뜬다 — 강제 펼침/접힘까지 '사용자가 열었다'로
+  //   기록되면 다음 렌더의 savedOpen 을 오염시킨다(문제 없어졌는데 계속 펼쳐짐). 플래그로 이번 변경만 무시시킨다.
+  const det = document.getElementById('check-details');
+  if (det) {
+    const n = s.candN + s.unfillN;
+    let savedOpen = false;
+    try { savedOpen = localStorage.getItem('check_details_open') === '1'; } catch (e) {}
+    const desiredOpen = n > 0 || savedOpen;
+    if (det.open !== desiredOpen) { _chkDetailsAutoSet = true; det.open = desiredOpen; }
+    const sumEl = document.getElementById('check-summary-line');
+    if (sumEl) sumEl.textContent = `🧾 수표 발행 대장 — 누적 ${s.allN}건 ${chkEok(s.allSum)}억` +
+      (n ? ` · 미등록/미기재 ${n}건 ⚠` : ' · 모두 기재됨');
+  }
+
   renderCheckWarn();
 }
 
@@ -10749,7 +10780,13 @@ function renderCheckWarn(){
          <span style="margin-left:auto;font-size:12px;color:var(--amber);font-weight:700">수표 대장 열기 →</span>
        </div>
      </div>`;
-  document.getElementById('chk-warn-box')?.addEventListener('click', () => activateTab('check'));
+  document.getElementById('chk-warn-box')?.addEventListener('click', () => {
+    // 수표 탭이 입출금 탭으로 흡수됨(2026-08-13) — 탭 전환 + 섹션 강제 펼침 + 스크롤
+    activateTab('cashflow');
+    const det = document.getElementById('check-details');
+    if (det) det.open = true;
+    document.querySelector('.check-details-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 const CHK_FIELDS = [
@@ -10851,6 +10888,12 @@ document.getElementById('chk-filter-reset')?.addEventListener('click', () => {
   ['chk-filter-status','chk-filter-fill','chk-filter-month'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   renderCheckTab();
 });
+// 접힘 상태 기억 (자동 펼침/접힘으로 바뀐 건 저장하지 않는다 — 사용자가 직접 클릭했을 때만 기록)
+let _chkDetailsAutoSet = false;
+document.getElementById('check-details')?.addEventListener('toggle', function(){
+  if (_chkDetailsAutoSet) { _chkDetailsAutoSet = false; return; }
+  try { localStorage.setItem('check_details_open', this.open ? '1' : '0'); } catch (e) {}
+});
 
 /* ===== 탭 전환 · 브라우저 히스토리(뒤로가기) 연동 =====
  * 탭 클릭 / 좌상단 로고 / 뒤로가기가 모두 activateTab()을 거친다.
@@ -10878,7 +10921,6 @@ function activateTab(name, { push = true } = {}) {
   if (name === 'reporting')      renderActiveReportingSubTab();
   if (name === 'corp-card')      renderCorporateCardTab();
   if (name === 'loan')           renderLoanTab();
-  if (name === 'check')          renderCheckTab();
   if (name === 'category')       setTimeout(() => renderCategoryTab(), 0);
   if (name === 'recurring')      renderRecurringTab();
   if (name === 'admin')          renderAuditLog();
@@ -10898,6 +10940,7 @@ function activateTab(name, { push = true } = {}) {
     document.getElementById('cf-amount-max').value = '';
     cfPage = 1;
     renderCFTable();
+    renderCheckTab(); // 수표 발행 대장 접이식 섹션 — 입출금 탭에 흡수(2026-08-13)
   }
   if (name === 'ar') {
     document.getElementById('ar-filter-status').value = '';
