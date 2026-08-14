@@ -45,6 +45,21 @@ var TAB_CONFIG = {
 
 var FIELDS = ['expected', 'collected', 'remaining', 'start', 'due', 'collect'];
 
+/* 한 행의 금액이 이 값을 넘으면 파싱 오류로 본다 (안전가드 ③).
+   전체 채권 규모가 300억대(3e10)이고 최대 행이 4억 수준이므로 1조는 30배 이상 여유가 있다.
+   열이 밀려 날짜·계좌번호 같은 게 금액으로 읽히면 최소 1e14 대가 나오므로 확실히 걸린다. */
+var MAX_SANE_AMOUNT = 1e12;
+
+/* 헤더 행(정규화된 문자열 배열)에서 필드별 열 위치를 찾는다.
+   같은 탭에 표가 여러 개면 표마다 다시 호출해 열 위치를 새로 잡는다(parseTab_ 참고). */
+function mapCols_(rowNorm, cfg) {
+  var cm = {};
+  FIELDS.forEach(function (f) {
+    if (cfg[f]) { var ci = rowNorm.indexOf(norm_(cfg[f])); if (ci >= 0) cm[f] = ci; }
+  });
+  return cm;
+}
+
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('RAWGA 동기화')
@@ -64,6 +79,14 @@ function norm_(s) { return String(s == null ? '' : s).toLowerCase().replace(/\s+
 function num_(v) {
   if (v === '' || v == null) return 0;
   if (typeof v === 'number') return v;
+  /* ⚠⚠ 날짜 셀 방어 (2026-08-15 지앤원 사고) — Date 객체를 문자열로 만들면
+     "Sat Jan 10 2026 00:00:00 GMT+0900 (…)" 이 되고, 아래 '숫자만 남기기'가 이걸
+     "1020260000000900" = 1,020조 짜리 금액으로 바꿔 놓는다. 실제로 지앤원 탭에서
+     금액 열 자리에 날짜가 들어와 예상회수 합계가 19,163조로 찍혔다.
+     금액 칸에 날짜가 오는 건 예외 없이 열 매핑 오류이므로 0으로 죽인다 —
+     조용히 거대 숫자로 합계를 오염시키는 것보다 0이 훨씬 안전하고, 아래
+     MAX_SANE_AMOUNT 가드가 원인을 따로 잡아 준다. */
+  if (Object.prototype.toString.call(v) === '[object Date]') return 0;
   var neg = /^\(.*\)$/.test(String(v).trim());
   var s = String(v).replace(/[^0-9.\-]/g, '');
   var n = parseFloat(s);
@@ -183,24 +206,32 @@ function parseTab_(sh, cfg) {
   var headerRow = -1, colMap = {};
   for (var r = 0; r < Math.min(values.length, 20); r++) {
     var rowNorm = values[r].map(norm_);
-    if (rowNorm.indexOf(wantExp) >= 0) {
-      headerRow = r;
-      FIELDS.forEach(function (f) {
-        if (cfg[f]) { var ci = rowNorm.indexOf(norm_(cfg[f])); if (ci >= 0) colMap[f] = ci; }
-      });
-      break;
-    }
+    if (rowNorm.indexOf(wantExp) >= 0) { headerRow = r; colMap = mapCols_(rowNorm, cfg); break; }
   }
-  if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfg.expected + ') 못 찾음' };
-  if (colMap.expected === undefined) return { records: [], note: '⚠ 예상회수액 열 못 찾음' };
+  if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfg.expected + ') 못 찾음', anomalies: [] };
+  if (colMap.expected === undefined) return { records: [], note: '⚠ 예상회수액 열 못 찾음', anomalies: [] };
 
   // ── 1차 스캔: 후보 행 수집 (송금일 빈 행도 일단 보류로 담음) ─────────────
   //   종전에는 '송금일 빈 행 = 합계/공백'으로 보고 전부 버렸으나, 병합셀 연속행
   //   (같은 매입 건의 추가 매출/분할 회수 행)까지 사라져 금액이 누락됐음(동이식품 1억).
-  var hasStartCol = colMap.start !== undefined;
+  var anomalies = [];
   var cand = [];
+  var tableCount = 1, block = 0, blockFirst = true;
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
+
+    /* ⚠⚠ 한 탭에 표가 여러 개 있고 열 구조가 서로 다를 수 있다 (2026-08-15 지앤원 사고).
+       지앤원 탭은 표가 둘인데 **둘째 표에만 '차수' 열이 있어 이후 열이 한 칸씩 밀린다.**
+       첫 헤더의 열 위치를 끝까지 그대로 쓰면 둘째 표에서 '입금예정액' 자리의 '지출일자'(날짜)를
+       금액으로 읽고, num_ 가 날짜를 15~16자리 숫자로 바꿔 합계가 19,163조로 찍혔다
+       (예상 871,999,773 → 19,163,380,872,011,470. 날짜 13개 합으로 오차 0 재현 확인).
+       → 헤더 행을 다시 만나면 그 아래 행부터는 새 열 위치로 읽는다. */
+    if (row.map(norm_).indexOf(wantExp) >= 0) {
+      colMap = mapCols_(row.map(norm_), cfg);
+      tableCount++; block++; blockFirst = true;
+      continue;                                  // 헤더 자체는 데이터가 아니다
+    }
+
     // ── (옵트인) 키워드 제외: config의 excludeKeywords 중 하나라도 행에 있으면 제외 ──
     //   예: CNA의 '통관경비'(매출 아님) 행 제외. 다른 탭엔 영향 없음.
     if (cfg.excludeKeywords && rowHasKeyword_(row, cfg.excludeKeywords)) continue;
@@ -218,9 +249,22 @@ function parseTab_(sh, cfg) {
     }
     if (expected === 0 && collected === 0) continue; // 빈 행 제외
 
+    /* ── 안전가드 ③ — 한 행 금액이 상식 범위를 넘으면 파싱 오류다 ──
+       전체 채권이 300억대인데 1조를 넘는 행이 나왔다면 열이 밀려 날짜·번호를 금액으로
+       읽은 것이다. 조용히 합계에 섞이면 대시보드가 통째 오염되므로 기록해 두고
+       ②동기화를 막는다(pushToDashboard). */
+    if (Math.abs(expected) > MAX_SANE_AMOUNT || Math.abs(collected) > MAX_SANE_AMOUNT) {
+      anomalies.push({ tab: sh.getName(), row: i + 1, expected: expected, collected: collected });
+    }
+
     // 송금일 열이 없는 탭은 이 판정을 적용하지 않음(종전 동작 유지)
+    var hasStartCol = colMap.start !== undefined;
     var hasStart = hasStartCol ? String(row[colMap.start] || '').trim() !== '' : true;
-    cand.push({ row: row, expected: expected, collected: collected, hasStart: hasStart, first: cand.length === 0 });
+    /* cm: 이 행을 읽을 때 쓴 열 매핑을 그대로 들고 간다 — 표마다 열 위치가 다르므로
+       2차 판정에서 colMap 을 다시 참조하면 마지막 표의 매핑으로 전부 읽어 버린다. */
+    cand.push({ row: row, cm: colMap, block: block, expected: expected, collected: collected,
+                hasStart: hasStart, first: blockFirst });
+    blockFirst = false;
   }
 
   // ── 2차: 합계 행만 걸러내고 나머지는 살림 ──────────────────────────────
@@ -233,20 +277,25 @@ function parseTab_(sh, cfg) {
   //          CNA 59행처럼 날짜가 하나도 없어도 시트 누적액에 잡히는 '실제 채권'이 있어서
   //          (2026-08-07 사용자 확인, 30,757,119원). ⑴⑵(총계 행 판정)는 그대로 살아 있다.
   //   나머지 = 병합셀 연속행(같은 매입 건의 추가 매출/분할 회수) → 직전 행의 송금일 승계해 유지
-  var totalExpAll = 0, skippedTotalRows = 0;
-  for (var t = 0; t < cand.length; t++) totalExpAll += cand[t].expected;
+  //   ⚠ 총계 일치 판정 ⑵ 는 **같은 표(block) 안의 합**과 비교한다 — 표가 둘인 탭에서
+  //     전체 합과 비교하면 어느 표의 총계 행도 걸리지 않는다.
+  var blockExp = {}, skippedTotalRows = 0;
+  for (var t = 0; t < cand.length; t++) blockExp[cand[t].block] = (blockExp[cand[t].block] || 0) + cand[t].expected;
 
-  var records = [], lastStart = '';
+  var records = [], lastStart = '', lastBlock = -1;
   for (var k = 0; k < cand.length; k++) {
-    var c = cand[k];
+    var c = cand[k], cm = c.cm;
+    // 송금일 승계(병합셀 연속행)는 같은 표 안에서만 유효 — 표가 바뀌면 초기화한다
+    if (c.block !== lastBlock) { lastStart = ''; lastBlock = c.block; }
+    var hasStartCol = cm.start !== undefined;
     if (!c.hasStart) {
-      var dueVal     = colMap.due     !== undefined ? String(c.row[colMap.due]     || '').trim() : '';
-      var collectVal = colMap.collect !== undefined ? String(c.row[colMap.collect] || '').trim() : '';
+      var dueVal     = cm.due     !== undefined ? String(c.row[cm.due]     || '').trim() : '';
+      var collectVal = cm.collect !== undefined ? String(c.row[cm.collect] || '').trim() : '';
       var noEvidence = !cfg.keepNoEvidenceRows && !dueVal && !collectVal && !(c.collected > 0); // 회수 근거 전무
-      var isDropRow  = c.first || Math.abs(2 * c.expected - totalExpAll) <= 2 || noEvidence;
+      var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2 || noEvidence;
       if (isDropRow) { skippedTotalRows++; continue; }
     }
-    var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[colMap.start]) : (hasStartCol ? lastStart : '');
+    var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[cm.start]) : (hasStartCol ? lastStart : '');
     if (c.hasStart && hasStartCol) lastStart = startStr;
 
     var rec = {
@@ -255,15 +304,15 @@ function parseTab_(sh, cfg) {
       start: startStr,
       expected: c.expected,
       collected: c.collected,
-      due_date: colMap.due !== undefined ? fmtDate_(c.row[colMap.due]) : '',
-      collect_date: colMap.collect !== undefined ? fmtDate_(c.row[colMap.collect]) : '',
+      due_date: cm.due !== undefined ? fmtDate_(c.row[cm.due]) : '',
+      collect_date: cm.collect !== undefined ? fmtDate_(c.row[cm.collect]) : '',
       note: '',
     };
     // 회수액 없는 행(미회수)에 실제 입금일이 잘못 찍혀 있으면 공란 (입금 없으면 입금일도 없음).
     // FIFO 2단 정렬 전에 정리해야 stray 회수일이 '회수일 있는 행'으로 잘못 우선순위 먹지 않음 (예: 팬텀).
     if (!(rec.collected > 0)) rec.collect_date = '';
     // 미회수 열이 있는 탭만 remaining 전달(없으면 Edge가 예상-회수로 계산)
-    if (colMap.remaining !== undefined) rec.remaining = num_(c.row[colMap.remaining]);
+    if (cm.remaining !== undefined) rec.remaining = num_(c.row[cm.remaining]);
     records.push(rec);
   }
 
@@ -277,8 +326,11 @@ function parseTab_(sh, cfg) {
   return {
     records: records,
     fifo: fifo,
-    note: 'OK (헤더 ' + (headerRow + 1) + '행, 매핑: ' + foundCols.join(',') + ')' +
-          (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '')
+    anomalies: anomalies,
+    note: 'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
+          ', 매핑: ' + foundCols.join(',') + ')' +
+          (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '') +
+          (anomalies.length ? ' ⛔비정상 금액 ' + anomalies.length + '행' : '')
   };
 }
 
@@ -286,7 +338,7 @@ function parseTab_(sh, cfg) {
 function parseAll_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheets = ss.getSheets();
-  var records = [], report = [], skipped = [], fifoTabs = [];
+  var records = [], report = [], skipped = [], fifoTabs = [], anomalies = [];
   var configured = {};
 
   sheets.forEach(function (sh) {
@@ -297,6 +349,7 @@ function parseAll_() {
     configured[name] = true;
     var res = parseTab_(sh, cfg);
     if (res.fifo && res.fifo.changed) fifoTabs.push(name + '(' + res.fifo.moved + '행)');
+    if (res.anomalies && res.anomalies.length) anomalies = anomalies.concat(res.anomalies);
     var sumE = res.records.reduce(function (s, r) { return s + r.expected; }, 0);
     var sumC = res.records.reduce(function (s, r) { return s + r.collected; }, 0);
     report.push('· ' + name + ' : ' + res.records.length + '건, 예상 ' + Math.round(sumE).toLocaleString() + ' / 회수 ' + Math.round(sumC).toLocaleString() + ' — ' + res.note);
@@ -308,7 +361,17 @@ function parseAll_() {
     if (!configured[k]) report.push('⚠ 설정에 있으나 탭 못 찾음: ' + k + ' (탭 이름 확인 필요)');
   });
 
-  return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs };
+  return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs, anomalies: anomalies };
+}
+
+/* 비정상 금액(안전가드 ③) 안내문 — 미리보기·동기화 중단 메시지에서 같이 쓴다 */
+function anomalyText_(anoms) {
+  var won = function (n) { return Math.round(n).toLocaleString(); };
+  var lines = anoms.slice(0, 5).map(function (a) {
+    return '   · ' + a.tab + ' ' + a.row + '행 : 예상 ' + won(a.expected) + ' / 회수 ' + won(a.collected);
+  });
+  if (anoms.length > 5) lines.push('   · … 외 ' + (anoms.length - 5) + '행');
+  return lines.join('\n');
 }
 
 // ① 미리보기(검증) — 대시보드 변경 없이 파싱 결과 표시
@@ -340,8 +403,13 @@ function previewSync() {
     ? '⚙ 과입금 감지 → FIFO 재배분된 탭: ' + out.fifoTabs.join(', ') +
       '\n   회수액을 오래된 채권부터 예상액 상한으로 재분배(총액 불변). AR_preview에서 행별 확인하세요.\n\n'
     : '';
+  var anomMsg = out.anomalies && out.anomalies.length
+    ? '⛔ 비정상 금액 ' + out.anomalies.length + '행 — 열 매핑 오류입니다 (②동기화가 차단됩니다)\n' +
+      anomalyText_(out.anomalies) +
+      '\n   → 해당 탭에 열 구조가 다른 표가 섞여 있거나 헤더 이름이 바뀐 것입니다.\n\n'
+    : '';
   ui.alert(
-    warn + fifoMsg +
+    anomMsg + warn + fifoMsg +
     '미리보기 (대시보드 변경 없음)\n\n' +
     '총 ' + out.records.length + '건\n예상회수 합계: ' + Math.round(totalE).toLocaleString() + '\n회수 합계: ' + Math.round(totalC).toLocaleString() +
     '\n\n[탭별]\n' + out.report.join('\n') +
@@ -354,6 +422,21 @@ function pushToDashboard() {
   var ui = SpreadsheetApp.getUi();
   var out = parseAll_();
   if (!out.records.length) { ui.alert('파싱된 데이터가 없습니다. 먼저 ①미리보기로 확인하세요.'); return; }
+
+  /* ── 안전가드 ③: 비정상 금액이 있으면 중단 (열 매핑 오류) ──
+     2026-08-15 지앤원 사고 — 열이 한 칸 밀려 날짜가 금액으로 읽혀 예상회수 합계가
+     19,163조로 찍혔다. 그대로 ②동기화를 눌렀다면 ar_data 가 통째 오염됐다.
+     건수는 정상이라 기존 '건수 급감' 가드(②)로는 절대 안 걸리는 유형이다. */
+  if (out.anomalies && out.anomalies.length) {
+    ui.alert('⛔ 동기화 중단 (데이터 보호)\n\n' +
+      '상식 범위(1조)를 넘는 금액이 ' + out.anomalies.length + '행 파싱됐습니다 — 열 매핑 오류입니다.\n' +
+      anomalyText_(out.anomalies) + '\n\n' +
+      '이대로 진행하면 대시보드 매출채권이 통째로 오염됩니다.\n' +
+      '· 해당 탭에 열 구조가 다른 표가 섞여 있는지 확인 (표마다 헤더 행이 있어야 자동 인식됩니다)\n' +
+      '· 헤더 이름이 바뀌었는지 확인 → TAB_CONFIG 수정\n' +
+      '①미리보기로 탭별 합계를 먼저 확인하세요.');
+    return;
+  }
 
   // ── 안전가드 ①: 설정 없는 탭이 있으면 중단 (그 거래처가 통째로 사라짐) ──
   if (out.skipped && out.skipped.length) {
