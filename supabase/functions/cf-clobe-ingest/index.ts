@@ -18,7 +18,8 @@
  * 모드 (하나만 골라 보낸다)
  *   • 적재 { secret, action:"push", rows:[...] }                       — 종전과 동일
  *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly? } }
- *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat? }], midToBig?:{중분류:대분류} }
+ *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at? }], midToBig?:{중분류:대분류} }
+ *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *
  * 왜 patch 가 따로 있나: push 는 clobe_id 중복을 skip 하므로 재실행으로는 이미 적재된 행의
  * 분류를 못 고친다. 대분류는 대시보드가 catMidToBig[중분류] 로 파생하므로, 새 중분류를
@@ -309,13 +310,17 @@ Deno.serve(async (req) => {
             if (idx < 0) { nf.push(clobeId || rid); continue; }
 
             const r = cur[idx];
-            const before = { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat) };
+            const before = { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat), tx_at: str(r.tx_at) };
             let touched = false;
             if (p?.mid_cat !== undefined) { r.mid_cat = str(p.mid_cat); touched = true; }
             if (p?.big_cat !== undefined) { r.big_cat = str(p.big_cat); touched = true; }
+            /* 거래 시각 백필 — **비어 있을 때만** 채운다(멱등, 재실행 안전).
+             * 이미 값이 있으면 조용히 건드리지 않는다. 잘못 들어간 시각을 고치는 건 별개 작업이고,
+             * 대량 백필이 기존 값을 덮어쓰는 사고를 막는 게 우선이다. */
+            if (p?.tx_at !== undefined && str(p.tx_at) && !str(r.tx_at)) { r.tx_at = str(p.tx_at); touched = true; }
             if (!touched) { nf.push(`${clobeId || rid} (바꿀 필드 없음)`); continue; }
             ch.push({ clobe_id: str(r.clobe_id), _id: str(r._id), date: str(r.date), desc: str(r.desc),
-                      before, after: { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat) } });
+                      before, after: { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat), tx_at: str(r.tx_at) } });
           }
           return { ch, nf };
         });
