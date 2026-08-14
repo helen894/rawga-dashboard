@@ -35,7 +35,10 @@ var TAB_CONFIG = {
   '천대표':         { expected: '총 회수예정액',       collected: '실제 회수액',  remaining: '미회수액', start: '송금날짜', due: '예상회수일', collect: '회수일' },
   '천대표(부산영업)': { expected: '예상회수액',         collected: '최종 회수액(1)', remaining: '',      start: '송금일',   due: '예상회수일', collect: '최종회수일(1)' },
   '동이식품':       { expected: '매출액',             collected: '현재 회수액',  remaining: '미회수금액', start: '송금일',   due: '예상회수일', collect: '실제회수일' },
-  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자' },
+  //  지앤원: excludeFutureStart — 지출일자가 미래인 행은 아직 돈이 안 나갔으므로 채권이 아니다.
+  //          표2의 26-08-20~26-11-20 지출 예정 4행(475,200,000)이 그 경우이고, 시트 자체 합계도
+  //          이 4행을 빼고 907,748,592(과거 9행 합과 원 단위 일치)로 잡혀 있다.
+  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true },
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
@@ -92,6 +95,11 @@ function num_(v) {
   var n = parseFloat(s);
   if (isNaN(n)) return 0;
   return neg ? -Math.abs(n) : n;
+}
+
+// 오늘(스크립트 표준시) 'yyyy-MM-dd' — excludeFutureStart 판정 기준
+function today_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 function fmtDate_(v) {
@@ -216,7 +224,8 @@ function parseTab_(sh, cfg) {
   //   (같은 매입 건의 추가 매출/분할 회수 행)까지 사라져 금액이 누락됐음(동이식품 1억).
   var anomalies = [];
   var cand = [];
-  var tableCount = 1, block = 0, blockFirst = true;
+  var tableCount = 1, block = 0, blockFirst = true, futureRows = 0;
+  var TODAY = today_();
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
 
@@ -260,6 +269,16 @@ function parseTab_(sh, cfg) {
     // 송금일 열이 없는 탭은 이 판정을 적용하지 않음(종전 동작 유지)
     var hasStartCol = colMap.start !== undefined;
     var hasStart = hasStartCol ? String(row[colMap.start] || '').trim() !== '' : true;
+
+    /* ── (옵트인) 미래 지출 제외 — 아직 돈이 안 나갔으면 채권이 아니다 ──
+       지앤원 표2의 지출일자 26-08-20~26-11-20 4행(118,800,000×4 = 475,200,000)이 이 경우다.
+       시트 자체 합계도 이 4행을 빼고 907,748,592 로 잡혀 있고, 과거 9행 합과 원 단위까지 일치한다.
+       ⚠ 날짜 모양(yyyy-MM-dd)으로 확정되는 것만 제외한다 — 텍스트 날짜는 판정이 안 되므로
+         남기는 쪽(fail-open)으로 간다. 조용히 채권을 지우는 것이 더 위험하기 때문. */
+    if (cfg.excludeFutureStart && hasStart && hasStartCol) {
+      var sd = fmtDate_(row[colMap.start]);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(sd) && sd > TODAY) { futureRows++; continue; }
+    }
     /* cm: 이 행을 읽을 때 쓴 열 매핑을 그대로 들고 간다 — 표마다 열 위치가 다르므로
        2차 판정에서 colMap 을 다시 참조하면 마지막 표의 매핑으로 전부 읽어 버린다. */
     cand.push({ row: row, cm: colMap, block: block, expected: expected, collected: collected,
@@ -329,6 +348,7 @@ function parseTab_(sh, cfg) {
     anomalies: anomalies,
     note: 'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
           ', 매핑: ' + foundCols.join(',') + ')' +
+          (futureRows ? ' ⏭미래 지출 ' + futureRows + '행 제외(아직 채권 아님)' : '') +
           (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '') +
           (anomalies.length ? ' ⛔비정상 금액 ' + anomalies.length + '행' : '')
   };
