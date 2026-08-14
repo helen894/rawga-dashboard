@@ -869,7 +869,7 @@
           <th class="sort" data-col="desc">거래내용</th>
           <th class="num sort" data-col="in">입금액</th>
           <th class="num sort" data-col="out">출금액</th>
-          <th class="num sort" data-col="amount">금액</th>
+          <th class="num" title="누적 잔액 — 정렬 불가(날짜순 누적값이라 다른 기준으로 재정렬하면 의미가 깨짐)">잔액</th>
           <th>구분</th>
           <th>상태</th>
           <th>중분류</th>
@@ -5291,18 +5291,57 @@ function getFilteredCF() {
   });
 }
 
+/* 잔액 열 — 입출금 내역 표의 "금액"(순액) 열을 대체(2026-08-14, 사용자 요청).
+ * 전체 cfData를 날짜순으로 한 번 훑어 누적한다(필터·정렬과 무관 — 필터링돼도 잔액은
+ * 전체 히스토리 기준이어야 의미가 있다). 실제 거래만 확정 잔액(real)로 쌓고,
+ * 예정 거래는 그 위에 별도 누적(pending)을 얹어 "실제+예정" 잠정 잔액을 보여준다.
+ * ⚠ 오늘자 환산손익(FX_ADJ)은 넣지 않는다 — 과거 시점에 오늘 기준 보정을 얹으면 과거가
+ *   왜곡된다는 원칙(잔액 대조 카드와 동일, [[rawga-cashflow-reporting-overhaul]] 참고).
+ *   그래서 최신 행의 잔액이 KPI "현재 잔액" 카드와 근소하게 다를 수 있는데 의도된 차이다.
+ * ⚠ 같은 날짜에 여러 건이면(현재 데이터 기준 하루 대부분 2건+) tie-break로 clobe_id(클로브
+ *   원본 거래ID) 오름차순 → 없으면 _id 순으로 최선을 다해 정렬하지만, 실제 은행 처리 순서를
+ *   보장하지 않는다 — 그날의 마지막 잔액만 정확하다고 보면 된다.
+ * ⚠ "예정 소멸" 미해결 문제와 맞물린다 — 반복거래 등에서 예정 행이 실제 행으로 전환된 뒤에도
+ *   옛 예정 행이 안 지워지면 pending 누적이 이중계상된다. 지금은 예정 행이 사실상 없어 안
+ *   드러나지만, 나중에 예정 파이프가 늘면 이 잔액 열도 같이 틀어진다. */
+function computeCFBalances() {
+  const sorted = [...cfData].sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    const ca = Number(a.clobe_id), cb = Number(b.clobe_id);
+    if (!isNaN(ca) && !isNaN(cb)) return ca - cb;
+    if (!isNaN(ca)) return -1;
+    if (!isNaN(cb)) return 1;
+    return String(a._id || '').localeCompare(String(b._id || ''));
+  });
+  const balances = new Map();
+  let real = INIT_CASH, pending = 0;
+  for (const r of sorted) {
+    if (r.status === '실제 입금')      { real += (r.in  || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
+    else if (r.status === '실제 지출') { real -= (r.out || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
+    else if (r.status === '입금 예정') { pending += (r.in  || 0); balances.set(r._id, { val: real + pending, kind: 'projected' }); }
+    else if (r.status === '지출 예정') { pending -= (r.out || 0); balances.set(r._id, { val: real + pending, kind: 'projected' }); }
+  }
+  return balances;
+}
+
 function renderCFTable() {
   cfFiltered = getFilteredCF();
   const total = cfFiltered.length;
   const pages = Math.max(1, Math.ceil(total / cfPerPage));
   if (cfPage > pages) cfPage = pages;
   const slice = cfFiltered.slice((cfPage-1)*cfPerPage, cfPage*cfPerPage);
+  const cfBalances = computeCFBalances(); // 전체 cfData 기준(필터와 무관) — 아래 주석 참고
 
   const tbody = document.getElementById('cf-tbody');
   tbody.innerHTML = slice.map(r => {
     const statusBadge = r.status.includes('예정')
       ? `<span class="badge 예정">${r.status}</span>`
       : `<span class="badge ${r.type}">${r.status}</span>`;
+    const bal = cfBalances.get(r._id);
+    const balCell = !bal ? '—'
+      : bal.kind === 'projected'
+        ? `<span style="color:var(--amber);font-family:var(--mono);border-bottom:1px dashed var(--amber);padding-bottom:1px" title="예정 거래 포함 — 확정 전 잠정 잔액">~${fmt(bal.val)}</span>`
+        : `<span style="font-family:var(--mono)">${fmt(bal.val)}</span>`;
     return `<tr>
       <td style="text-align:center">
         <input type="checkbox" class="cf-row-check" data-id="${r._id}" ${cfSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
@@ -5311,7 +5350,7 @@ function renderCFTable() {
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
       <td class="num">${r.in > 0 ? '<span style="color:var(--green)">+' + fmt(r.in) + '</span>' : '—'}</td>
       <td class="num">${r.out > 0 ? '<span style="color:var(--red)">-' + fmt(r.out) + '</span>' : '—'}</td>
-      <td class="num" style="color:${r.amount >= 0 ? 'var(--green)' : 'var(--red)'}${Math.abs(r.amount) < 1 ? ';color:var(--text3)' : ''}">${fmt(r.amount)}</td>
+      <td class="num">${balCell}</td>
       <td>${r.type ? `<span class="badge ${r.type}">${r.type}</span>` : ''}</td>
       <td>${statusBadge}</td>
       <td style="color:var(--text2);font-size:11px">${r.mid_cat||'—'}</td>
