@@ -351,6 +351,11 @@ const rows = target.map(r => {
     in: inA, out: outA,
     status: inA > 0 ? '실제 입금' : '실제 지출',
     clobe_id: String(r.transactionId),
+    /* 실제 거래 시각(초 단위). 종전엔 dateOf() 로 날짜만 남기고 버렸는데, 그러면 같은 날 안에서
+       순서를 알 방법이 없어 대시보드 잔액 열의 중간값이 실제 은행 처리 순서와 어긋났다.
+       ⚠ clobe_id 로는 대신할 수 없다 — 계좌별 스크래핑 배치 순서라 계좌가 다르면 시간순과 무관하다
+       (2026-07-10 실측: 신한 129568xxx / 국민·기업 114xxx 로 대역이 갈려 03:52 건이 17:18 건보다 뒤로 밀림). */
+    ...(r.transactionAt ? { tx_at: String(r.transactionAt) } : {}),
     ...(r._fxUsd ? { fx_usd: r._fxUsd } : {}),   // 외화 행에만 원금(통화 단위)을 남긴다
   };
 });

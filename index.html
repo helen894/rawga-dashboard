@@ -5257,6 +5257,7 @@ function getFilteredCF() {
   const amtMaxRaw = document.getElementById('cf-amount-max').value;
   const amtMax    = amtMaxRaw ? parseFloat(amtMaxRaw) : Infinity;
 
+  const _cfChrono = makeCfChronoCompare(cfData);   // 배열 원본 순서를 잡아둔다(필터 전 기준)
   return cfData.filter(r => {
     if (from && r.date < from) return false;
     if (to && r.date > to) return false;
@@ -5281,6 +5282,13 @@ function getFilteredCF() {
     if (amtMax < Infinity && amt > amtMax) return false;
     return true;
   }).sort((a,b) => {
+    /* 거래일 정렬은 잔액 계산과 같은 기준을 써야 한다 — 안 그러면 화면 옆 행끼리 역산이 안 맞는다
+     * (makeCfChronoCompare 주석 참고). 다른 열로 정렬하면 시간순이 깨지므로 잔액 열은 원래
+     * 옆 행끼리 안 맞는 게 정상이다(필터를 걸었을 때와 같은 이유). */
+    if (cfSortCol === 'date') {
+      const c = _cfChrono(a, b);
+      return cfSortAsc ? c : -c;
+    }
     let av = a[cfSortCol] ?? '', bv = b[cfSortCol] ?? '';
     // 문자열은 한글 포함 로케일 비교, 숫자는 숫자 비교
     if (typeof av === 'number' && typeof bv === 'number') {
@@ -5291,6 +5299,32 @@ function getFilteredCF() {
   });
 }
 
+/* 같은 날짜 안의 순서 — 표시(getFilteredCF)와 잔액 계산(computeCFBalances)이 **반드시 같은 기준**을
+ * 써야 화면에서 옆 행끼리 역산이 맞는다. 2026-08-15 이전엔 표시는 배열 저장 순서, 계산은 clobe_id 라
+ * 서로 어긋나서, 필터를 안 걸어도 옆 행 잔액이 그 행 금액만큼 안 맞았다(실측: 08-14 토스→월드씨푸드
+ * 사이에 쿠팡 15,567원이 계산에만 끼어 있었다).
+ * 순서 기준:
+ *   1) date          — 항상 있음
+ *   2) tx_at 의 시각  — 클로브가 주는 실제 거래 시각(초 단위). 없는 행은 그날 맨 뒤로 보낸다.
+ *   3) 원본 배열 순서  — 시각이 없는 행(수기 입력·2026-07-10 이전 업로드분)은 종전 표시 순서를 유지.
+ * ⚠ clobe_id 는 정렬에 쓰지 않는다 — 계좌별 스크래핑 배치 순서라 계좌가 다르면 시간순과 무관하다.
+ *   2026-07-10 실측: 신한 `129568xxx` / 국민·기업 `114xxx` 로 대역이 통째로 갈려, 새벽 03:52 거래가
+ *   오후 17:18 거래보다 뒤로 밀렸다. 시각이 유일하게 믿을 수 있는 근거다. */
+function cfTimeKey(r) {
+  const t = String((r && r.tx_at) || '');
+  return t.length > 10 ? t.slice(11, 19) : '￿';   // 'HH:MM:SS' · 시각 없으면 그날 맨 뒤
+}
+function makeCfChronoCompare(rows) {
+  const pos = new Map();
+  rows.forEach((r, i) => pos.set(r._id, i));
+  return (a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    const ta = cfTimeKey(a), tb = cfTimeKey(b);
+    if (ta !== tb) return ta < tb ? -1 : 1;
+    return (pos.get(a._id) ?? 0) - (pos.get(b._id) ?? 0);
+  };
+}
+
 /* 잔액 열 — 입출금 내역 표의 "금액"(순액) 열을 대체(2026-08-14, 사용자 요청).
  * 전체 cfData를 날짜순으로 한 번 훑어 누적한다(필터·정렬과 무관 — 필터링돼도 잔액은
  * 전체 히스토리 기준이어야 의미가 있다). 실제 거래만 확정 잔액(real)로 쌓고,
@@ -5298,21 +5332,14 @@ function getFilteredCF() {
  * ⚠ 오늘자 환산손익(FX_ADJ)은 넣지 않는다 — 과거 시점에 오늘 기준 보정을 얹으면 과거가
  *   왜곡된다는 원칙(잔액 대조 카드와 동일, [[rawga-cashflow-reporting-overhaul]] 참고).
  *   그래서 최신 행의 잔액이 KPI "현재 잔액" 카드와 근소하게 다를 수 있는데 의도된 차이다.
- * ⚠ 같은 날짜에 여러 건이면(현재 데이터 기준 하루 대부분 2건+) tie-break로 clobe_id(클로브
- *   원본 거래ID) 오름차순 → 없으면 _id 순으로 최선을 다해 정렬하지만, 실제 은행 처리 순서를
- *   보장하지 않는다 — 그날의 마지막 잔액만 정확하다고 보면 된다.
+ * ⚠ 같은 날짜 안의 순서는 makeCfChronoCompare 를 쓴다(표시와 동일 기준 — 위 주석 참고).
+ *   tx_at 이 있는 행은 실제 은행 처리 순서가 보장되고, 없는 행은 그날 맨 뒤에서 종전 순서를
+ *   유지한다(= 그날의 마지막 잔액만 정확).
  * ⚠ "예정 소멸" 미해결 문제와 맞물린다 — 반복거래 등에서 예정 행이 실제 행으로 전환된 뒤에도
  *   옛 예정 행이 안 지워지면 pending 누적이 이중계상된다. 지금은 예정 행이 사실상 없어 안
  *   드러나지만, 나중에 예정 파이프가 늘면 이 잔액 열도 같이 틀어진다. */
 function computeCFBalances() {
-  const sorted = [...cfData].sort((a, b) => {
-    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    const ca = Number(a.clobe_id), cb = Number(b.clobe_id);
-    if (!isNaN(ca) && !isNaN(cb)) return ca - cb;
-    if (!isNaN(ca)) return -1;
-    if (!isNaN(cb)) return 1;
-    return String(a._id || '').localeCompare(String(b._id || ''));
-  });
+  const sorted = [...cfData].sort(makeCfChronoCompare(cfData));
   const balances = new Map();
   let real = INIT_CASH, pending = 0;
   for (const r of sorted) {

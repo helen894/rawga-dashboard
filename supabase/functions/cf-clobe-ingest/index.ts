@@ -234,12 +234,17 @@ Deno.serve(async (req) => {
   const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
     ? body.midToBig as Record<string, string> : null;
 
-  /* ── 조회 모드 ── 분류를 고치기 전에 대상 행과 현재 상태를 확인한다(_id 선택자도 여기서 얻는다). */
+  /* ── 조회 모드 ── 분류를 고치기 전에 대상 행과 현재 상태를 확인한다(_id 선택자도 여기서 얻는다).
+   * status·recur_id 도 반환한다(2026-08-14 추가) — 종전엔 이 둘이 빠져 있어 조회 스크립트로
+   * "예정/실제" 판별이나 반복거래 추적이 불가능했다(cf_data 저장값 자체엔 늘 있었음, 응답만 안 줬음).
+   * inspect.meta:true 를 같이 보내면 cat_data(settings.init_cash, bank_snapshot)도 읽기 전용으로
+   * 함께 돌려준다 — 기초잔액·은행 스냅샷을 로그인 없이 확인하기 위한 용도. push/patch 로직은 무변경. */
   if (inspect) {
     try {
       const ids = new Set((Array.isArray(inspect.clobeIds) ? inspect.clobeIds : []).map((v) => str(v)).filter(Boolean));
       const from = str(inspect.from), to = str(inspect.to), descQ = str(inspect.desc);
       const unclassifiedOnly = inspect.unclassifiedOnly === true;
+      const wantMeta = inspect.meta === true;
 
       const getRes = await fetch(
         `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
@@ -262,8 +267,23 @@ Deno.serve(async (req) => {
         _id: str(r._id), clobe_id: str(r.clobe_id), date: str(r.date), desc: str(r.desc),
         in: Number(r.in || 0), out: Number(r.out || 0), type: str(r.type),
         mid_cat: str(r.mid_cat), big_cat: str(r.big_cat),
+        status: str(r.status), recur_id: str(r.recur_id), tx_at: str(r.tx_at),
       }));
-      return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length });
+
+      let meta: Record<string, unknown> | undefined;
+      if (wantMeta) {
+        const metaRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/cat_data?select=key,data&key=in.(settings,bank_snapshot)`,
+          { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+        );
+        if (metaRes.ok) {
+          const metaRows: any[] = await metaRes.json();
+          meta = {};
+          for (const row of metaRows) meta[row.key] = row.data;
+        }
+      }
+
+      return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length, ...(meta ? { meta } : {}) });
     } catch (e) {
       return json({ ok: false, error: (e as Error).message }, 500);
     }
@@ -320,7 +340,7 @@ Deno.serve(async (req) => {
   try {
     const today = todaySeoul();
     const MAX_TRIES = 4;
-    let added = 0, skipped = 0, total = 0, refreshed = 0;
+    let added = 0, skipped = 0, total = 0, refreshed = 0, timeFilled = 0;
     let renames: Array<{ from: string; to: string }> = [];
 
     /* 낙관적 잠금 — cf_data 는 배열 전체가 한 행이라 마지막에 쓴 쪽이 이긴다.
@@ -343,7 +363,7 @@ Deno.serve(async (req) => {
       ? arr[0].data
       : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : []);
 
-    added = 0; skipped = 0; refreshed = 0; renames = [];   // 재시도마다 새로 읽으므로 초기화
+    added = 0; skipped = 0; refreshed = 0; timeFilled = 0; renames = [];   // 재시도마다 새로 읽으므로 초기화
 
     for (const r of rows) {
       const date = String(r?.date || "").slice(0, 10);
@@ -359,6 +379,9 @@ Deno.serve(async (req) => {
       const clobeId = (r?.clobe_id !== undefined && r?.clobe_id !== null && String(r.clobe_id).trim())
         ? String(r.clobe_id).trim() : "";
       const mid = String(r?.mid ?? "").trim();
+      /* 실제 거래 시각(ISO, 초 단위). 같은 날짜 안의 순서를 정하는 유일한 근거다 —
+         대시보드 잔액 열이 이걸로 정렬한다. 없으면 종전과 동일 동작(하위호환). */
+      const txAt = String(r?.tx_at ?? "").trim();
 
       // 중복 판정: clobe_id(고유) 있으면 그걸로, 없으면 기존 (거래일+거래내용+상태+금액)
       const dupIdx = clobeId
@@ -378,6 +401,13 @@ Deno.serve(async (req) => {
         const ex = cfData[dupIdx];
         const exDesc = String(ex.desc ?? "");
         const exSrc = ex.desc_src === undefined || ex.desc_src === null ? null : String(ex.desc_src);
+        /* 거래 시각 백필 — 이 기능 이전에 적재된 행은 tx_at 이 없다. 재적재로 같은 거래를 다시 만나면
+         * 그때 채운다(값이 이미 있으면 건드리지 않는다). 스케줄 태스크가 매일 최근 6일을 다시 훑으므로
+         * 최근분은 저절로 채워지고, 그보다 오래된 건은 그 기간을 한 번 재적재하면 된다. */
+        if (clobeId && txAt && !String(ex.tx_at ?? "").trim()) {
+          ex.tx_at = txAt;
+          timeFilled++;
+        }
         if (clobeId && exSrc !== null && exSrc === exDesc && desc !== exDesc) {
           ex.desc = desc;
           ex.desc_src = desc;
@@ -395,6 +425,7 @@ Deno.serve(async (req) => {
         mid_cat: mid, // 클로브 계정라벨(있으면). 없으면 "" → 자동분류 추천 대상
         big_cat: "",
       };
+      if (txAt) rec.tx_at = txAt;   // 같은 날짜 안의 정렬 근거 (대시보드 잔액 열)
       if (clobeId) {
         rec.clobe_id = clobeId;  // 재적재 중복 차단용 고유키
         /* 클로브가 준 원본 적요. 이후 재적재 때 desc 와 비교해 "사람이 손댔는지" 를 가린다 —
@@ -454,7 +485,7 @@ Deno.serve(async (req) => {
     }
 
     return json({
-      ok: true, added, skipped, refreshed, total,
+      ok: true, added, skipped, refreshed, timeFilled, total,
       ...(catNote ? { cat_sync: catNote } : {}),
       /* 갱신된 적요를 그대로 실어 보낸다 — 스케줄 태스크가 요약·슬랙에 남겨
        * 사람이 "무엇이 어떻게 바뀌었는지" 를 사후에 알아볼 수 있게 한다. */
