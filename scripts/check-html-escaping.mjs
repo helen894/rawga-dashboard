@@ -31,10 +31,42 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const TARGETS = [
-  'index.html',
-  'supabase/functions/send-weekly-report/index.ts',
-];
+/**
+ * 검사 대상 — 목록을 손으로 관리하지 않는다.
+ *
+ * 처음엔 index.html 과 send-weekly-report 둘만 하드코딩했는데, 그러면 **새 Edge 함수가
+ * 생길 때 목록에 추가하는 걸 잊는 것**이 그대로 구멍이 된다. 이 검사기를 만든 이유가
+ * "사람이 매번 기억해야 하는 방어"를 없애는 것이었으므로 대상 선정도 같은 원칙을 따른다.
+ * → 디렉터리를 훑어 자동으로 채운다(2026-08-17).
+ *
+ * HTML 을 안 만드는 파일이 섞여도 손해가 없다: check() 가 마크업이 든 템플릿만 보고
+ * 나머지는 건너뛴다. TypeScript 제네릭(`Map<string, string>`)은 템플릿 리터럴이 아니라
+ * 애초에 스캔 대상이 아니다.
+ */
+function discoverTargets() {
+  const found = ['index.html'];
+
+  // Edge 함수 — supabase/functions/<이름>/index.ts
+  const fnRoot = path.resolve(ROOT, 'supabase/functions');
+  if (fs.existsSync(fnRoot)) {
+    for (const name of fs.readdirSync(fnRoot).sort()) {
+      const rel = `supabase/functions/${name}/index.ts`;
+      if (fs.existsSync(path.resolve(ROOT, rel))) found.push(rel);
+    }
+  }
+
+  // Apps Script — 지금은 HTML 을 만들지 않지만 HtmlService 를 쓰기 시작하면 바로 대상이 된다
+  const gsRoot = path.resolve(ROOT, 'apps-script');
+  if (fs.existsSync(gsRoot)) {
+    for (const name of fs.readdirSync(gsRoot).sort()) {
+      if (name.endsWith('.gs')) found.push(`apps-script/${name}`);
+    }
+  }
+
+  return found.filter(f => fs.existsSync(path.resolve(ROOT, f)));
+}
+
+const TARGETS = discoverTargets();
 
 /** 사용자가 값을 넣을 수 있는 필드 — 새 필드가 생기면 여기에 추가한다 */
 const DATA_FIELDS = [
