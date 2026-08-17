@@ -191,6 +191,15 @@
   @media (max-width: 1100px) { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 460px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* 9장(2026-08-17 '세종' 추가). 9 = 3×3 이라 좁아지면 3열로 떨어뜨려 마지막 줄이 안 남게 한다.
+     ⚠ .corp-card-grid.corp-card-grid-9(0,2,0)가 기본 .corp-card-grid(0,1,0)를 항상 이기므로
+        중간 구간도 여기서 전부 다시 써야 한다(8장 때 겪은 것과 같은 특정성 함정). */
+  .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(9, minmax(0, 1fr)); }
+  /* 9열은 1320px 이상에서만 — 그 아래로 가면 칸이 ~125px 로 좁아져 8자리 금액이 두 줄로 깨진다
+     (8장 때 900px 에서 겪은 것과 같은 문제라 여유를 크게 잡았다). */
+  @media (max-width: 1320px) { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  @media (max-width: 900px)  { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 460px)  { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* 법인카드 탭 사용현황 표 */
   .corp-table-wrap { overflow: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
   .corp-usage-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -681,7 +690,7 @@
   <div class="chart-box dashboard-card" id="corp-card-box" style="margin-bottom:20px">
     <div class="chart-title" style="margin-bottom:12px">💳 법인카드 <span id="corp-card-period" style="font-size:12px;color:var(--text2);font-weight:400"></span></div>
     <!-- 순서: 개인 명의(딥그린) 4명 → 조직(라이트그린) 4개. 색이 두 덩어리로 나뉘게. -->
-    <div class="corp-card-grid corp-card-grid-8">
+    <div class="corp-card-grid corp-card-grid-9">
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">하경수</div><div class="corp-card-value" id="corp-card-ha">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
@@ -690,6 +699,7 @@
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">2본부</div><div class="corp-card-value" id="corp-card-hq2">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
+      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">세종</div><div class="corp-card-value" id="corp-card-sejong">0</div></div>
     </div>
   </div>
 
@@ -2628,7 +2638,7 @@ let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // S
 let isInitCashHidden = localStorage.getItem('init_cash_hidden') === 'true'; // 숨김 상태 (localStorage 유지)
 
 /* ===== 법인카드 탭 — 열/행 설정 ===== */
-const DEFAULT_CORP_CARD_COLUMNS  = ['하경수','김현민','박우현','문성삼','1본부','2본부','IL','SO'];
+const DEFAULT_CORP_CARD_COLUMNS  = ['하경수','김현민','박우현','문성삼','1본부','2본부','IL','SO','세종'];
 const DEFAULT_CORP_CARD_ACCOUNTS = ['교통비','식대','소모품비','접대비','출장비','통신비','기타'];
 
 /* ── 카드 코드 → 조직 이름 매핑 (2026-08-07) ──────────────────────────
@@ -2639,7 +2649,7 @@ const DEFAULT_CORP_CARD_ACCOUNTS = ['교통비','식대','소모품비','접대�
  * 카드사가 주는 내부 코드와 조직 이름을 분리해 두면 다음 조직 개편 때도
  * 이 표만 고치면 된다. */
 const CC_ALIAS_TO_COLUMN = { 'M01': '1본부', 'M03': '2본부', 'BX': '2본부' };
-const CC_COLUMNS_VERSION = 2;   // 열 목록 마이그레이션 세대
+const CC_COLUMNS_VERSION = 3;   // 열 목록 마이그레이션 세대 (v3: '세종' 추가)
 
 function loadCorpCardColumns() {
   let v = null;
@@ -2655,6 +2665,12 @@ function loadCorpCardColumns() {
       if (!out.includes(name)) out.push(name);        // M03·BX → 2본부 병합(중복 제거)
     }
     if (out.length) v = out;
+    /* v3(2026-08-17) — 신한카드 세종(490298******9450) 열 추가.
+       ⚠ 위 루프는 '기존 값 변환' 만 한다(M01→1본부 등). 새 열은 이렇게 명시적으로 넣어야 하며,
+          DEFAULT_CORP_CARD_COLUMNS 만 고치면 저장된 목록을 가진 기존 사용자에겐 안 생긴다.
+       ⚠ 빠진 기본 열을 전부 채우는 식으로 일반화하지 말 것 — 사용자가 일부러 지운 열이
+          되살아난다(M02 를 v2 에서 명시적으로 지운 것과 같은 이유). */
+    if (!v.includes('세종')) v.push('세종');
     try {
       localStorage.setItem('corp_card_columns', JSON.stringify(v));
       localStorage.setItem('corp_card_columns_v', String(CC_COLUMNS_VERSION));
@@ -12936,7 +12952,7 @@ function renderCorpCardDashboard() {
     '하경수': 'corp-card-ha', '김현민': 'corp-card-kim',
     '1본부': 'corp-card-hq1', '2본부': 'corp-card-hq2',
     '박우현': 'corp-card-park', '문성삼': 'corp-card-moon',
-    'IL': 'corp-card-il', 'SO': 'corp-card-so',
+    'IL': 'corp-card-il', 'SO': 'corp-card-so', '세종': 'corp-card-sejong',
   };
   Object.keys(idMap).forEach(col => {
     const el = document.getElementById(idMap[col]);
