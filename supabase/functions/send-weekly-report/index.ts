@@ -446,8 +446,8 @@ function buildWeeklyReportHTML(
     ? displayGroupedIn.map(g =>
         `<tr>
           <td style="${TDS}color:${C.t2}">${wkLabel}</td>
-          <td style="${TDS}">${g.mid_cat}</td>
-          <td style="${TDS}color:${g.conflict ? C.amber : C.t2}">${g.big_cat}</td>
+          <td style="${TDS}">${escapeHtml(g.mid_cat)}</td>
+          <td style="${TDS}color:${g.conflict ? C.amber : C.t2}">${escapeHtml(g.big_cat)}</td>
           <td style="${TDS}text-align:right;color:${C.green};font-family:monospace">+${fmt(g.amount)}</td>
         </tr>`).join('')
     : emptyIn4)
@@ -458,8 +458,8 @@ function buildWeeklyReportHTML(
     ? displayGroupedOut.map(g =>
         `<tr>
           <td style="${TDS}color:${C.t2}">${wkLabel}</td>
-          <td style="${TDS}">${g.mid_cat}</td>
-          <td style="${TDS}color:${g.conflict ? C.amber : C.t2}">${g.big_cat}</td>
+          <td style="${TDS}">${escapeHtml(g.mid_cat)}</td>
+          <td style="${TDS}color:${g.conflict ? C.amber : C.t2}">${escapeHtml(g.big_cat)}</td>
           <td style="${TDS}text-align:right;color:${C.red};font-family:monospace">-${fmt(g.amount)}</td>
         </tr>`).join('')
     : emptyOut4)
@@ -469,7 +469,7 @@ function buildWeeklyReportHTML(
   const bigCatHtml = bigCatRows.length
     ? bigCatRows.map(x =>
         `<tr>
-          <td style="${TDS}font-weight:500">${x.cat}</td>
+          <td style="${TDS}font-weight:500">${escapeHtml(x.cat)}</td>
           <td style="${TDS}text-align:right;color:${x.in  > 0 ? C.green : C.t3};font-family:monospace">${x.in  > 0 ? '+' + fmt(x.in)  : '—'}</td>
           <td style="${TDS}text-align:right;color:${x.out > 0 ? C.red   : C.t3};font-family:monospace">${x.out > 0 ? '-' + fmt(x.out) : '—'}</td>
         </tr>`).join('')

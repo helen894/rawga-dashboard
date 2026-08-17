@@ -4085,7 +4085,7 @@ function subscribeRealtime() {
           }
           ['cf-midcat','edit-cf-midcat'].forEach(id => {
             const sel = document.getElementById(id);
-            if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
+            if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
           });
           buildBigCatSelects();
           // C-4: 카테고리 탭이 열려 있으면 편집 중일 수 있으므로 알림만 표시하고 렌더 보류
@@ -4661,7 +4661,7 @@ function renderUpcomingPayments() {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="color:${urg};font-weight:600;min-width:52px">${dayLabel(r.date)}</span>
             <span style="color:var(--text2);font-size:11px;min-width:44px">${r.date.slice(5)}</span>
-            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</span>
+            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</span>
           </div>
           <span style="color:${isPast?'var(--text3)':'var(--red)'};font-weight:500">-${fmt(r.out)}</span>
         </div>`;
@@ -4692,7 +4692,7 @@ function renderUpcomingPayments() {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="color:${urg};font-weight:600;min-width:52px">${dayLabel(r.date)}</span>
             <span style="color:var(--text2);font-size:11px;min-width:44px">${r.date.slice(5)}</span>
-            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</span>
+            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</span>
           </div>
           <span style="color:${isPast?'var(--text3)':'var(--green)'};font-weight:500">+${fmt(r.in)}</span>
         </div>`;
@@ -5097,7 +5097,7 @@ function ensureCFIds() {
 
 function buildMidCatSelect() {
   const sel = document.getElementById('cf-midcat');
-  if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
+  if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 
 // 분류 필터: '' 전체 · 'noMid' 중분류없음 · 'noBig' 대분류없음 · 'done' 분류완료
@@ -5259,8 +5259,8 @@ function renderCFTable() {
   const tbody = document.getElementById('cf-tbody');
   tbody.innerHTML = slice.map(r => {
     const statusBadge = r.status.includes('예정')
-      ? `<span class="badge 예정">${r.status}</span>`
-      : `<span class="badge ${r.type}">${r.status}</span>`;
+      ? `<span class="badge 예정">${escapeHtml(r.status)}</span>`
+      : `<span class="badge ${escapeHtml(r.type)}">${escapeHtml(r.status)}</span>`;
     const bal = cfBalances.get(r._id);
     const balCell = !bal ? '—'
       : bal.kind === 'projected'
@@ -5270,23 +5270,23 @@ function renderCFTable() {
       <td style="text-align:center">
         <input type="checkbox" class="cf-row-check" data-id="${r._id}" ${cfSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
       </td>
-      <td class="date-cell">${r.date}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td class="date-cell">${escapeHtml(r.date)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</td>
       <td class="num">${r.in > 0 ? '<span style="color:var(--green)">+' + fmt(r.in) + '</span>' : '—'}</td>
       <td class="num">${r.out > 0 ? '<span style="color:var(--red)">-' + fmt(r.out) + '</span>' : '—'}</td>
       <td class="num">${balCell}</td>
-      <td>${r.type ? `<span class="badge ${r.type}">${r.type}</span>` : ''}</td>
+      <td>${r.type ? `<span class="badge ${escapeHtml(r.type)}">${escapeHtml(r.type)}</span>` : ''}</td>
       <td>${statusBadge}</td>
-      <td style="color:var(--text2);font-size:11px">${r.mid_cat||'—'}</td>
-      <td style="color:var(--text2);font-size:11px">${r.big_cat||'—'}</td>
+      <td style="color:var(--text2);font-size:11px">${escapeHtml(r.mid_cat||'—')}</td>
+      <td style="color:var(--text2);font-size:11px">${escapeHtml(r.big_cat||'—')}</td>
       <td style="white-space:nowrap">
         <button class="btn sm cf-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
         <button class="btn sm red cf-del-btn" data-id="${r._id}">삭제</button>
         ${r.type === '입금' && r.mid_cat ? (() => {
           if (r.ar_applied === '완료')
-            return `<span title="차감일: ${r.ar_applied_date||'—'}" style="margin-left:4px;font-size:10px;color:var(--green);cursor:default">💰완료</span>`;
+            return `<span title="차감일: ${escapeHtml(r.ar_applied_date||'—')}" style="margin-left:4px;font-size:10px;color:var(--green);cursor:default">💰완료</span>`;
           if (r.ar_applied === '실패')
-            return `<span title="${r.ar_applied_error||''}" style="margin-left:4px;font-size:10px;color:var(--red);cursor:default">💰실패</span>`;
+            return `<span title="${escapeHtml(r.ar_applied_error||'')}" style="margin-left:4px;font-size:10px;color:var(--red);cursor:default">💰실패</span>`;
           return '';
         })() : ''}
       </td>
@@ -5785,8 +5785,8 @@ function buildCFFilterSelects() {
   const bigs = [...new Set(cfData.map(r => r.big_cat).filter(Boolean))].sort();
 
   const curMid = midSel.value, curBig = bigSel.value;
-  midSel.innerHTML = '<option value="">전체</option>' + mids.map(m => `<option value="${m}"${m===curMid?' selected':''}>${m}</option>`).join('');
-  bigSel.innerHTML = '<option value="">전체</option>' + bigs.map(b => `<option value="${b}"${b===curBig?' selected':''}>${b}</option>`).join('');
+  midSel.innerHTML = '<option value="">전체</option>' + mids.map(m => `<option value="${escapeHtml(m)}"${m===curMid?' selected':''}>${escapeHtml(m)}</option>`).join('');
+  bigSel.innerHTML = '<option value="">전체</option>' + bigs.map(b => `<option value="${escapeHtml(b)}"${b===curBig?' selected':''}>${escapeHtml(b)}</option>`).join('');
 }
 
 /* ---- 필터 초기화 버튼 ---- */
@@ -5984,7 +5984,7 @@ function openCFBulkEditModal() {
   midSel.innerHTML =
     '<option value="__KEEP__">변경 안 함</option>' +
     '<option value="">— 빈 값으로 변경 —</option>' +
-    mids.map(m => `<option value="${m}">${m}</option>`).join('');
+    mids.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 
   // 대분류 셀렉터 구성 (catMidToBig + cfData 내 big_cat 포함)
   const bigSet = new Set([...getBigCats(), ...cfData.map(r => r.big_cat).filter(Boolean)]);
@@ -5993,7 +5993,7 @@ function openCFBulkEditModal() {
   bigSel.innerHTML =
     '<option value="__KEEP__">변경 안 함</option>' +
     '<option value="">— 빈 값으로 변경 —</option>' +
-    bigs.map(b => `<option value="${b}">${b}</option>`).join('');
+    bigs.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
 
   // 입력 초기화
   document.getElementById('cf-bulk-status').value = '';
@@ -6321,7 +6321,7 @@ function buildARPartnerSelect() {
   const partners = [...new Set(arData.map(r => r.partner))].sort();
   const sel = document.getElementById('ar-filter-partner');
   const current = sel.value; // 현재 선택값 보존
-  sel.innerHTML = '<option value="">전체</option>' + partners.map(p => `<option value="${p}">${p}</option>`).join('');
+  sel.innerHTML = '<option value="">전체</option>' + partners.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
   if (current) sel.value = current; // 선택값 복원
 }
 
@@ -6380,16 +6380,16 @@ function renderARTable() {
       <td style="text-align:center">
         ${AR_READONLY ? '' : `<input type="checkbox" class="ar-row-check" data-id="${r._id}" ${arSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">`}
       </td>
-      <td style="font-weight:500">${r.partner}</td>
-      <td class="date-cell">${r.start}</td>
+      <td style="font-weight:500">${escapeHtml(r.partner)}</td>
+      <td class="date-cell">${escapeHtml(r.start)}</td>
       <td class="num">${fmt(r.expected)}</td>
       <td class="num" style="color:var(--green)">${fmt(r.collected)}</td>
       <td class="num" style="color:${r.remaining > 0 ? 'var(--amber)' : r.remaining < 0 ? 'var(--blue)' : 'var(--text3)'};font-weight:${r.remaining !== 0 ? '600' : '400'}">${r.remaining !== 0 ? fmt(r.remaining) : '—'}</td>
-      <td class="date-cell">${r.due_date}</td>
+      <td class="date-cell">${escapeHtml(r.due_date)}</td>
       <td class="date-cell" style="color:${r.collect_date?'var(--green)':'var(--text3)'}">
-        ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.floor(n-25569)*86400*1000); return d.toISOString().slice(0,10); } return v; })()}
+        ${(()=>{ const v = r.collect_date||''; if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; const n = Number(v); if (!isNaN(n) && n > 40000) { const d = new Date(Math.floor(n-25569)*86400*1000); return d.toISOString().slice(0,10); } return escapeHtml(v); })()}
       </td>
-      <td><span class="badge ${dispStatus}">${dispStatus}</span></td>
+      <td><span class="badge ${escapeHtml(dispStatus)}">${escapeHtml(dispStatus)}</span></td>
       <td class="num">${elapsedHtml}</td>
       <td style="white-space:nowrap"><span class="ar-upd ${_upd.cls}">${_upd.label}</span>${_upd.date ? `<br><span style="font-size:10px;color:var(--text3)">${_upd.date}</span>` : ''}</td>
       <td class="ar-memo-cell" data-id="${r._id}" title="클릭하여 메모 편집" style="cursor:text;font-size:11px;color:var(--text2);max-width:170px;overflow:hidden;text-overflow:ellipsis">${_memo ? escapeHtml(_memo) : '<span style="color:var(--text3)">＋ 메모</span>'}</td>
@@ -8210,16 +8210,16 @@ function renderWeeklyReport() {
   document.getElementById('wkrpt-in-tbody').innerHTML = groupedIn.length ? groupedIn.map(g => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="${tdBase}color:var(--text2)">${wkLabel}</td>
-      <td style="${tdEll}" title="${g.mid_cat}">${g.mid_cat}</td>
-      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${g.big_cat}">${g.big_cat}</td>
+      <td style="${tdEll}" title="${escapeHtml(g.mid_cat)}">${escapeHtml(g.mid_cat)}</td>
+      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${escapeHtml(g.big_cat)}">${escapeHtml(g.big_cat)}</td>
       <td style="${tdBase}text-align:right;color:var(--green);font-family:var(--mono)">+${fmt(g.amount)}</td>
     </tr>`).join('') : empty;
 
   document.getElementById('wkrpt-out-tbody').innerHTML = groupedOut.length ? groupedOut.map(g => `
     <tr style="border-bottom:1px solid var(--border)">
       <td style="${tdBase}color:var(--text2)">${wkLabel}</td>
-      <td style="${tdEll}" title="${g.mid_cat}">${g.mid_cat}</td>
-      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${g.big_cat}">${g.big_cat}</td>
+      <td style="${tdEll}" title="${escapeHtml(g.mid_cat)}">${escapeHtml(g.mid_cat)}</td>
+      <td style="${tdEll}font-size:11px;color:${g.conflict?'var(--amber)':'var(--text2)'}" title="${escapeHtml(g.big_cat)}">${escapeHtml(g.big_cat)}</td>
       <td style="${tdBase}text-align:right;color:var(--red);font-family:var(--mono)">-${fmt(g.amount)}</td>
     </tr>`).join('') : empty;
 
@@ -8243,7 +8243,7 @@ function renderWeeklyReport() {
   const partnerTbody = document.getElementById('wkrpt-partner-tbody');
   partnerTbody.innerHTML = partnerRows.length ? partnerRows.map(x => `
     <tr style="border-bottom:1px solid var(--border)">
-      <td style="${tdEll}font-weight:500" title="${x.p}">${x.p}</td>
+      <td style="${tdEll}font-weight:500" title="${escapeHtml(x.p)}">${escapeHtml(x.p)}</td>
       <td style="${tdBase}text-align:right;color:${x.in > 0 ? 'var(--green)' : 'var(--text3)'};font-family:var(--mono)">${x.in > 0 ? '+'+fmt(x.in) : '—'}</td>
       <td style="${tdBase}text-align:right;color:${x.out > 0 ? 'var(--red)' : 'var(--text3)'};font-family:var(--mono)">${x.out > 0 ? '-'+fmt(x.out) : '—'}</td>
     </tr>`).join('') : `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:18px">이번 주 거래 없음</td></tr>`;
@@ -8612,16 +8612,16 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   // 전체 행 생성 (중분류별 합산) — 표시 건수 제어는 스크롤 래퍼에서 처리
   const inHtml = groupedIn.length ? groupedIn.map(g =>
     `<tr><td style="${TDS}color:${C.t2}">${wkLabel}</td>
-         <td style="${TDS}">${g.mid_cat}</td>
-         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${g.big_cat}</td>
+         <td style="${TDS}">${escapeHtml(g.mid_cat)}</td>
+         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${escapeHtml(g.big_cat)}</td>
          <td style="${TDS}text-align:right;color:${C.green};font-weight:600">+${fmt(g.amount)}</td></tr>`).join('') : empty4;
   const outHtml = groupedOut.length ? groupedOut.map(g =>
     `<tr><td style="${TDS}color:${C.t2}">${wkLabel}</td>
-         <td style="${TDS}">${g.mid_cat}</td>
-         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${g.big_cat}</td>
+         <td style="${TDS}">${escapeHtml(g.mid_cat)}</td>
+         <td style="${TDS}color:${g.conflict?C.amber:C.t2}">${escapeHtml(g.big_cat)}</td>
          <td style="${TDS}text-align:right;color:${C.red};font-weight:600">-${fmt(g.amount)}</td></tr>`).join('') : empty4;
   const bigCatHtml = bigCatRows.length ? bigCatRows.map(x =>
-    `<tr><td style="${TDS}font-weight:500">${x.cat}</td>
+    `<tr><td style="${TDS}font-weight:500">${escapeHtml(x.cat)}</td>
          <td style="${TDS}text-align:right;color:${x.in>0?C.green:C.t3}">${x.in>0?'+'+fmt(x.in):'—'}</td>
          <td style="${TDS}text-align:right;color:${x.out>0?C.red:C.t3}">${x.out>0?'-'+fmt(x.out):'—'}</td></tr>`).join('')
     : `<tr><td colspan="3" style="text-align:center;color:${C.t3};padding:14px;font-size:12px">이번 주 거래 없음</td></tr>`;
@@ -8820,8 +8820,8 @@ async function renderEmailHistory() {
       <td style="padding:6px 10px;font-size:12px">${row.week_key ? fmtMD2(row.week_key)+'주' : '—'}</td>
       <td style="padding:6px 10px;font-size:11px;color:var(--text2);white-space:nowrap">${row.report_start_date ? fmtMD2(row.report_start_date)+'~'+fmtMD2(row.report_end_date) : '—'}</td>
       <td style="padding:6px 10px;font-size:11px;color:var(--text2)">${typeLabel(row.send_type)}</td>
-      <td style="padding:6px 10px;font-size:11px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis">${(row.recipients||[]).join(', ')||'—'}</td>
-      <td style="padding:6px 10px;text-align:center">${statusBadge(row.status)}${row.error_message?`<div style="font-size:10px;color:var(--red);margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${row.error_message}">${row.error_message.slice(0,40)}</div>`:''}</td>
+      <td style="padding:6px 10px;font-size:11px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis">${escapeHtml((row.recipients||[]).join(', ')||'—')}</td>
+      <td style="padding:6px 10px;text-align:center">${statusBadge(row.status)}${row.error_message?`<div style="font-size:10px;color:var(--red);margin-top:2px;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(row.error_message)}">${escapeHtml(row.error_message.slice(0,40))}</div>`:''}</td>
     </tr>`).join('');
 }
 
@@ -9369,7 +9369,7 @@ function renderDailyReport(){
              <span>금액</span><input type="number" data-dx="${mi}" data-df="out" value="${Number(r.out)||0}" step="1000000">
            </div>`
         : `<div class="h"><span class="nm">${escapeHtml(dlLabel(r, note))}</span><span class="am">${dlWon(r.out)}</span></div>
-           <div class="meta">${r.date} ${dayTag(r)}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}${it.label?` · 원본 "${escapeHtml(r.desc||'')}"`:''}</div>`;
+           <div class="meta">${escapeHtml(r.date)} ${dayTag(r)}${r.mid_cat?` · ${escapeHtml(r.mid_cat)}`:''}${it.label?` · 원본 "${escapeHtml(r.desc||'')}"`:''}</div>`;
       return `<div class="dl-item ${r.date < d && !r._manual ? 'hot':''}">${head}
         <div class="dl-f">
           ${r._manual ? '' : `<span>표시명</span><input data-dk="${k}" data-df="label" value="${escapeHtml(it.label||'')}" placeholder="비우면 원본 그대로 — 적요가 잘렸을 때만">`}
@@ -9412,7 +9412,7 @@ function renderDailyReport(){
         ? `<div class="dl-hint" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
              이번 보고에서 뺀 건 <b>${R.skipped.length}건 · ${dlWon(R.skipSum)}원</b> — 메일에는 안 나가지만 <b>집행 후 잔액에는 반영</b>돼 있습니다.
              ${R.skipped.map(r=>`<div style="margin-top:4px;display:flex;justify-content:space-between;gap:10px;align-items:center">
-                <span>· ${escapeHtml(r.desc||'(거래내용 없음)')} <span style="color:var(--text3)">${r.date}</span></span>
+                <span>· ${escapeHtml(r.desc||'(거래내용 없음)')} <span style="color:var(--text3)">${escapeHtml(r.date)}</span></span>
                 <span style="display:flex;align-items:center;gap:8px;font-family:var(--mono)">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`).join('')}
            </div>`
         : '')) +
@@ -9674,7 +9674,7 @@ function generateRecurring(showToastMsg = true) {
 function buildRecMidCatSelect() {
   const sel = document.getElementById('rec-midcat');
   if (!sel) return;
-  sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
+  sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
 }
 
 function renderRecurTable() {
@@ -9702,12 +9702,12 @@ function renderRecurTable() {
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="rec-row-check" data-idx="${i}" style="cursor:pointer"></td>
       <td style="text-align:center;font-weight:600;color:var(--text)">매월 ${r.day}일</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</td>
       <td class="num">${(r.in||0)>0?'<span style="color:var(--green)">+'+fmt(r.in)+'</span>':'—'}</td>
       <td class="num">${(r.out||0)>0?'<span style="color:var(--red)">-'+fmt(r.out)+'</span>':'—'}</td>
       <td><span class="badge ${type}">${type}</span></td>
-      <td style="font-size:11px;color:var(--text2)">${r.mid_cat||'—'}</td>
-      <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.memo||'—'}</td>
+      <td style="font-size:11px;color:var(--text2)">${escapeHtml(r.mid_cat||'—')}</td>
+      <td style="font-size:11px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.memo||'—')}</td>
       <td style="font-size:11px;color:${alreadyGen?'var(--green)':'var(--text3)'}">
         ${alreadyGen ? '✅ 생성됨' : nextDate}
       </td>
@@ -9724,7 +9724,7 @@ function expandRecurRow(tr, idx) {
   const r = recurData[idx];
   const mids = getMidCats();
   const midOpts = '<option value="">선택...</option>' + mids.map(m =>
-    `<option value="${m}"${m === r.mid_cat ? ' selected' : ''}>${m}</option>`
+    `<option value="${escapeHtml(m)}"${m === r.mid_cat ? ' selected' : ''}>${escapeHtml(m)}</option>`
   ).join('');
 
   tr.classList.add('rec-editing');
@@ -9736,7 +9736,7 @@ function expandRecurRow(tr, idx) {
         style="width:52px;background:var(--bg3);border:1px solid var(--blue);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 6px;border-radius:6px;text-align:center">
     </td>
     <td>
-      <input type="text" class="rec-edit-desc" value="${(r.desc||'').replace(/"/g,'&quot;')}"
+      <input type="text" class="rec-edit-desc" value="${escapeHtml(r.desc||'')}"
         style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px">
     </td>
     <td class="num">
@@ -9755,7 +9755,7 @@ function expandRecurRow(tr, idx) {
       </select>
     </td>
     <td>
-      <input type="text" class="rec-edit-memo" value="${(r.memo||'').replace(/"/g,'&quot;')}"
+      <input type="text" class="rec-edit-memo" value="${escapeHtml(r.memo||'')}"
         style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:4px 8px;border-radius:6px">
     </td>
     <td></td>
@@ -10320,7 +10320,7 @@ function openLoanModal(idx){
     } else {
       const t = f.type==='date'?'date':(f.type==='num'?'number':'text');
       const step = f.type==='num'?' step="any"':'';
-      inp = `<input type="${t}"${step} data-k="${f.k}" value="${String(v).replace(/"/g,'&quot;')}">`;
+      inp = `<input type="${t}"${step} data-k="${f.k}" value="${escapeHtml(String(v))}">`;
     }
     return `<label class="${f.star?'star':''}">${f.label}${inp}</label>`;
   }).join('');
@@ -11363,7 +11363,7 @@ function updateCCTxAliasFilter() {
   // 표시명(조직명) 기준 — 저장값이 M03/BX 여도 '2본부' 한 항목으로 묶인다
   const aliases = [...new Set(corpCardTxData.map(r => ccAliasDisplay(r.card_alias)).filter(Boolean))].sort();
   sel.innerHTML = `<option value="">카드 전체</option>` +
-    aliases.map(a => `<option value="${a}"${a === current ? ' selected' : ''}>${a}</option>`).join('');
+    aliases.map(a => `<option value="${escapeHtml(a)}"${a === current ? ' selected' : ''}>${escapeHtml(a)}</option>`).join('');
   updateCCTxMonthFilter();   // 데이터가 바뀌면 두 선택기를 같이 갱신 (호출부가 여러 곳이라 여기에 묶음)
 }
 
@@ -11380,7 +11380,7 @@ function updateCCTxMonthFilter() {
     .sort().reverse();
   const label = m => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
   sel.innerHTML = `<option value="">전체 기간</option>` +
-    months.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${label(m)}</option>`).join('');
+    months.map(m => `<option value="${escapeHtml(m)}"${m === current ? ' selected' : ''}>${escapeHtml(label(m))}</option>`).join('');
   // 고르고 있던 달이 데이터에서 사라졌으면(전체 삭제·교체) 선택이 조용히 풀린다
   if (current && !months.includes(current)) sel.value = '';
 }
@@ -11524,12 +11524,12 @@ function renderCCTxTable() {
     const chk = corpCardTxSelectedIds.has(r._id) ? 'checked' : '';
     return `<tr>` +
       `<td style="width:32px;padding:4px 8px"><input type="checkbox" class="cctx-row-check" data-id="${r._id}" ${chk} style="cursor:pointer"></td>` +
-      `<td>${r.use_date || ''}</td>` +
-      `<td style="font-family:var(--mono);font-size:11px">${r.card_no || ''}</td>` +
-      `<td>${ccAliasDisplay(r.card_alias) || '—'}</td>` +
-      `<td>${r.merchant || '—'}</td>` +
+      `<td>${escapeHtml(r.use_date || '')}</td>` +
+      `<td style="font-family:var(--mono);font-size:11px">${escapeHtml(r.card_no || '')}</td>` +
+      `<td>${escapeHtml(ccAliasDisplay(r.card_alias) || '—')}</td>` +
+      `<td>${escapeHtml(r.merchant || '—')}</td>` +
       `<td class="num">${fmt(r.billing_amount || 0)}</td>` +
-      `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.memo || '—'}</td>` +
+      `<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.memo || '—')}</td>` +
       `<td style="padding:3px 6px;white-space:nowrap">` +
         `<button class="cctx-ract" title="수정" data-editid="${r._id}">✏</button>` +
         `<button class="cctx-ract del" title="삭제" data-delid="${r._id}">🗑</button>` +
@@ -12332,8 +12332,8 @@ function previewCCTxBulkEdit() {
   const fnames    = { use_date:'사용일자', card_alias:'사용자', card_no:'카드번호', merchant:'가맹점명', billing_amount:'금액', memo:'계정과목' };
   const fieldSummary = defs.map(d => {
     const fn = fnames[d.field] || d.field;
-    const ml = d.mode === 'set_value' ? `→ "${d.rawVal}"` : d.mode === 'set_empty' ? '→ (빈 값)' : d.mode === 'add_value' ? `+${d.rawVal}` : `-${d.rawVal}`;
-    return `${fn} ${ml}`;
+    const ml = d.mode === 'set_value' ? `→ "${escapeHtml(d.rawVal)}"` : d.mode === 'set_empty' ? '→ (빈 값)' : d.mode === 'add_value' ? `+${escapeHtml(d.rawVal)}` : `-${escapeHtml(d.rawVal)}`;
+    return `${escapeHtml(fn)} ${ml}`;
   }).join(', ');
   const exRows = changed.slice(0, 10).map(r => {
     const nr = _applyCCTxChangesToRow(r, defs);
@@ -12341,9 +12341,9 @@ function previewCCTxBulkEdit() {
       const fn = fnames[d.field] || d.field;
       const bef = d.field === 'billing_amount' ? (r[d.field]||0).toLocaleString() : (r[d.field]||'(없음)');
       const aft = d.field === 'billing_amount' ? (nr[d.field]||0).toLocaleString() : (nr[d.field]||'(빈 값)');
-      return `${fn}: ${bef} → ${aft}`;
+      return `${escapeHtml(fn)}: ${escapeHtml(bef)} → ${escapeHtml(aft)}`;
     }).join(' | ');
-    return `<div style="padding:2px 0;border-bottom:1px solid var(--border);font-size:11px">${r.merchant||r.use_date||r._id.slice(-6)}: ${diff}</div>`;
+    return `<div style="padding:2px 0;border-bottom:1px solid var(--border);font-size:11px">${escapeHtml(r.merchant||r.use_date||r._id.slice(-6))}: ${diff}</div>`;
   }).join('');
   if (prevEl) prevEl.innerHTML =
     `<div class="cctx-preview">` +
@@ -12921,7 +12921,7 @@ function buildBigCatSelects(curAddBig, curEditBig) {
   const allBigs = getBigCats();
   const makeOpts = (cur) =>
     '<option value="">자동(중분류 기준)</option>' +
-    allBigs.map(b => `<option value="${b}"${b === cur ? ' selected' : ''}>${b}</option>`).join('');
+    allBigs.map(b => `<option value="${escapeHtml(b)}"${b === cur ? ' selected' : ''}>${escapeHtml(b)}</option>`).join('');
   const addSel  = document.getElementById('cf-bigcat');
   const editSel = document.getElementById('edit-cf-bigcat');
   if (addSel)  addSel.innerHTML  = makeOpts(curAddBig  || addSel.value  || '');
@@ -12999,17 +12999,17 @@ function renderDescMidList() {
   }
 
   list.innerHTML = entries.map(([desc, mid]) => {
-    const safeDesc = desc.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const safeDesc = escapeHtml(desc);
     const bigCat = catMidToBig[mid] || '기타';
-    return `<div class="cat-row cat-view-row" data-desc="${safeDesc}" data-mid="${mid}" style="cursor:pointer">
+    return `<div class="cat-row cat-view-row" data-desc="${safeDesc}" data-mid="${escapeHtml(mid)}" style="cursor:pointer">
       <input type="checkbox" class="cat-desc-chk" data-desc="${safeDesc}" style="margin-right:4px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();updateDescSelectedBtn()">
       <div style="flex:1.4;min-width:0;overflow:hidden">
-        <div style="font-size:12px;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${desc}</div>
+        <div style="font-size:12px;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(desc)}</div>
       </div>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
       <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px">
-        <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${mid}</span>
-        <span style="font-size:10px;color:var(--text3);white-space:nowrap">${bigCat}</span>
+        <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${escapeHtml(mid)}</span>
+        <span style="font-size:10px;color:var(--text3);white-space:nowrap">${escapeHtml(bigCat)}</span>
       </div>
       <button class="cat-del-desc-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5" title="삭제">✕</button>
     </div>`;
@@ -13032,8 +13032,8 @@ function expandDescRow(row) {
   const origDesc = row.dataset.desc;
   const origMid  = row.dataset.mid;
   const mids = getMidCats();
-  const opts = mids.map(m => `<option value="${m}"${m===origMid?' selected':''}>${m}</option>`).join('');
-  const safeDesc = origDesc.replace(/"/g,'&quot;');
+  const opts = mids.map(m => `<option value="${escapeHtml(m)}"${m===origMid?' selected':''}>${escapeHtml(m)}</option>`).join('');
+  const safeDesc = escapeHtml(origDesc);
 
   row.classList.add('cat-editing');
   row.style.cursor = 'default';
@@ -13126,17 +13126,17 @@ function renderMidBigList() {
   allBigs.forEach((b,i) => bigColorMap[b] = bigColors[i % bigColors.length]);
 
   list.innerHTML = entries.map(([mid, big]) => {
-    const safeMid = mid.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const safeMid = escapeHtml(mid);
     const col = bigColorMap[big] || 'var(--text2)';
     const bgCol = col.startsWith('var') ? col.replace(')', '-bg)').replace('var(','rgba(').replace('-bg)','').replace('var(--','') : col;
-    return `<div class="cat-row cat-mid-view-row" data-mid="${safeMid}" data-big="${big}" style="cursor:pointer">
+    return `<div class="cat-row cat-mid-view-row" data-mid="${safeMid}" data-big="${escapeHtml(big)}" style="cursor:pointer">
       <input type="checkbox" class="cat-mid-chk" data-mid="${safeMid}" style="margin-right:4px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();updateMidSelectedBtn()">
       <div style="flex:1;min-width:0;overflow:hidden">
-        <span style="font-size:12px;color:var(--text);font-weight:500">${mid}</span>
+        <span style="font-size:12px;color:var(--text);font-weight:500">${escapeHtml(mid)}</span>
       </div>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
       <div style="flex:1;min-width:0">
-        <span class="badge" style="background:rgba(49,72,64,0.12);color:${col};font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${big}</span>
+        <span class="badge" style="background:rgba(49,72,64,0.12);color:${col};font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap">${escapeHtml(big)}</span>
       </div>
       <button class="cat-del-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5" title="삭제">✕</button>
     </div>`;
@@ -13158,8 +13158,8 @@ function renderMidBigList() {
 function expandMidRow(row, allBigs) {
   const origMid = row.dataset.mid;
   const origBig = row.dataset.big;
-  const safeMid = origMid.replace(/"/g,'&quot;');
-  const bigOpts = allBigs.map(b => `<option value="${b}"${b===origBig?' selected':''}>${b}</option>`).join('');
+  const safeMid = escapeHtml(origMid);
+  const bigOpts = allBigs.map(b => `<option value="${escapeHtml(b)}"${b===origBig?' selected':''}>${escapeHtml(b)}</option>`).join('');
 
   row.classList.add('cat-editing');
   row.style.cursor = 'default';
@@ -13401,7 +13401,7 @@ function refreshDescAddMidSelect() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">선택...</option>' +
-    getMidCats().map(m => `<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
+    getMidCats().map(m => `<option value="${escapeHtml(m)}"${m===cur?' selected':''}>${escapeHtml(m)}</option>`).join('');
 }
 
 // mid-add-big select 갱신 헬퍼
@@ -13410,7 +13410,7 @@ function refreshMidAddBigSelect() {
   if (!sel) return;
   const cur = sel.value;
   const allBigs = [...new Set(Object.values(catMidToBig))].sort((a,b) => a.localeCompare(b,'ko'));
-  sel.innerHTML = allBigs.map(b => `<option value="${b}"${b===cur?' selected':''}>${b}</option>`).join('') +
+  sel.innerHTML = allBigs.map(b => `<option value="${escapeHtml(b)}"${b===cur?' selected':''}>${escapeHtml(b)}</option>`).join('') +
     `<option value="__new__">+ 새 대분류...</option>`;
 }
 
@@ -13508,7 +13508,7 @@ document.getElementById('cat-save-btn').addEventListener('click', () => {
   saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
-    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
+    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   });
   buildBigCatSelects();
   renderMidBigList();
@@ -13577,7 +13577,7 @@ document.getElementById('cat-reset-btn').addEventListener('click', () => {
   saveCatData();
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
-    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
+    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   });
   buildBigCatSelects();
   renderMidBigList();
@@ -13621,17 +13621,17 @@ function renderComboList() {
 
   list.innerHTML = entries.map(([key, mid]) => {
     const [desc, type] = key.split('::');
-    const safeKey = key.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const safeKey = escapeHtml(key);
     const typeColor = type === '입금' ? 'var(--green)' : 'var(--red)';
     const typeBg = type === '입금' ? 'rgba(46,199,122,0.12)' : 'rgba(255,77,106,0.12)';
     return `<div class="cat-row cat-combo-view-row" data-key="${safeKey}" style="cursor:pointer">
       <input type="checkbox" class="cat-combo-chk" data-key="${safeKey}" style="margin-right:4px;cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();updateComboSelectedBtn()">
       <div style="flex:1.4;min-width:0;overflow:hidden">
-        <span style="font-size:12px;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${desc}</span>
+        <span style="font-size:12px;color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escapeHtml(desc)}</span>
       </div>
-      <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;flex-shrink:0;background:${typeBg};color:${typeColor}">${type}</span>
+      <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;flex-shrink:0;background:${typeBg};color:${typeColor}">${escapeHtml(type)}</span>
       <span style="color:var(--text3);font-size:11px;flex-shrink:0">→</span>
-      <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0">${mid}</span>
+      <span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:4px;white-space:nowrap;flex-shrink:0">${escapeHtml(mid)}</span>
       <button class="combo-del-btn btn sm red" style="flex-shrink:0;padding:2px 7px;opacity:0.5">✕</button>
     </div>`;
   }).join('');
@@ -13654,8 +13654,8 @@ function expandComboRow(row) {
   const [origDesc, origType] = origKey.split('::');
   const origMid = catDescTypeToMid[origKey] || '';
   const mids = getMidCats();
-  const opts = mids.map(m => `<option value="${m}"${m===origMid?' selected':''}>${m}</option>`).join('');
-  const safeDesc = origDesc.replace(/"/g,'&quot;');
+  const opts = mids.map(m => `<option value="${escapeHtml(m)}"${m===origMid?' selected':''}>${escapeHtml(m)}</option>`).join('');
+  const safeDesc = escapeHtml(origDesc);
 
   row.classList.add('cat-editing');
   row.style.cursor = 'default';
@@ -13702,7 +13702,7 @@ function refreshComboAddMidSelect() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">선택...</option>' +
-    getMidCats().map(m => `<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
+    getMidCats().map(m => `<option value="${escapeHtml(m)}"${m===cur?' selected':''}>${escapeHtml(m)}</option>`).join('');
 }
 
 document.getElementById('combo-add-btn').addEventListener('click', () => {
@@ -13944,7 +13944,7 @@ document.getElementById('cat-apply-btn').addEventListener('click', () => {
   // 중분류 드롭다운 갱신
   ['cf-midcat','edit-cf-midcat'].forEach(id => {
     const sel = document.getElementById(id);
-    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${m}">${m}</option>`).join('');
+    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   });
   buildBigCatSelects();
 
@@ -14036,7 +14036,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
   buildARPartnerSelect();
   (function buildEditMidCatSelect() {
     const sel = document.getElementById('edit-cf-midcat');
-    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${m}">${m}</option>`).join('');
+    if (sel) sel.innerHTML = '<option value="">선택...</option>' + getMidCats().map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   })();
   buildBigCatSelects();
 
@@ -14410,12 +14410,12 @@ function renderCFPreview(parsed) {
   const tbody = document.querySelector('#cf-preview-table tbody');
   thead.innerHTML = '<tr><th>거래일</th><th>거래내용</th><th>입금액</th><th>출금액</th><th>상태</th><th>중분류</th></tr>';
   tbody.innerHTML = parsed.slice(0,30).map(r => `<tr>
-    <td>${r.date}</td>
-    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${r.desc}</td>
+    <td>${escapeHtml(r.date)}</td>
+    <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.desc)}</td>
     <td style="text-align:right;color:var(--green)">${r.in > 0 ? fmt(r.in) : ''}</td>
     <td style="text-align:right;color:var(--red)">${r.out > 0 ? fmt(r.out) : ''}</td>
-    <td><span class="badge ${r.type}">${r.status}</span></td>
-    <td style="color:var(--text2)">${r.mid_cat||'—'}</td>
+    <td><span class="badge ${escapeHtml(r.type)}">${escapeHtml(r.status)}</span></td>
+    <td style="color:var(--text2)">${escapeHtml(r.mid_cat||'—')}</td>
   </tr>`).join('') + (parsed.length > 30 ? `<tr><td colspan="6" style="text-align:center;color:var(--text3)">... 외 ${parsed.length-30}건</td></tr>` : '');
 }
 
@@ -14508,7 +14508,7 @@ document.getElementById('cf-import-btn').addEventListener('click', () => {
     document.getElementById('cf-dup-modal-count').textContent = `${dups.length}건`;
     document.getElementById('cf-dup-modal-list').innerHTML = dups.map((r,i) => {
       const amt = r.amount !== undefined ? r.amount : ((r.in||0)-(r.out||0));
-      return `<div style="padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${i+1}. ${r.date} &nbsp;|&nbsp; ${r.desc.slice(0,25)} &nbsp;|&nbsp; ${amt > 0 ? '+'+fmt(amt) : fmt(amt)}원</div>`;
+      return `<div style="padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${i+1}. ${escapeHtml(r.date)} &nbsp;|&nbsp; ${escapeHtml(r.desc.slice(0,25))} &nbsp;|&nbsp; ${amt > 0 ? '+'+fmt(amt) : fmt(amt)}원</div>`;
     }).join('');
     document.getElementById('cf-dup-modal').classList.remove('hidden');
     window._cfDupMode = 'bulk';
@@ -14733,12 +14733,12 @@ function renderARPreview(parsed) {
   const tbody = document.querySelector('#ar-preview-table tbody');
   thead.innerHTML = '<tr><th>거래처</th><th>시작일</th><th>예상회수액</th><th>미회수액</th><th>회수예정일</th><th>상태</th></tr>';
   tbody.innerHTML = parsed.slice(0,30).map(r => `<tr>
-    <td style="font-weight:500">${r.partner}</td>
-    <td style="color:var(--text2)">${r.start||'—'}</td>
+    <td style="font-weight:500">${escapeHtml(r.partner)}</td>
+    <td style="color:var(--text2)">${escapeHtml(r.start||'—')}</td>
     <td style="text-align:right">${fmt(r.expected)}</td>
     <td style="text-align:right;color:${r.remaining>0?'var(--amber)':'var(--text3)'}">${r.remaining>0?fmt(r.remaining):'—'}</td>
-    <td style="color:var(--text2)">${r.due_date||'—'}</td>
-    <td><span class="badge ${r.status}">${r.status}</span></td>
+    <td style="color:var(--text2)">${escapeHtml(r.due_date||'—')}</td>
+    <td><span class="badge ${escapeHtml(r.status)}">${escapeHtml(r.status)}</span></td>
   </tr>`).join('') + (parsed.length > 30 ? `<tr><td colspan="6" style="text-align:center;color:var(--text3)">... 외 ${parsed.length-30}건</td></tr>` : '');
 }
 
@@ -14800,7 +14800,7 @@ document.getElementById('ar-import-btn').addEventListener('click', () => {
   if (dups.length > 0) {
     document.getElementById('ar-dup-modal-count').textContent = `${dups.length}건`;
     document.getElementById('ar-dup-modal-list').innerHTML = dups.map((r,i) =>
-      `<div style="padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${i+1}. ${r.partner} &nbsp;|&nbsp; ${r.start||'—'} &nbsp;|&nbsp; ${fmt(r.expected||0)}원</div>`
+      `<div style="padding:3px 0;border-bottom:1px solid rgba(0,0,0,0.06)">${i+1}. ${escapeHtml(r.partner)} &nbsp;|&nbsp; ${escapeHtml(r.start||'—')} &nbsp;|&nbsp; ${fmt(r.expected||0)}원</div>`
     ).join('');
     document.getElementById('ar-dup-modal').classList.remove('hidden');
   } else {
