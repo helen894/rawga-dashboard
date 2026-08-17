@@ -4844,15 +4844,16 @@ function renderCashChart() {
   const ctx = document.getElementById('cashChart').getContext('2d');
   if (cashChartInst) cashChartInst.destroy();
 
-  // 보고 기준일 기준 3개월(90일) 전 ~ 기준일
+  /* 보고 기준일 기준 3개월(90일) 전 ~ 기준일
+   * ⚠ 날짜 산술에 toISOString() 을 쓰지 말 것 — KST 자정이 UTC 로 **전날 15:00** 이라 하루가 밀린다.
+   *   일간 리포트에서 같은 버그로 당일 예정 출금을 두 번 빼고 7일 창 마지막 날이 빠진 적이 있고,
+   *   2026-08-18 궤적 구간에서도 같은 실수로 futDates 가 기준일을 중복 포함해 하회 일수가 하루
+   *   많게 나왔다. 로컬 날짜 문자열 헬퍼 addDays() 를 쓴다. */
   const maxDate = refDate;
-  const minDt   = new Date(refDate+'T00:00:00'); minDt.setDate(minDt.getDate()-90);
-  const minDate = minDt.toISOString().slice(0,10);
+  const minDate = addDays(refDate, -90);
 
   const allDates = [];
-  for (let d = new Date(minDate+'T00:00:00'); d.toISOString().slice(0,10) <= maxDate; d.setDate(d.getDate()+1)) {
-    allDates.push(d.toISOString().slice(0,10));
-  }
+  for (let d = minDate; d <= maxDate; d = addDays(d, 1)) allDates.push(d);
 
   /* 외화 환산손익을 기준선에 얹는다. 아래 세 기준선(running·last·preRunning)에 같은 상수를
    * 더하므로 선의 모양은 변하지 않고 끝점만 현금 KPI·대조 카드와 맞는다.
@@ -4897,14 +4898,9 @@ function renderCashChart() {
    * ⚠ 기한이 지난 예정(연체)은 미래가 아니라 **오늘 시점에 한꺼번에** 얹는다. 돈은 아직
    *   안 나갔으므로 과거로 그리면 확정 구간을 왜곡한다(만기 예정 경고가 별도로 알린다). */
   const HORIZON_DAYS = 56;                    // 8주
-  const futEnd = (() => { const d = new Date(maxDate+'T00:00:00'); d.setDate(d.getDate()+HORIZON_DAYS); return d.toISOString().slice(0,10); })();
+  const futEnd = addDays(maxDate, HORIZON_DAYS);        // ⚠ toISOString 금지(위 주석 참고)
   const futDates = [];
-  for (let d = new Date(maxDate+'T00:00:00'); ; ) {
-    d.setDate(d.getDate()+1);
-    const k = d.toISOString().slice(0,10);
-    if (k > futEnd) break;
-    futDates.push(k);
-  }
+  for (let d = addDays(maxDate, 1); d <= futEnd; d = addDays(d, 1)) futDates.push(d);
   const planRows = cfData.filter(r => r.status === '입금 예정' || r.status === '지출 예정');
   const planDelta = {};                        // 날짜 → 순증감
   let overdueSum = 0, overdueN = 0;
