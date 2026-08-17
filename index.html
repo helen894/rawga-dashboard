@@ -10187,22 +10187,36 @@ function loanDdayBadge(due){
   return html`<span class="dd ${cls}">${txt}</span>`;
 }
 
+/* ⚠ 진행 중인 로드를 공유한다 — 종전엔 `if(_loanLoading) return;` 이라 두 번째 호출자가
+   **로드가 끝나기 전에 즉시 반환**됐다. 부팅 흐름이 `await loadLoanData()` 로 기다리려 해도
+   먼저 뜬 renderAll 의 호출이 아직 돌고 있으면 그냥 빠져나와 loanData 가 빈 채로 진행된다. */
+let _loanLoadPromise = null;
 async function loadLoanData(){
-  if(_loanLoading) return; _loanLoading=true;
-  try{ const ls=JSON.parse(localStorage.getItem('loan_data')||'null'); if(Array.isArray(ls)) loanData=ls; }catch(e){}
-  try{
-    if(typeof _supa!=='undefined' && _supa){
-      const { data, error } = await _supa.from('cat_data').select('data').eq('key','loan_data').maybeSingle();
-      if(!error && data && Array.isArray(data.data)) loanData=data.data;
+  if(_loanLoadPromise) return _loanLoadPromise;
+  _loanLoadPromise = (async () => {
+    _loanLoading=true;
+    try{ const ls=JSON.parse(localStorage.getItem('loan_data')||'null'); if(Array.isArray(ls)) loanData=ls; }catch(e){}
+    try{
+      if(typeof _supa!=='undefined' && _supa){
+        const { data, error } = await _supa.from('cat_data').select('data').eq('key','loan_data').maybeSingle();
+        if(!error && data && Array.isArray(data.data)) loanData=data.data;
+      }
+    }catch(e){ console.warn('[loan] 로드 실패', e); }
+    _loanLoaded=true; _loanLoading=false;
+    /* 예정 생성은 **초기화 이후에만** 한다.
+       ⚠ 여기서 무조건 돌렸다가 아무것도 안 생기는 버그를 겪었다(2026-08-17):
+         부팅은 `renderAll()`(=loadLoanData 유발)을 Supabase 로드 **전에** 부른다.
+         그때 만든 행은 saveDataToSupabase 의 `_isInitialized` 가드에 막혀 서버에 못 가고,
+         곧이어 Supabase 응답이 cfData 를 통째로 교체하면서 사라진다.
+         게다가 _loanLoaded 가 이미 true 라 두 번 다시 실행되지도 않는다.
+       → 부팅 흐름(_isInitialized=true 직후)에서 다시 부르고, 여기서는 초기화 후에만 만든다. */
+    if (typeof _isInitialized !== 'undefined' && _isInitialized) {
+      try{ generateLoanPlanned(); }catch(e){ console.warn('[loan] 예정 생성 실패', e); }
     }
-  }catch(e){ console.warn('[loan] 로드 실패', e); }
-  _loanLoaded=true; _loanLoading=false;
-  /* 대출은 지연 로드라 초기화 시점엔 loanData 가 비어 있다 — 반복거래처럼 부팅 흐름에서
-     부를 수 없으므로 로드가 끝난 여기서 한 번 돌린다. 중복은 loan_id+date 로 막으므로
-     탭을 여러 번 열어도 안전하다. */
-  try{ generateLoanPlanned(); }catch(e){ console.warn('[loan] 예정 생성 실패', e); }
-  renderLoanTab();
-  try{ renderCFTable(); }catch(e){}   // 새 예정 행을 입출금 표·잔액 열에 즉시 반영
+    renderLoanTab();
+    try{ renderCFTable(); }catch(e){}   // 새 예정 행을 입출금 표·잔액 열에 즉시 반영
+  })();
+  return _loanLoadPromise;
 }
 
 /* ═══ 대출 이자 예정 자동 생성 (예정 파이프 1단계) ═══════════════════════
@@ -14191,6 +14205,15 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
 
     const autoChanged2 = autoUpdateStatus();
     const recurGenerated2 = generateRecurring(false); // Supabase 데이터 기준 반복거래 생성
+    /* 대출 이자 예정 — 반복거래와 같은 자리에서 돈다.
+       ⚠ 대출은 지연 로드라 여기서 **명시적으로 기다려야** 한다. loadLoanData 는 진행 중인
+       로드를 공유하므로(_loanLoadPromise) 앞선 renderAll 의 호출과 겹쳐도 안전하다.
+       초기화 전에 만들면 저장이 가드에 막히고 Supabase 응답에 덮여 사라진다(2026-08-17 실측). */
+    let loanGenerated = 0;
+    try {
+      await loadLoanData();
+      loanGenerated = generateLoanPlanned(false);
+    } catch (e) { console.warn('[boot] 대출 예정 생성 실패', e); }
     renderAll();
     // Supabase 로드 완료 후 대시보드가 활성 탭이면 KPI/차트를 rAF로 한 번 더 보장 갱신
     //   renderAll() → renderCharts()는 active guard를 통과해 이미 실행됐으나,
@@ -14202,6 +14225,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     }
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
+    if (loanGenerated > 0) showToast(`🏦 대출 이자 예정 ${loanGenerated}건이 생성됐습니다 (추정치 — 실제 출금 후 예정 행을 지워 주세요).`, 'green');
 
     // 딥링크 처리 — Supabase 데이터 로드 완료 후 탭 전환 + renderWeeklyReport() 재실행
     // (조기 처리에서 skipRender=true 로 탭만 열었으므로, 여기서 데이터와 함께 전체 렌더)
