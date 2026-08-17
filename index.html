@@ -2914,15 +2914,15 @@ function renderFreshness() {
   const COL = ['var(--green)', 'var(--amber)', 'var(--red)'];
   const worst = Math.max(...src.map(s => s.lvl));
   const chips = src.map(s =>
-    `<span title="${escapeHtml(s.tip)}" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:3px 9px;white-space:nowrap;cursor:default">
+    html`<span title="${s.tip}" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:3px 9px;white-space:nowrap;cursor:default">
       <span style="width:7px;height:7px;border-radius:50%;background:${COL[s.lvl]};flex:none"></span>
-      <b style="color:var(--text);font-weight:600">${s.name}</b> ${escapeHtml(s.cover)}
-    </span>`).join('');
+      <b style="color:var(--text);font-weight:600">${s.name}</b> ${s.cover}
+    </span>`);
   el.innerHTML =
-    `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 12px;background:var(--bg3);border-radius:8px;border-left:3px solid ${COL[worst]}">
+    html`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 12px;background:var(--bg3);border-radius:8px;border-left:3px solid ${COL[worst]}">
       <span style="font-size:11.5px;font-weight:700;color:var(--text2);white-space:nowrap">📊 데이터 신선도</span>
       ${chips}
-      ${worst > 0 ? `<span style="font-size:11px;color:${COL[worst]}">← 갱신이 밀린 소스가 있습니다</span>` : ''}
+      ${worst > 0 ? html`<span style="font-size:11px;color:${COL[worst]}">← 갱신이 밀린 소스가 있습니다</span>` : ''}
     </div>`;
 }
 
@@ -2978,33 +2978,35 @@ function renderBankRecon() {
   try { savedOpen = localStorage.getItem('bank_recon_open') === '1'; } catch (e) {}
   const openAttr = (forceOpen || savedOpen) ? ' open' : '';
 
-  const rowsHtml =
-    (FX_ADJ ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px">
+  const rowsParts = [
+    (FX_ADJ ? html`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px">
         <span style="font-size:11px;color:var(--text2)">🔄 외화 환산손익</span>
         <span style="text-align:right">
           <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${FX_ADJ < 0 ? 'var(--red)' : 'var(--green)'}">${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}</span>
           <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
         </span>
-      </div>` : '') +
-    (fxTxt ? `<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${escapeHtml(fxTxt)}${loanBal ? ` &nbsp;·&nbsp; 대출잔액 ${fmt(loanBal)}(현금 아님, 대조 제외)` : ''}</div>` : '') +
-    (ad > 1000000 ? `<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : '');
+      </div>` : ''),
+    (fxTxt ? html`<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${fxTxt}${loanBal ? ` · 대출잔액 ${fmt(loanBal)}(현금 아님, 대조 제외)` : ''}</div>` : ''),
+    (ad > 1000000 ? html`<div style="font-size:11px;color:var(--text2);margin-top:6px">주요 원인: 미반영 거래 · 기초잔액 설정</div>` : ''),
+  ];
+  const hasRows = !!(FX_ADJ || fxTxt || ad > 1000000);
 
   // 접힌 상태에서도 핵심 숫자는 보이게 요약 줄 구성
   const sumBits = [];
   if (FX_ADJ)            sumBits.push(`환산손익 ${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}`);
   if (fxTxt)             sumBits.push(`외화 ${s.fx.map(x => `${x.ccy} ${Number(x.amount).toLocaleString()}`).join('+')}`);
   if (loanBal)           sumBits.push(`대출 ${fmt(loanBal)}`);
-  const moreHtml = rowsHtml
-    ? `<details class="recon-more"${openAttr}><summary>${escapeHtml(sumBits.join(' · ') || '세부 정보')}</summary>${rowsHtml}</details>`
+  const moreHtml = hasRows
+    ? html`<details class="recon-more"${openAttr?raw(' open'):''}><summary>${sumBits.join(' · ') || '세부 정보'}</summary>${rowsParts}</details>`
     : '';
 
   el.innerHTML =
-    `<div class="chart-box" style="margin-bottom:20px;border-left:3px solid ${col}">
+    html`<div class="chart-box" style="margin-bottom:20px;border-left:3px solid ${col}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <span class="chart-title" style="margin:0">🏦 은행 실잔액 대조</span>
         <span style="font-size:11px;font-weight:700;color:${col};background:${bg};padding:2px 8px;border-radius:5px">${mark}</span>
         <div style="flex:1"></div>
-        <span style="font-size:11px;color:${stale ? 'var(--amber)' : 'var(--text3)'}">${escapeHtml(s.source || '클로브')} · ${age}${stale ? ' ⚠' : ''}</span>
+        <span style="font-size:11px;color:${stale ? 'var(--amber)' : 'var(--text3)'}">${s.source || '클로브'} · ${age}${stale ? ' ⚠' : ''}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
         <div style="background:var(--bg3);border-radius:8px;padding:11px 13px">
@@ -3135,22 +3137,22 @@ function renderArIssueBanner() {
   const col  = high ? 'var(--red)' : 'var(--amber)';
   const bgc  = high ? 'var(--red2)' : 'var(--amber2)';
   el.innerHTML =
-    `<div style="border:1px solid ${col};background:${bgc};border-radius:8px;padding:10px 12px;margin-bottom:8px">
+    html`<div style="border:1px solid ${col};background:${bgc};border-radius:8px;padding:10px 12px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:13px;font-weight:600;color:${col}">${high ? '⚠' : 'ℹ'} 동기화 점검 ${issues.length}건</span>
         <span style="font-size:11px;color:var(--text2)">데이터가 누락됐을 가능성만 표시합니다 (값 이상·상계행은 대상 아님)</span>
         <div style="flex:1"></div>
         <button class="btn sm" data-ar-ack-all="1" style="font-size:11px">모두 확인함</button>
       </div>
-      ${issues.map(i => `
+      ${issues.map(i => html`
         <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 9px;background:var(--card);border-radius:6px;margin-top:5px">
           <span style="color:${i.level === 'high' ? 'var(--red)' : 'var(--amber)'};font-size:12px;line-height:1.5">${i.level === 'high' ? '●' : '○'}</span>
           <div style="flex:1;min-width:0">
-            <div style="font-size:12.5px;font-weight:600;color:var(--text)">${escapeHtml(i.title)}</div>
-            <div style="font-size:11.5px;color:var(--text2);margin-top:2px;line-height:1.5">${escapeHtml(i.detail)}</div>
+            <div style="font-size:12.5px;font-weight:600;color:var(--text)">${i.title}</div>
+            <div style="font-size:11.5px;color:var(--text2);margin-top:2px;line-height:1.5">${i.detail}</div>
           </div>
-          <button class="btn sm" data-ar-ack="${escapeHtml(i.key)}" style="font-size:11px;white-space:nowrap">확인함</button>
-        </div>`).join('')}
+          <button class="btn sm" data-ar-ack="${i.key}" style="font-size:11px;white-space:nowrap">확인함</button>
+        </div>`)}
     </div>`;
 }
 
@@ -3478,7 +3480,7 @@ async function renderAuditLog() {
   const { data, error } = await q;
 
   if (error) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
+    tbody.innerHTML = html`<tr><td colspan="5" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
     if (countEl) countEl.textContent = '';
     return;
   }
@@ -3497,18 +3499,18 @@ async function renderAuditLog() {
     password_change:['비밀번호 변경','audit-modify'],
   };
   const fmtDt = iso => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone:'Asia/Seoul', hour12:false }).slice(0,-3) : '—';
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const dash = html`<span style="color:var(--text3)">—</span>`;
 
-  tbody.innerHTML = data.map(row => {
+  tbody.innerHTML = html`${data.map(row => {
     const [lbl, cls] = actionMeta[row.action] || [row.action, 'audit-logout'];
-    return `<tr>
+    return html`<tr>
       <td style="white-space:nowrap;color:var(--text2)">${fmtDt(row.created_at)}</td>
-      <td>${esc(row.user_email) || '<span style="color:var(--text3)">—</span>'}</td>
-      <td style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap">${esc(row.ip) || '<span style="color:var(--text3)">—</span>'}</td>
+      <td>${row.user_email || dash}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap">${row.ip || dash}</td>
       <td><span class="audit-badge ${cls}">${lbl}</span></td>
-      <td>${esc(row.detail) || '<span style="color:var(--text3)">—</span>'}</td>
+      <td>${row.detail || dash}</td>
     </tr>`;
-  }).join('');
+  })}`;
   if (countEl) countEl.textContent = `최근 ${data.length}건${data.length >= 200 ? ' (최대 200건 표시)' : ''}`;
 }
 
@@ -4397,7 +4399,7 @@ function renderKPIs() {
       ? (up ? 'var(--red)' : 'var(--green)')
       : (up ? 'var(--green)' : 'var(--red)');
     const arrow = up ? '▲' : growth < 0 ? '▼' : '—';
-    return `<span style="color:${color}">${arrow} 전주 대비 ${Math.abs(growth).toFixed(1)}%</span>`;
+    return html`<span style="color:${color}">${arrow} 전주 대비 ${Math.abs(growth).toFixed(1)}%</span>`;
   };
 
   // 현재 현금잔액
@@ -4720,13 +4722,13 @@ function renderBudgetVsActual() {
     return;
   }
 
-  el.innerHTML = cats.map(cat => {
+  el.innerHTML = html`${cats.map(cat => {
     const p = planned[cat]||0, a = actual[cat]||0;
     const total = p + a;
     if (total === 0) return '';
     const pct = total > 0 ? Math.round(a / total * 100) : 0;
     const barColor = pct >= 90 ? 'var(--red)' : pct >= 60 ? 'var(--amber)' : 'var(--green)';
-    return `<div style="padding:10px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+    return html`<div style="padding:10px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;margin-bottom:6px">
         <span style="font-size:12px;font-weight:500;color:var(--text)">${cat}</span>
         <span style="font-size:11px;color:var(--text2)">${fmt(a)} / ${fmt(total)}</span>
@@ -4736,7 +4738,7 @@ function renderBudgetVsActual() {
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:4px">실적 ${pct}% · 예정 ${fmt(p)}</div>
     </div>`;
-  }).filter(Boolean).join('');
+  }).filter(Boolean)}`;
 }
 function getWeekKey(dateStr) {
   const dt = new Date(dateStr + 'T00:00:00');
@@ -4838,7 +4840,7 @@ function renderDonutChart() {
   const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
 
   const legend = document.getElementById('donut-legend');
-  legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
+  legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
 
   donutChartInst = new Chart(ctx, {
     type: 'doughnut',
@@ -4871,7 +4873,7 @@ function renderDonutWeeklyChart() {
   const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
 
   const legend = document.getElementById('donut-weekly-legend');
-  if (legend) legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`).join('');
+  if (legend) legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
 
   donutWeeklyChartInst = new Chart(ctx, {
     type: 'doughnut',
@@ -5064,7 +5066,7 @@ function renderARDonutChart() {
   const colArr = labels.map(l => colors[l] || '#aaaaaa');
 
   const legend = document.getElementById('ar-legend');
-  legend.innerHTML = labels.map((l,i) => `<span class="legend-item"><span class="legend-dot" style="background:${colArr[i]}"></span>${l} ${vals[i]}건</span>`).join('');
+  legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colArr[i]}"></span>${l} ${vals[i]}건</span>`)}`;
 
   arDonutInst = new Chart(ctx, {
     type: 'doughnut',
@@ -5228,16 +5230,16 @@ function renderCFOverdueWarn() {
   const outAmt = rows.filter(r => r.status === '지출 예정').reduce((s, r) => s + (r.out || 0), 0);
   const oldest = rows.reduce((a, r) => (!a || r.date < a ? r.date : a), '');
   const bits = [];
-  if (inAmt)  bits.push(`입금 예정 <span style="color:var(--green);font-family:var(--mono)">+${fmt(inAmt)}</span>`);
-  if (outAmt) bits.push(`지출 예정 <span style="color:var(--red);font-family:var(--mono)">-${fmt(outAmt)}</span>`);
+  if (inAmt)  bits.push(html`입금 예정 <span style="color:var(--green);font-family:var(--mono)">+${fmt(inAmt)}</span>`);
+  if (outAmt) bits.push(html`지출 예정 <span style="color:var(--red);font-family:var(--mono)">-${fmt(outAmt)}</span>`);
 
   el.innerHTML =
-    `<div class="chart-box" style="margin-bottom:12px;border-left:3px solid var(--amber);background:var(--amber2)">
+    html`<div class="chart-box" style="margin-bottom:12px;border-left:3px solid var(--amber);background:var(--amber2)">
        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
          <span style="font-size:13px;font-weight:700;color:var(--amber)">
            ⚠ 기한이 지난 예정 거래 ${rows.length}건</span>
-         <span style="font-size:12px;color:var(--text2)">${bits.join(' · ')}</span>
-         <span style="font-size:11.5px;color:var(--text3)">가장 오래된 건 ${escapeHtml(oldest)} · 기준 ${escapeHtml(cutoff)}</span>
+         <span style="font-size:12px;color:var(--text2)">${bits.length === 2 ? [bits[0], ' · ', bits[1]] : bits}</span>
+         <span style="font-size:11.5px;color:var(--text3)">가장 오래된 건 ${oldest} · 기준 ${cutoff}</span>
        </div>
        <div style="margin-top:7px;font-size:11.5px;color:var(--text2);line-height:1.6">
          실제 거래가 이미 들어왔다면 <b style="color:var(--text)">그 예정 행을 삭제</b>해 주세요 —
@@ -5299,11 +5301,10 @@ function renderCFTable() {
   let sumIn = 0, sumOut = 0;
   for (const r of cfFiltered) { sumIn += (r.in || 0); sumOut += (r.out || 0); }
   const sumNet = sumIn - sumOut;
-  document.getElementById('cf-count').innerHTML =
-    `총 ${total}건`
-    + ` <span style="color:var(--text3)">·</span> 입금 <span style="color:var(--green)">+${fmt(sumIn)}</span>`
-    + ` <span style="color:var(--text3)">·</span> 출금 <span style="color:var(--red)">-${fmt(sumOut)}</span>`
-    + ` <span style="color:var(--text3)">·</span> 순액 <span style="color:${sumNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(sumNet)}</span>`;
+  document.getElementById('cf-count').innerHTML = html`총 ${total}건`
+    + html` <span style="color:var(--text3)">·</span> 입금 <span style="color:var(--green)">+${fmt(sumIn)}</span>`
+    + html` <span style="color:var(--text3)">·</span> 출금 <span style="color:var(--red)">-${fmt(sumOut)}</span>`
+    + html` <span style="color:var(--text3)">·</span> 순액 <span style="color:${sumNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(sumNet)}</span>`;
   document.getElementById('cf-page-info').textContent = `${cfPage} / ${pages}`;
 
   // 정렬 표시(▲▼) 업데이트
@@ -5602,7 +5603,7 @@ document.getElementById('cf-add-btn').addEventListener('click', () => {
     // 팝업 표시
     document.getElementById('cf-dup-modal-count').textContent = '1건';
     document.getElementById('cf-dup-modal-list').innerHTML =
-      `<div style="padding:3px 0">1. ${date} &nbsp;|&nbsp; ${desc.slice(0,25)} &nbsp;|&nbsp; ${newAmt > 0 ? '+'+fmt(newAmt) : fmt(newAmt)}원</div>`;
+      html`<div style="padding:3px 0">1. ${date} &nbsp;|&nbsp; ${desc.slice(0,25)} &nbsp;|&nbsp; ${newAmt > 0 ? '+'+fmt(newAmt) : fmt(newAmt)}원</div>`;
     document.getElementById('cf-dup-modal').classList.remove('hidden');
     window._cfDupPendingRow = newRow;
     window._cfDupMode = 'single';
@@ -6103,30 +6104,26 @@ function previewCFBulkEdit() {
   const stats  = calcCFBulkStats(selectedRows, params);
   const { errors, warnings } = validateCFBulkParams(selectedRows, params);
 
-  let html = '';
-  if (errors.length)
-    html += errors.map(e => `<div style="color:var(--red);margin-bottom:4px">🚫 ${e}</div>`).join('');
-  if (warnings.length)
-    html += warnings.map(w => `<div style="color:#f59e0b;margin-bottom:4px">${w}</div>`).join('');
-
-  html += `<table style="width:100%;border-collapse:collapse">`;
   const row = (label, val, color) =>
-    `<tr><td style="padding:1px 4px;color:var(--text2)">${label}</td><td style="text-align:right;font-weight:600;${color ? 'color:'+color : ''}">${val}</td></tr>`;
-  html += row('선택 건수',      selectedRows.length + '건');
-  html += row('실제 변경 예정', stats.actualCnt   + '건', stats.actualCnt > 0 ? 'var(--green)' : '');
-  html += row('변경 없는 항목', stats.noChangeCnt + '건', 'var(--text3)');
-  if (params.status)            html += row('　· 상태 변경',   stats.statusCnt + '건');
-  if (params.mid !== '__KEEP__') html += row('　· 중분류 변경', stats.midCnt    + '건');
-  if (params.big !== '__KEEP__')      html += row('　· 대분류 변경', stats.bigCnt + '건');
-  else if (params.mid !== '__KEEP__' && params.mid && stats.bigCnt)
-    html += row(`　· 대분류 자동(${getBigCat(params.mid)})`, stats.bigCnt + '건');
-  if (params.descMode !== 'keep') html += row('　· 거래내용 변경', stats.descCnt + '건');
-  if (params.memoMode !== 'keep') html += row('　· 비고 변경',     stats.memoCnt + '건');
-  html += row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#f59e0b' : '');
-  html += `</table>`;
+    html`<tr><td style="padding:1px 4px;color:var(--text2)">${label}</td><td style="text-align:right;font-weight:600;${color ? 'color:'+color : ''}">${val}</td></tr>`;
+  const rows = [
+    row('선택 건수',      selectedRows.length + '건'),
+    row('실제 변경 예정', stats.actualCnt   + '건', stats.actualCnt > 0 ? 'var(--green)' : ''),
+    row('변경 없는 항목', stats.noChangeCnt + '건', 'var(--text3)'),
+    params.status            ? row('　· 상태 변경',   stats.statusCnt + '건') : '',
+    params.mid !== '__KEEP__' ? row('　· 중분류 변경', stats.midCnt    + '건') : '',
+    params.big !== '__KEEP__'
+      ? row('　· 대분류 변경', stats.bigCnt + '건')
+      : (params.mid !== '__KEEP__' && params.mid && stats.bigCnt
+          ? row(`　· 대분류 자동(${getBigCat(params.mid)})`, stats.bigCnt + '건') : ''),
+    params.descMode !== 'keep' ? row('　· 거래내용 변경', stats.descCnt + '건') : '',
+    params.memoMode !== 'keep' ? row('　· 비고 변경',     stats.memoCnt + '건') : '',
+    row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#f59e0b' : ''),
+  ];
+  const _out = html`${errors.map(e => html`<div style="color:var(--red);margin-bottom:4px">🚫 ${e}</div>`)}${warnings.map(w => html`<div style="color:#f59e0b;margin-bottom:4px">${w}</div>`)}<table style="width:100%;border-collapse:collapse">${rows}</table>`;
 
   const previewEl = document.getElementById('cf-bulk-preview');
-  previewEl.innerHTML = html;
+  previewEl.innerHTML = _out;
   previewEl.style.display = 'block';
 }
 
@@ -6997,22 +6994,22 @@ function previewARBulkEdit() {
 
   const previewEl = document.getElementById('ar-bulk-preview');
   previewEl.style.display = '';
-  previewEl.innerHTML = `
+  previewEl.innerHTML = html`
     <div style="font-weight:600;color:var(--text);margin-bottom:10px">📋 변경사항 미리보기</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <tr><td style="padding:3px 0;color:var(--text2)">선택 건수</td><td style="text-align:right;font-weight:600">${selectedRows.length}건</td></tr>
       <tr><td style="padding:3px 0;color:var(--text2)">실제 변경 예정</td><td style="text-align:right;font-weight:600;color:var(--blue,#6366f1)">${s.actualCnt}건</td></tr>
       <tr><td style="padding:3px 0;color:var(--text2)">변경 없는 항목</td><td style="text-align:right">${s.noChangeCnt}건</td></tr>
-      ${s.partnerCnt  ? `<tr><td style="padding:3px 0;color:var(--text2)">거래처 변경</td><td style="text-align:right">${s.partnerCnt}건</td></tr>` : ''}
-      ${s.startCnt    ? `<tr><td style="padding:3px 0;color:var(--text2)">시작일 변경</td><td style="text-align:right">${s.startCnt}건</td></tr>` : ''}
-      ${s.dueCnt      ? `<tr><td style="padding:3px 0;color:var(--text2)">회수 예정일 변경</td><td style="text-align:right">${s.dueCnt}건</td></tr>` : ''}
-      ${s.noteCnt     ? `<tr><td style="padding:3px 0;color:var(--text2)">비고 변경</td><td style="text-align:right">${s.noteCnt}건</td></tr>` : ''}
+      ${s.partnerCnt  ? html`<tr><td style="padding:3px 0;color:var(--text2)">거래처 변경</td><td style="text-align:right">${s.partnerCnt}건</td></tr>` : ''}
+      ${s.startCnt    ? html`<tr><td style="padding:3px 0;color:var(--text2)">시작일 변경</td><td style="text-align:right">${s.startCnt}건</td></tr>` : ''}
+      ${s.dueCnt      ? html`<tr><td style="padding:3px 0;color:var(--text2)">회수 예정일 변경</td><td style="text-align:right">${s.dueCnt}건</td></tr>` : ''}
+      ${s.noteCnt     ? html`<tr><td style="padding:3px 0;color:var(--text2)">비고 변경</td><td style="text-align:right">${s.noteCnt}건</td></tr>` : ''}
       <tr><td style="padding:3px 0;color:var(--text2)">상태 변경 예상</td><td style="text-align:right">${s.statusChangeCnt}건</td></tr>
       <tr><td style="padding:3px 0;color:var(--text2)">위험등급 변경 예상</td><td style="text-align:right">${s.riskChangeCnt}건</td></tr>
-      ${s.doneCnt     ? `<tr><td style="padding:3px 0;color:var(--text2)">완료 AR</td><td style="text-align:right">${s.doneCnt}건</td></tr>` : ''}
-      ${s.cfLinkedCnt ? `<tr><td style="padding:3px 0;color:var(--amber)">CF 회수 연결 AR</td><td style="text-align:right;color:var(--amber)">${s.cfLinkedCnt}건</td></tr>` : ''}
+      ${s.doneCnt     ? html`<tr><td style="padding:3px 0;color:var(--text2)">완료 AR</td><td style="text-align:right">${s.doneCnt}건</td></tr>` : ''}
+      ${s.cfLinkedCnt ? html`<tr><td style="padding:3px 0;color:var(--amber)">CF 회수 연결 AR</td><td style="text-align:right;color:var(--amber)">${s.cfLinkedCnt}건</td></tr>` : ''}
     </table>
-    ${s.actualCnt === 0 ? '<div style="margin-top:8px;color:var(--text3)">실제 변경되는 항목이 없습니다.</div>' : ''}
+    ${s.actualCnt === 0 ? html`<div style="margin-top:8px;color:var(--text3)">실제 변경되는 항목이 없습니다.</div>` : ''}
   `;
 }
 
@@ -7566,25 +7563,26 @@ function renderReport() {
   }
 
   const tbody = document.getElementById('rpt-tbody');
-  tbody.innerHTML = REPORT_ITEMS.map(item => {
+  tbody.innerHTML = html`${REPORT_ITEMS.map(item => {
     const wv = sumCF(wStart, wEnd, item, ['실제 입금','실제 지출']);
     const nv = sumCF(nwStart, nwEnd, item, ['실제 입금','실제 지출','입금 예정','지출 예정']);
     const total = wv + nv;
     if (wv === 0 && nv === 0) return '';
     const color = val => val > 0 ? 'var(--green)' : val < 0 ? 'var(--red)' : 'var(--text3)';
-    return `<tr><td>${item}</td><td class="num" style="color:${color(wv)}">${wv !== 0 ? fmt(wv) : '—'}</td><td class="num" style="color:${color(nv)}">${nv !== 0 ? fmt(nv) : '—'}</td><td class="num" style="color:${color(total)}">${total !== 0 ? fmt(total) : '—'}</td></tr>`;
-  }).join('');
+    return html`<tr><td>${item}</td><td class="num" style="color:${color(wv)}">${wv !== 0 ? fmt(wv) : '—'}</td><td class="num" style="color:${color(nv)}">${nv !== 0 ? fmt(nv) : '—'}</td><td class="num" style="color:${color(total)}">${total !== 0 ? fmt(total) : '—'}</td></tr>`;
+  })}`;
 
   const catTbody = document.getElementById('rpt-cat-tbody');
   let totalW = 0, totalN = 0;
-  catTbody.innerHTML = REPORT_CATS.map(cat => {
+  const catRows = REPORT_CATS.map(cat => {
     const wv = sumBigCat(wStart, wEnd, cat, '지출');
     const nv = sumBigCat(nwStart, nwEnd, cat, '지출');
     const total = wv + nv;
     totalW += wv; totalN += nv;
     if (wv === 0 && nv === 0) return '';
-    return `<tr><td>${cat}</td><td class="num">${wv > 0 ? fmt(wv) : '—'}</td><td class="num">${nv > 0 ? fmt(nv) : '—'}</td><td class="num" style="font-weight:500">${total > 0 ? fmt(total) : '—'}</td></tr>`;
-  }).join('') + `<tr class="total-row"><td>합계</td><td class="num">${fmt(totalW)}</td><td class="num">${fmt(totalN)}</td><td class="num">${fmt(totalW+totalN)}</td></tr>`;
+    return html`<tr><td>${cat}</td><td class="num">${wv > 0 ? fmt(wv) : '—'}</td><td class="num">${nv > 0 ? fmt(nv) : '—'}</td><td class="num" style="font-weight:500">${total > 0 ? fmt(total) : '—'}</td></tr>`;
+  });
+  catTbody.innerHTML = html`${catRows}<tr class="total-row"><td>합계</td><td class="num">${fmt(totalW)}</td><td class="num">${fmt(totalN)}</td><td class="num">${fmt(totalW+totalN)}</td></tr>`;
 
 }
 
@@ -7670,14 +7668,13 @@ function showSankeyDrill_(node, side) {
   if (!drill) return;
   const color = side === 'in' ? 'var(--green)' : 'var(--red)';
   const sign  = side === 'in' ? '+' : '−';
-  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  const rows = node.d.map(([k, v]) =>
-    `<tr><td>${esc(k)}</td><td class="num" style="color:${color}">${sign}${fmt(v)}</td></tr>`).join('');
-  drill.innerHTML = `
+  const rows = html`${node.d.map(([k, v]) =>
+    html`<tr><td>${k}</td><td class="num" style="color:${color}">${sign}${fmt(v)}</td></tr>`)}`;
+  drill.innerHTML = html`
     <div class="sk-drill-box">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-size:13px;font-weight:700">
-          ${esc(node.n)} <span style="color:${color}">${sign}${fmt(node.a)}</span>
+          ${node.n} <span style="color:${color}">${sign}${fmt(node.a)}</span>
           <span style="font-size:11px;color:var(--text3);font-weight:400">· 중분류 내역</span>
         </div>
         <button class="btn" style="font-size:11px;padding:2px 8px"
@@ -7921,7 +7918,7 @@ function renderMonthlyReport() {
     if (Math.abs(pct) < 0.001) return '전월 동일';
     const up = pct > 0;
     const color = isExpense ? (up ? 'var(--red)' : 'var(--green)') : (up ? 'var(--green)' : 'var(--red)');
-    return `<span style="color:${color};font-weight:600">${up ? '▲' : '▼'} ${Math.abs(pct * 100).toFixed(1)}%</span>`;
+    return html`<span style="color:${color};font-weight:600">${up ? '▲' : '▼'} ${Math.abs(pct * 100).toFixed(1)}%</span>`;
   };
 
   const pmEndEl = document.getElementById('mnrpt-pm-end');
@@ -8070,14 +8067,14 @@ function renderMonthlyReport() {
     checks.push('금융비용과 고위험 AR은 정상 범위입니다');
   }
   const checksToRender = checks.slice(0, 5);
-  document.getElementById('mnrpt-actions').innerHTML = actions.map(x => `<li>${safeText(x)}</li>`).join('');
-  document.getElementById('mnrpt-next-checks').innerHTML = checksToRender.map(x => `<li>${safeText(x)}</li>`).join('');
+  document.getElementById('mnrpt-actions').innerHTML = html`${actions.map(x => html`<li>${x}</li>`)}`;
+  document.getElementById('mnrpt-next-checks').innerHTML = html`${checksToRender.map(x => html`<li>${x}</li>`)}`;
 
   const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.basisDays || 0}일`).join(' · ');
   document.getElementById('mnrpt-ar-diagnosis').innerHTML =
-    `회수 우선: ${safeText(arPriority || '고위험 AR 없음')}<br>` +
-    `월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColCF.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>` +
-    `자동 경고 메일 또는 담당자 후속 조치 대상 표시`;
+    html`회수 우선: ${arPriority || '고위험 AR 없음'}<br>`
+    + html`월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColCF.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>`
+    + html`자동 경고 메일 또는 담당자 후속 조치 대상 표시`;
 }
 
 function getISOWeekNum(dateStr) {
@@ -8524,8 +8521,9 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   }
 
   // HTML escape + 줄바꿈 변환 (사용자 입력 XSS 방지)
+  // 이스케이프한 뒤 개행만 <br> 로 바꾼다 — 그래서 raw() 로 명시한다(내용은 이미 안전)
   const summaryHtml   = effectiveSummary
-    ? escapeHtml(effectiveSummary).replace(/\r?\n/g, '<br>')
+    ? raw(escapeHtml(effectiveSummary).replace(/\r?\n/g, '<br>'))
     : '등록된 주간 요약이 없습니다.';
   const updatedAtDisp = formatUpdatedAtKST(effectiveUpdatedAt);
   const thuStr  = addDays(wStart, 3);
@@ -8671,24 +8669,19 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   const SCROLL_H = '340px'; // 헤더(~36px) + 본문 10행(~30px×10) ≈ 336px
   const STHS = `padding:7px 8px;font-size:11px;font-weight:600;color:${C.t2};background:${C.bg3};position:sticky;top:0;z-index:1;text-align:`;
   const scrollTbl = (headers, body, count) => count > MAX_ROWS
-    ? `<div style="border:1px solid ${B};border-radius:6px;overflow:auto;max-height:${SCROLL_H}">`
-      + `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%">`
-      + `<thead><tr>${headers.map(([t, a]) => `<th style="${STHS}${a}">${t}</th>`).join('')}</tr></thead>`
-      + `<tbody>${body}</tbody></table></div>`
-    : `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden">`
-      + `<tr>${headers.map(([t, a]) => `<th style="${THS}${a}">${t}</th>`).join('')}</tr>`
-      + `${body}</table>`;
+    ? html`<div style="border:1px solid ${B};border-radius:6px;overflow:auto;max-height:${SCROLL_H}"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr>${headers.map(([t, a]) => html`<th style="${STHS}${a}">${t}</th>`)}</tr></thead><tbody>${body}</tbody></table></div>`
+    : html`<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${B};border-radius:6px;overflow:hidden"><tr>${headers.map(([t, a]) => html`<th style="${THS}${a}">${t}</th>`)}</tr>${body}</table>`;
 
   // 섹션 제목 옆 건수 배지 (10건 초과 시 스크롤 안내 포함)
   const cntBadge = (n, over) => n > 0
-    ? ` <span style="font-size:11px;font-weight:400;color:${C.t2};margin-left:6px">총 ${n}건${over ? ' · 스크롤로 전체 확인' : ''}</span>`
+    ? html` <span style="font-size:11px;font-weight:400;color:${C.t2};margin-left:6px">총 ${n}건${over ? ' · 스크롤로 전체 확인' : ''}</span>`
     : '';
 
   const title  = `${wYear}년 ${wMon}월 ${wNum}주차`;
   const period = `${wStart} (월) ~ ${wEnd} (일)`;
   const sentAt = new Date().toLocaleString('ko-KR');
 
-  return `<!DOCTYPE html>
+  return html`<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RAWGA 주간 자금 리포트 — ${title}</title></head>
 <body style="margin:0;padding:0;background:${C.bg};font-family:'Malgun Gothic',Arial,sans-serif">
@@ -8760,10 +8753,10 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
   <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:10px">📊 매출채권 요약</div>
   <table width="100%" cellpadding="0" cellspacing="0"><tr>
     ${[['주간 신규',fmt(wNewAmt),C.text,`${wNewAR.length}건`],['주간 회수',fmt(wColAmt),C.green,`${wColCF.length}건`],['전체 미회수',fmt(remTotal),C.amber,arBalanceSub],['지연',fmt(dlyAmt),C.red,dlySub]]
-      .map(([l,v,co,s])=>`<td width="25%" style="padding:0 5px;vertical-align:top"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center;min-height:120px;box-sizing:border-box">
+      .map(([l,v,co,s])=>html`<td width="25%" style="padding:0 5px;vertical-align:top"><div style="background:${C.bg3};border-radius:8px;padding:12px 10px;text-align:center;min-height:120px;box-sizing:border-box">
         <div style="font-size:10px;color:${C.t2};margin-bottom:5px">${l}</div>
         <div style="font-size:16px;font-weight:700;color:${co};font-family:monospace;margin-bottom:3px">${v}</div>
-        <div style="font-size:10px;color:${co};line-height:1.45;word-break:keep-all;overflow-wrap:anywhere">${s}</div></div></td>`).join('')}
+        <div style="font-size:10px;color:${co};line-height:1.45;word-break:keep-all;overflow-wrap:anywhere">${s}</div></div></td>`)}
   </tr></table></td></tr>
 <!-- 푸터 -->
 <tr><td style="background:${C.bg3};border-radius:0 0 12px 12px;padding:14px 18px;text-align:center">
@@ -9005,7 +8998,7 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
       const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH + FX_ADJ, _previewSummaryData);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
-        win.document.write(previewHtml);
+        win.document.write(String(previewHtml));
         win.document.close();
       }
       statusEl.textContent =
@@ -9380,9 +9373,12 @@ function renderDailyReport(){
   const row = (k,s,v,c) => html`<div class="dl-row"><span class="k">${k}${s?html`<small>${s}</small>`:''}</span><span class="v" style="${c?'color:'+c:''}">${v}</span></div>`;
 
   // ③ 승인 요청 — 자동으로 뽑되 목적·미집행 시·권고는 사람이 채운다
-  const dayTag = r => {
+  // bare=true 면 앞의 '· ' 를 뺀다 — 예전엔 호출부에서 .replace() 로 떼느라
+  // 문자열을 반환해야 했고, 그래서 raw() 가 필요했다. 인자로 받으면 그럴 일이 없다.
+  const dayTag = (r, bare) => {
     const dd = Math.round((new Date(d+'T00:00:00') - new Date(r.date+'T00:00:00'))/86400000);
-    return dd > 0 ? `· <b style="color:var(--red)">${dd}일 경과</b>` : dd === 0 ? '· 오늘' : `· D-${-dd}`;
+    const pre = bare ? '' : '· ';
+    return dd > 0 ? html`${pre}<b style="color:var(--red)">${dd}일 경과</b>` : dd === 0 ? `${pre}오늘` : `${pre}D-${-dd}`;
   };
   const itemHtml = [
     html`<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
@@ -9392,7 +9388,6 @@ function renderDailyReport(){
     (R.approve.length ? R.approve.map(r => {
       const k = dlKey(r), it = note.items[k] || {};
       const mi = r._manual ? (note.extra||[]).findIndex(e => e.id === r._id) : -1;
-      // dayTag 는 숫자만 넣어 마크업을 만들고 .replace() 로 쓰이는 곳이 있어 문자열로 둔다 → raw()
       const head = r._manual
         ? html`<div class="h">
              <span class="nm" style="display:flex;align-items:center;gap:6px">
@@ -9408,7 +9403,7 @@ function renderDailyReport(){
              <span>금액</span><input type="number" data-dx="${mi}" data-df="out" value="${Number(r.out)||0}" step="1000000">
            </div>`
         : html`<div class="h"><span class="nm">${dlLabel(r, note)}</span><span class="am">${dlWon(r.out)}</span></div>
-           <div class="meta">${r.date} ${raw(dayTag(r))}${r.mid_cat?` · ${r.mid_cat}`:''}${it.label?` · 원본 "${r.desc||''}"`:''}</div>`;
+           <div class="meta">${r.date} ${dayTag(r)}${r.mid_cat?` · ${r.mid_cat}`:''}${it.label?` · 원본 "${r.desc||''}"`:''}</div>`;
       return html`<div class="dl-item ${r.date < d && !r._manual ? 'hot':''}">${head}
         <div class="dl-f">
           ${r._manual ? '' : html`<span>표시명</span><input data-dk="${k}" data-df="label" value="${it.label||''}" placeholder="비우면 원본 그대로 — 적요가 잘렸을 때만">`}
@@ -9445,7 +9440,7 @@ function renderDailyReport(){
 
     ${blk(4,'통보 — 승인 불필요', [
       (R.notify.length
-        ? [R.notify.map(r => html`<div class="dl-row"><span class="k">${dlLabel(r, note)}<small>${r.date} ${raw(dayTag(r).replace(/^· /,''))}</small></span><span class="v" style="display:flex;align-items:center;gap:8px">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`),
+        ? [R.notify.map(r => html`<div class="dl-row"><span class="k">${dlLabel(r, note)}<small>${r.date} ${dayTag(r, true)}</small></span><span class="v" style="display:flex;align-items:center;gap:8px">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`),
            html`<div class="dl-row tot"><span class="k">합계</span><span class="v">${dlWon(R.notifySum)}</span></div>`]
         : html`<div class="dl-empty">이 범위에 통보할 예정 출금이 없습니다.</div>`),
       (R.skipped.length
@@ -10328,24 +10323,22 @@ function renderLoanSummaryCard(){
   const warn=document.getElementById('loan-dash-warn');
   if(warn){
     warn.innerHTML = s.immN>0
-      ? `<div style="display:flex;align-items:center;gap:9px;background:var(--red2);color:var(--red);border-radius:9px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:12px"><span>⚠️ 3개월 내 만기 <b>${s.immN}건 · ${loanEok(s.immSum)}억</b> — 대응 필요</span>${s.nextDday!=null?`<span style="margin-left:auto;font-weight:700">다음 D-${s.nextDday}</span>`:''}</div>`
+      ? html`<div style="display:flex;align-items:center;gap:9px;background:var(--red2);color:var(--red);border-radius:9px;padding:8px 12px;font-size:13px;font-weight:600;margin-bottom:12px"><span>⚠️ 3개월 내 만기 <b>${s.immN}건 · ${loanEok(s.immSum)}억</b> — 대응 필요</span>${s.nextDday!=null?html`<span style="margin-left:auto;font-weight:700">다음 D-${s.nextDday}</span>`:''}</div>`
       : '';
   }
   const grid=document.getElementById('loan-dash-grid');
   if(grid){
-    const card=(label,val,sub,hot)=>`<div class="corp-mini-card"${hot?' style="background:var(--red2)"':''}>`
-      +`<div class="corp-card-label"${hot?' style="color:var(--red)"':''}>${label}</div>`
-      +`<div class="corp-card-value"${hot?' style="color:var(--red)"':''}>${val}${sub?` <span style="font-size:11px;font-weight:600;color:${hot?'var(--red)':'var(--text3)'}">${sub}</span>`:''}</div></div>`;
-    grid.innerHTML =
-      // 대출 탭 요약과 같은 표기 — 원 단위 전액. 억/만 축약은 자릿수가 뭉개져 자금 판단에 못 쓴다.
-      card('총 대출잔액', loanWon(s.bal), s.count+'건') +
-      card('월 이자', loanWon(s.mi), '연 '+loanWon(s.mi*12)) +
-      // 평균 금리 = 잔액가중(effRate). 소액 대출이 왜곡하는 단순평균 대신 실제 조달비용률을 쓴다.
-      // 최고금리는 범위 부기로 남겨 '가장 비싼 건'도 계속 보이게 함.
-      card('평균 금리', s.effRate?s.effRate.toFixed(2)+'%':'—',
-           (s.minRate!=null && s.maxRate) ? s.minRate.toFixed(2)+'~'+s.maxRate.toFixed(2)+'%' : '') +
-      card('임박 만기', s.immN>0?loanEok(s.immSum)+'억':'없음', s.immN>0?s.immN+'건':'', s.immN>0) +
-      card('다음 만기', s.nextDday!=null?'D-'+s.nextDday:'—', s.nextDue?s.nextDue.slice(5):'');
+    const card=(label,val,sub,hot)=>html`<div class="corp-mini-card" style="${hot?'background:var(--red2)':''}"><div class="corp-card-label" style="${hot?'color:var(--red)':''}">${label}</div><div class="corp-card-value" style="${hot?'color:var(--red)':''}">${val}${sub?html` <span style="font-size:11px;font-weight:600;color:${hot?'var(--red)':'var(--text3)'}">${sub}</span>`:''}</div></div>`;
+    grid.innerHTML = html`
+      ${/* 대출 탭 요약과 같은 표기 — 원 단위 전액. 억/만 축약은 자릿수가 뭉개져 자금 판단에 못 쓴다. */''}
+      ${card('총 대출잔액', loanWon(s.bal), s.count+'건')}
+      ${card('월 이자', loanWon(s.mi), '연 '+loanWon(s.mi*12))}
+      ${/* 평균 금리 = 잔액가중(effRate). 소액 대출이 왜곡하는 단순평균 대신 실제 조달비용률.
+           최고금리는 범위 부기로 남겨 '가장 비싼 건'도 계속 보이게 함. */''}
+      ${card('평균 금리', s.effRate?s.effRate.toFixed(2)+'%':'—',
+           (s.minRate!=null && s.maxRate) ? s.minRate.toFixed(2)+'~'+s.maxRate.toFixed(2)+'%' : '')}
+      ${card('임박 만기', s.immN>0?loanEok(s.immSum)+'억':'없음', s.immN>0?s.immN+'건':'', s.immN>0)}
+      ${card('다음 만기', s.nextDday!=null?'D-'+s.nextDday:'—', s.nextDue?s.nextDue.slice(5):'')}`;
   }
 }
 
@@ -10651,7 +10644,7 @@ function renderCheckWarn(){
   const n = s.candN + s.unfillN, amt = s.candSum + s.unfillSum;
   if(!n){ el.innerHTML = ''; return; }
   el.innerHTML =
-    `<div class="chart-box" style="margin-bottom:20px;border-left:3px solid var(--amber);background:var(--amber2);cursor:pointer" id="chk-warn-box">
+    html`<div class="chart-box" style="margin-bottom:20px;border-left:3px solid var(--amber);background:var(--amber2);cursor:pointer" id="chk-warn-box">
        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
          <span style="font-size:13px;font-weight:700;color:var(--amber)">🧾 수취인·목적이 안 적힌 출금 ${n}건 · ${chkWon(amt)}원</span>
          <span style="font-size:11.5px;color:var(--text2)">
@@ -11033,10 +11026,8 @@ function renderCorpCardTab() {
 
   // 헤더 열 (카드명칭 + 수정/삭제 버튼)
   const colThs = corpCardColumns.map((col, i) =>
-    `<th><div class="corp-cell-hd"><span>${col}</span>` +
-    `<button class="corp-ibtn" title="수정" onclick="editCorpCardColumn(${i})">✏</button>` +
-    `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardColumn(${i})">×</button></div></th>`
-  ).join('');
+    html`<th><div class="corp-cell-hd"><span>${col}</span><button class="corp-ibtn" title="수정" onclick="editCorpCardColumn(${i})">✏</button><button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardColumn(${i})">×</button></div></th>`
+  );
 
   // 사용자별(열) 합계 누적용
   const colTotals = {};
@@ -11062,29 +11053,21 @@ function renderCorpCardTab() {
     const cells = corpCardColumns.map((col, ci) => {
       const amt = (aliasAmounts[col] && aliasAmounts[col][acc]) || 0;
       colTotals[col] += amt;
-      if (amt) return `<td class="num cc-cell-clickable" data-ci="${ci}" data-ai="${i}" title="클릭 시 하단 사용내역 필터">${amt.toLocaleString()}</td>`;
-      return `<td class="num"></td>`;
-    }).join('');
-    const rowTotalCell = `<td class="num corp-total-cell">${rowTotal ? rowTotal.toLocaleString() : ''}</td>`;
-    return `<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span>` +
-      `<button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button>` +
-      `<button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}${rowTotalCell}</tr>`;
-  }).join('');
+      if (amt) return html`<td class="num cc-cell-clickable" data-ci="${ci}" data-ai="${i}" title="클릭 시 하단 사용내역 필터">${amt.toLocaleString()}</td>`;
+      return html`<td class="num"></td>`;
+    });
+    const rowTotalCell = html`<td class="num corp-total-cell">${rowTotal ? rowTotal.toLocaleString() : ''}</td>`;
+    return html`<tr><th class="corp-account-col"><div class="corp-account-cell"><span>${acc}</span><button class="corp-ibtn" title="수정" onclick="editCorpCardAccount(${i})">✏</button><button class="corp-ibtn del" title="삭제" onclick="deleteCorpCardAccount(${i})">×</button></div></th>${cells}${rowTotalCell}</tr>`;
+  });
 
   // 사용자별(열) 합계 행 + 총합
   const totalCells = corpCardColumns.map(col =>
-    `<td class="num corp-total-cell">${colTotals[col] ? colTotals[col].toLocaleString() : ''}</td>`
-  ).join('');
+    html`<td class="num corp-total-cell">${colTotals[col] ? colTotals[col].toLocaleString() : ''}</td>`
+  );
   const totalRow =
-    `<tr class="corp-total-row"><th class="corp-account-col corp-total-cell">합계</th>` +
-    `${totalCells}<td class="num corp-total-cell corp-grand-total">${grandTotal ? grandTotal.toLocaleString() : ''}</td></tr>`;
+    html`<tr class="corp-total-row"><th class="corp-account-col corp-total-cell">합계</th>${totalCells}<td class="num corp-total-cell corp-grand-total">${grandTotal ? grandTotal.toLocaleString() : ''}</td></tr>`;
 
-  container.innerHTML =
-    `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> ` +
-    `(${pickedMonth ? '아래 월별 필터' : '보고 기준일 귀속월'})</div>` +
-    `<table class="corp-usage-table"><thead><tr>` +
-    `<th class="corp-account-col">계정과목</th>${colThs}<th class="corp-total-cell">합계</th></tr></thead>` +
-    `<tbody>${rows}${totalRow}</tbody></table>`;
+  container.innerHTML = html`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">기준 월: <b style="color:var(--text)">${ym}</b> (${pickedMonth ? '아래 월별 필터' : '보고 기준일 귀속월'})</div><table class="corp-usage-table"><thead><tr><th class="corp-account-col">계정과목</th>${colThs}<th class="corp-total-cell">합계</th></tr></thead><tbody>${rows}${totalRow}</tbody></table>`;
 }
 
 // 상단 현황표 금액 셀 클릭 → 하단 사용내역 필터 (위임 리스너 1회 등록; innerHTML 교체돼도 컨테이너는 유지)
@@ -11320,22 +11303,19 @@ function handleCCTxFileSelect(e) {
 
 function showCCTxUploadModal(total, dupeCount, sheetName, voided = 0) {
   const body = document.getElementById('cctx-modal-body');
-  body.innerHTML =
-    `<div style="margin-bottom:14px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:1.9">` +
-      `<div><b>시트:</b> ${sheetName}</div>` +
-      `<div><b>업로드 대상:</b> ${total.toLocaleString()}건${voided > 0 ? ` <span style="color:var(--text3)">(취소·0원 ${voided.toLocaleString()}건 제외, 순액 기준)</span>` : ''}</div>` +
-      `<div><b>현재 데이터:</b> ${corpCardTxData.length.toLocaleString()}건</div>` +
-      (dupeCount > 0 ? `<div style="color:var(--amber)"><b>중복 예상:</b> ${dupeCount.toLocaleString()}건 (사용일자+카드번호+사용자+가맹점명+금액 기준)</div>` : '') +
-    `</div>` +
-    `<div style="font-size:12px;font-weight:600;margin-bottom:10px">업로드 방식</div>` +
-    `<label style="display:block;margin-bottom:8px;font-size:12px;cursor:pointer">` +
-      `<input type="radio" name="cctx-mode" value="add" checked style="margin-right:6px">` +
-      `추가 &mdash; 기존 데이터 보존, 중복 제외 후 새 항목만 추가` +
-    `</label>` +
-    `<label style="display:block;font-size:12px;cursor:pointer">` +
-      `<input type="radio" name="cctx-mode" value="replace" style="margin-right:6px">` +
-      `전체 교체 &mdash; 기존 데이터 삭제 후 새 파일로 완전 교체` +
-    `</label>`;
+  body.innerHTML = html`<div style="margin-bottom:14px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:1.9">
+      <div><b>시트:</b> ${sheetName}</div>
+      <div><b>업로드 대상:</b> ${total.toLocaleString()}건${voided > 0 ? html` <span style="color:var(--text3)">(취소·0원 ${voided.toLocaleString()}건 제외, 순액 기준)</span>` : ''}</div>
+      <div><b>현재 데이터:</b> ${corpCardTxData.length.toLocaleString()}건</div>
+      ${dupeCount > 0 ? html`<div style="color:var(--amber)"><b>중복 예상:</b> ${dupeCount.toLocaleString()}건 (사용일자+카드번호+사용자+가맹점명+금액 기준)</div>` : ''}
+    </div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:10px">업로드 방식</div>
+    <label style="display:block;margin-bottom:8px;font-size:12px;cursor:pointer">
+      <input type="radio" name="cctx-mode" value="add" checked style="margin-right:6px">추가 &mdash; 기존 데이터 보존, 중복 제외 후 새 항목만 추가
+    </label>
+    <label style="display:block;font-size:12px;cursor:pointer">
+      <input type="radio" name="cctx-mode" value="replace" style="margin-right:6px">전체 교체 &mdash; 기존 데이터 삭제 후 새 파일로 완전 교체
+    </label>`;
   document.getElementById('cctx-upload-modal').classList.remove('hidden');
 }
 
@@ -11789,17 +11769,11 @@ function renderCCTxFilterTags() {
   if (resetBtn) resetBtn.textContent = cnt > 0 ? `필터 초기화 (${cnt})` : '필터 초기화';
   if (!cnt) { area.style.display = 'none'; return; }
   area.style.display = 'flex';
-  let html = '';
-  if (cctxPersonFilter) {
-    html += `<span class="cctx-filter-tag">사용자: ${cctxPersonFilter}<button class="cctx-filter-tag-x" onclick="clearCCTxPersonFilter()" title="필터 제거">×</button></span>`;
-  }
-  if (cctxAccountFilter != null) {
-    html += `<span class="cctx-filter-tag">계정과목: ${cctxAccountFilter || '(빈값)'}<button class="cctx-filter-tag-x" onclick="clearCCTxAccountFilter()" title="필터 제거">×</button></span>`;
-  }
-  html += active.map(([field, f]) =>
-    `<span class="cctx-filter-tag">${_describeCCTxFilter(field, f)}<button class="cctx-filter-tag-x" onclick="clearCCTxColumnFilter('${field}')" title="필터 제거">×</button></span>`
-  ).join('');
-  area.innerHTML = html;
+  area.innerHTML = html`
+    ${cctxPersonFilter ? html`<span class="cctx-filter-tag">사용자: ${cctxPersonFilter}<button class="cctx-filter-tag-x" onclick="clearCCTxPersonFilter()" title="필터 제거">×</button></span>` : ''}
+    ${cctxAccountFilter != null ? html`<span class="cctx-filter-tag">계정과목: ${cctxAccountFilter || '(빈값)'}<button class="cctx-filter-tag-x" onclick="clearCCTxAccountFilter()" title="필터 제거">×</button></span>` : ''}
+    ${active.map(([field, f]) =>
+      html`<span class="cctx-filter-tag">${_describeCCTxFilter(field, f)}<button class="cctx-filter-tag-x" onclick="clearCCTxColumnFilter('${field}')" title="필터 제거">×</button></span>`)}`;
 }
 
 function clearCCTxPersonFilter() {
@@ -11872,77 +11846,73 @@ function _buildCCTxPopoverHtml(field) {
   const title  = labels[field] || field;
   let body = '';
   if (field === 'use_date') {
-    body =
-      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
-        `<option value="range">기간</option>` +
-        `<option value="exact">특정 날짜</option>` +
-        `<option value="empty">비어 있음</option>` +
-        `<option value="nonempty">비어 있지 않음</option>` +
-      `</select>` +
-      `<div id="cctx-pop-exact-${field}" style="display:none">` +
-        `<span class="cctx-pop-label">날짜</span>` +
-        `<input type="date" id="cctx-pop-d1-${field}">` +
-      `</div>` +
-      `<div id="cctx-pop-range-${field}" style="margin-top:4px">` +
-        `<span class="cctx-pop-label">시작일</span>` +
-        `<input type="date" id="cctx-pop-dr1-${field}">` +
-        `<span class="cctx-pop-label">종료일</span>` +
-        `<input type="date" id="cctx-pop-dr2-${field}">` +
-      `</div>`;
+    body = html`<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">
+        <option value="range">기간</option>
+        <option value="exact">특정 날짜</option>
+        <option value="empty">비어 있음</option>
+        <option value="nonempty">비어 있지 않음</option>
+      </select>
+      <div id="cctx-pop-exact-${field}" style="display:none">
+        <span class="cctx-pop-label">날짜</span>
+        <input type="date" id="cctx-pop-d1-${field}">
+      </div>
+      <div id="cctx-pop-range-${field}" style="margin-top:4px">
+        <span class="cctx-pop-label">시작일</span>
+        <input type="date" id="cctx-pop-dr1-${field}">
+        <span class="cctx-pop-label">종료일</span>
+        <input type="date" id="cctx-pop-dr2-${field}">
+      </div>`;
   } else if (field === 'billing_amount') {
-    body =
-      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
-        `<option value="gte">이상 (≥)</option>` +
-        `<option value="lte">이하 (≤)</option>` +
-        `<option value="eq">같음 (=)</option>` +
-        `<option value="range">범위</option>` +
-        `<option value="zero">0원</option>` +
-        `<option value="positive">양수</option>` +
-        `<option value="negative">음수</option>` +
-        `<option value="empty">비어 있음</option>` +
-      `</select>` +
-      `<div id="cctx-pop-single-${field}" style="margin-top:4px">` +
-        `<input type="number" id="cctx-pop-n1-${field}" placeholder="금액 입력" step="1" style="font-family:var(--mono)">` +
-      `</div>` +
-      `<div id="cctx-pop-range-${field}" style="display:none">` +
-        `<span class="cctx-pop-label">최솟값</span>` +
-        `<input type="number" id="cctx-pop-nr1-${field}" placeholder="최솟값" step="1" style="font-family:var(--mono)">` +
-        `<span class="cctx-pop-label">최댓값</span>` +
-        `<input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">` +
-      `</div>`;
+    body = html`<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">
+        <option value="gte">이상 (≥)</option>
+        <option value="lte">이하 (≤)</option>
+        <option value="eq">같음 (=)</option>
+        <option value="range">범위</option>
+        <option value="zero">0원</option>
+        <option value="positive">양수</option>
+        <option value="negative">음수</option>
+        <option value="empty">비어 있음</option>
+      </select>
+      <div id="cctx-pop-single-${field}" style="margin-top:4px">
+        <input type="number" id="cctx-pop-n1-${field}" placeholder="금액 입력" step="1" style="font-family:var(--mono)">
+      </div>
+      <div id="cctx-pop-range-${field}" style="display:none">
+        <span class="cctx-pop-label">최솟값</span>
+        <input type="number" id="cctx-pop-nr1-${field}" placeholder="최솟값" step="1" style="font-family:var(--mono)">
+        <span class="cctx-pop-label">최댓값</span>
+        <input type="number" id="cctx-pop-nr2-${field}" placeholder="최댓값" step="1" style="font-family:var(--mono)">
+      </div>`;
   } else if (field === 'card_alias' || field === 'card_no' || field === 'memo') {
     // 체크박스 기반 다중 선택: corpCardTxData 전체 기준 고유값 목록
     const vals = getCCTxUniqueValues(field);
-    body =
-      `<div class="cctx-ms-controls">` +
-        `<button type="button" class="cctx-ms-ctrl-btn" onclick="clearCCTxColumnFilter('${field}');closeAllCCTxPopovers()">전체</button>` +
-        `<button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsSelectAll('${field}')">모두 선택</button>` +
-        `<button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsClearAll('${field}')">모두 해제</button>` +
-      `</div>` +
-      `<div class="cctx-ms-list" id="cctx-ms-list-${field}">` +
-        `<label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-empty-${field}"><span>비어 있음</span></label>` +
-        `<label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-notempty-${field}"><span>비어 있지 않음</span></label>` +
-        `<div class="cctx-ms-sep"></div>` +
-        html`${vals.map(v => html`<label class="cctx-ms-item"><input type="checkbox" class="cctx-ms-val-${field}" value="${v}"><span title="${v}">${v}</span></label>`)}` +
-      `</div>`;
+    body = html`<div class="cctx-ms-controls">
+        <button type="button" class="cctx-ms-ctrl-btn" onclick="clearCCTxColumnFilter('${field}');closeAllCCTxPopovers()">전체</button>
+        <button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsSelectAll('${field}')">모두 선택</button>
+        <button type="button" class="cctx-ms-ctrl-btn" onclick="cctxMsClearAll('${field}')">모두 해제</button>
+      </div>
+      <div class="cctx-ms-list" id="cctx-ms-list-${field}">
+        <label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-empty-${field}"><span>비어 있음</span></label>
+        <label class="cctx-ms-item"><input type="checkbox" id="cctx-ms-notempty-${field}"><span>비어 있지 않음</span></label>
+        <div class="cctx-ms-sep"></div>
+        ${vals.map(v => html`<label class="cctx-ms-item"><input type="checkbox" class="cctx-ms-val-${field}" value="${v}"><span title="${v}">${v}</span></label>`)}
+      </div>`;
   } else {
-    body =
-      `<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">` +
-        `<option value="contains">포함</option>` +
-        `<option value="exact">일치</option>` +
-        `<option value="startswith">시작 문자</option>` +
-        `<option value="empty">비어 있음</option>` +
-        `<option value="nonempty">비어 있지 않음</option>` +
-      `</select>` +
-      `<div id="cctx-pop-text-${field}" style="margin-top:4px">` +
-        `<input type="text" id="cctx-pop-t1-${field}" placeholder="검색어" autocomplete="off">` +
-      `</div>`;
+    body = html`<select class="cctx-pop-mode" id="cctx-pop-mode-${field}">
+        <option value="contains">포함</option>
+        <option value="exact">일치</option>
+        <option value="startswith">시작 문자</option>
+        <option value="empty">비어 있음</option>
+        <option value="nonempty">비어 있지 않음</option>
+      </select>
+      <div id="cctx-pop-text-${field}" style="margin-top:4px">
+        <input type="text" id="cctx-pop-t1-${field}" placeholder="검색어" autocomplete="off">
+      </div>`;
   }
-  return `<div class="cctx-popover-title">▽ ${title} 필터</div>${body}` +
-    `<div class="cctx-popover-btns">` +
-      `<button class="btn sm cctx-pop-clear" style="color:var(--text2)">초기화</button>` +
-      `<button class="btn sm green cctx-pop-apply">적용</button>` +
-    `</div>`;
+  return html`<div class="cctx-popover-title">▽ ${title} 필터</div>${body}
+    <div class="cctx-popover-btns">
+      <button class="btn sm cctx-pop-clear" style="color:var(--text2)">초기화</button>
+      <button class="btn sm green cctx-pop-apply">적용</button>
+    </div>`;
 }
 
 // 팝오버 모드 변경에 따라 입력 UI 전환
@@ -12279,31 +12249,26 @@ function _buildCCTxBulkEditForm(scope, count) {
                    : scope === 'filtered' ? `현재 필터 결과 ${count.toLocaleString()}건`
                    : `전체 데이터 ${count.toLocaleString()}건`;
   const isAll = scope === 'all';
-  const textOpts = `<option value="no_change">변경 안 함</option><option value="set_value">입력값으로 변경</option><option value="set_empty">빈 값으로 변경</option>`;
-  const amtOpts  = `<option value="no_change">변경 안 함</option><option value="set_value">지정 금액으로 변경</option><option value="add_value">현재 금액에 더하기</option><option value="subtract_value">현재 금액에서 빼기</option>`;
+  const textOpts = html`<option value="no_change">변경 안 함</option><option value="set_value">입력값으로 변경</option><option value="set_empty">빈 값으로 변경</option>`;
+  const amtOpts  = html`<option value="no_change">변경 안 함</option><option value="set_value">지정 금액으로 변경</option><option value="add_value">현재 금액에 더하기</option><option value="subtract_value">현재 금액에서 빼기</option>`;
   const brow = (fid, label, type, opts) => {
-    const inp = type === 'date'   ? `<input type="date"   id="cctx-bv-${fid}" disabled style="flex:1">` :
-                type === 'number' ? `<input type="number" id="cctx-bv-${fid}" disabled placeholder="금액" style="font-family:var(--mono)">` :
-                                    `<input type="text"   id="cctx-bv-${fid}" disabled placeholder="${label}" style="flex:1">`;
-    return `<div class="cctx-brow"><label>${label}</label>` +
-      `<select id="cctx-bm-${fid}" data-fid="${fid}" onchange="onCCTxBulkModeChange(this)">${opts}</select>` +
-      inp + `</div>`;
+    const inp = type === 'date'   ? html`<input type="date"   id="cctx-bv-${fid}" disabled style="flex:1">` :
+                type === 'number' ? html`<input type="number" id="cctx-bv-${fid}" disabled placeholder="금액" style="font-family:var(--mono)">` :
+                                    html`<input type="text"   id="cctx-bv-${fid}" disabled placeholder="${label}" style="flex:1">`;
+    return html`<div class="cctx-brow"><label>${label}</label><select id="cctx-bm-${fid}" data-fid="${fid}" onchange="onCCTxBulkModeChange(this)">${opts}</select>${inp}</div>`;
   };
-  let html = `<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:7px;font-size:12px;color:var(--text2)">수정 범위: <b style="color:var(--text)">${scopeLabel}</b></div>`;
-  html += brow('use-date',     '사용일자',  'date',   textOpts);
-  html += brow('card-alias',   '사용자',    'text',   textOpts);
-  html += brow('card-no',      '카드번호',  'text',   textOpts);
-  html += brow('merchant',     '가맹점명',  'text',   textOpts);
-  html += brow('amount',       '금액',      'number', amtOpts);
-  html += brow('memo',         '계정과목',  'text',   textOpts);
-  if (isAll) {
-    html += `<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
-      `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 수정 확인</div>` +
-      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>전체수정</b>을 정확히 입력해야 적용됩니다.</div>` +
-      `<input type="text" id="cctx-bulk-confirm" placeholder="전체수정" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box"></div>`;
-  }
-  html += `<div id="cctx-bulk-preview-area" style="margin-top:6px"></div>`;
-  return html;
+  return html`<div style="margin-bottom:12px;padding:8px 10px;background:var(--bg3);border-radius:7px;font-size:12px;color:var(--text2)">수정 범위: <b style="color:var(--text)">${scopeLabel}</b></div>
+    ${brow('use-date',     '사용일자',  'date',   textOpts)}
+    ${brow('card-alias',   '사용자',    'text',   textOpts)}
+    ${brow('card-no',      '카드번호',  'text',   textOpts)}
+    ${brow('merchant',     '가맹점명',  'text',   textOpts)}
+    ${brow('amount',       '금액',      'number', amtOpts)}
+    ${brow('memo',         '계정과목',  'text',   textOpts)}
+    ${isAll ? html`<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">
+      <div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 수정 확인</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>전체수정</b>을 정확히 입력해야 적용됩니다.</div>
+      <input type="text" id="cctx-bulk-confirm" placeholder="전체수정" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box"></div>` : ''}
+    <div id="cctx-bulk-preview-area" style="margin-top:6px"></div>`;
 }
 
 function openCCTxBulkEditModal(scope) {
@@ -12525,30 +12490,25 @@ function openCCTxDeleteModal(scope) {
   const totalAmt  = targets.reduce((s, r) => s + (r.billing_amount || 0), 0);
   const isAll     = scope === 'all';
   const scopeLbl  = isAll ? '저장된 전체 사용내역' : '현재 필터 결과';
-  let html =
-    `<div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:2">` +
-    `<div><b>삭제 범위:</b> ${scopeLbl}</div>` +
-    `<div><b>삭제 대상:</b> ${targets.length.toLocaleString()}건</div>` +
-    `<div><b>합계 금액:</b> ${totalAmt.toLocaleString()}원</div>` +
-    (isAll ? `<div style="color:var(--red)"><b>삭제 후 남는 건수:</b> 0건 — 전체 삭제</div>`
-           : `<div><b>삭제 후 남는 건수:</b> ${remaining.toLocaleString()}건</div>`) +
-    `</div>` +
-    `<div style="margin-bottom:12px">` +
-      `<button class="btn sm" onclick="downloadCCTxBackup(${isAll ? 'null' : 'getCCTxFilteredRows()'})" ` +
-        `style="font-size:11px;color:var(--text2)">⬇ JSON 백업 다운로드</button>` +
-      `<span style="font-size:11px;color:var(--text3);margin-left:8px">삭제 전 데이터를 저장해두세요.</span>` +
-    `</div>`;
-  if (isAll) {
-    html +=
-      `<div style="padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">` +
-      `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 삭제 — 복구 불가</div>` +
-      `<div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>법인카드 사용내역 전체삭제</b>를 정확히 입력해야 실행됩니다.</div>` +
-      `<input type="text" id="cctx-del-confirm" placeholder="법인카드 사용내역 전체삭제" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box">` +
-      `</div>`;
-  } else {
-    html += `<div style="font-size:12px;color:var(--text2);margin-top:6px">필터 결과 <b>${targets.length.toLocaleString()}건</b>을 삭제하시겠습니까?</div>`;
-  }
-  document.getElementById('cctx-delete-body').innerHTML = html;
+  const _out = html`<div style="margin-bottom:12px;padding:10px 12px;background:var(--bg3);border-radius:7px;font-size:12px;line-height:2">
+    <div><b>삭제 범위:</b> ${scopeLbl}</div>
+    <div><b>삭제 대상:</b> ${targets.length.toLocaleString()}건</div>
+    <div><b>합계 금액:</b> ${totalAmt.toLocaleString()}원</div>
+    ${isAll ? html`<div style="color:var(--red)"><b>삭제 후 남는 건수:</b> 0건 — 전체 삭제</div>`
+            : html`<div><b>삭제 후 남는 건수:</b> ${remaining.toLocaleString()}건</div>`}
+    </div>
+    <div style="margin-bottom:12px">
+      <button class="btn sm" onclick="downloadCCTxBackup(${isAll ? 'null' : 'getCCTxFilteredRows()'})" style="font-size:11px;color:var(--text2)">⬇ JSON 백업 다운로드</button>
+      <span style="font-size:11px;color:var(--text3);margin-left:8px">삭제 전 데이터를 저장해두세요.</span>
+    </div>
+    ${isAll
+      ? html`<div style="padding:10px 12px;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:7px">
+        <div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:5px">⚠ 전체 데이터 삭제 — 복구 불가</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:7px">아래 칸에 <b>법인카드 사용내역 전체삭제</b>를 정확히 입력해야 실행됩니다.</div>
+        <input type="text" id="cctx-del-confirm" placeholder="법인카드 사용내역 전체삭제" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;padding:5px 9px;border-radius:6px;width:100%;box-sizing:border-box">
+        </div>`
+      : html`<div style="font-size:12px;color:var(--text2);margin-top:6px">필터 결과 <b>${targets.length.toLocaleString()}건</b>을 삭제하시겠습니까?</div>`}`;
+  document.getElementById('cctx-delete-body').innerHTML = _out;
   document.getElementById('cctx-delete-modal').classList.remove('hidden');
 }
 
@@ -13028,7 +12988,7 @@ function renderDescMidList() {
   const mids = getMidCats();
 
   if (!entries.length) {
-    list.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--text3);font-size:12px">${q ? '검색 결과가 없습니다.' : '매핑 항목이 없습니다. 위에서 추가하세요.'}</div>`;
+    list.innerHTML = html`<div style="text-align:center;padding:32px 0;color:var(--text3);font-size:12px">${q ? '검색 결과가 없습니다.' : '매핑 항목이 없습니다. 위에서 추가하세요.'}</div>`;
     document.getElementById('desc-count').textContent = `0건`;
     return;
   }
@@ -13142,8 +13102,8 @@ function renderMidBigList() {
     const total = Object.keys(catMidToBig).length;
     const unassigned = Object.values(catMidToBig).filter(b => !b || b === '기타').length;
     countEl.innerHTML = midShowUnassignedOnly
-      ? `<span style="color:var(--amber);font-weight:500">미분류 ${entries.length}건</span> 표시 중 / 전체 ${total}건`
-      : `${entries.length}건 표시 / 전체 ${total}건 <span style="color:var(--amber);margin-left:6px">미분류 ${unassigned}건</span>`;
+      ? html`<span style="color:var(--amber);font-weight:500">미분류 ${entries.length}건</span> 표시 중 / 전체 ${total}건`
+      : html`${entries.length}건 표시 / 전체 ${total}건 <span style="color:var(--amber);margin-left:6px">미분류 ${unassigned}건</span>`;
   }
 
   if (!entries.length) {
@@ -13645,7 +13605,7 @@ function renderComboList() {
   if (q) entries = entries.filter(([k]) => k.toLowerCase().includes(q));
 
   if (!entries.length) {
-    list.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px;grid-column:1/-1">${q ? '검색 결과가 없습니다.' : '조합 매핑 항목이 없습니다. 위에서 추가하세요.'}</div>`;
+    list.innerHTML = html`<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px;grid-column:1/-1">${q ? '검색 결과가 없습니다.' : '조합 매핑 항목이 없습니다. 위에서 추가하세요.'}</div>`;
     document.getElementById('combo-count').textContent = '0건';
     return;
   }
@@ -13803,7 +13763,7 @@ async function handleCatFile(file) {
 // 시트 선택 UI 구성
 function buildCatSheetOptions() {
   const container = document.getElementById('cat-sheet-options');
-  container.innerHTML = catWB.SheetNames.map((name, i) => {
+  container.innerHTML = html`${catWB.SheetNames.map((name, i) => {
     // 시트명으로 용도 자동 추정
     const isDesc = /거래|desc|적요|내용/i.test(name);
     const isMid  = /중분류|분류|mid|cat/i.test(name);
@@ -13813,7 +13773,7 @@ function buildCatSheetOptions() {
     const rows = sheetToRows(catWB, name);
     const headers = rows.length ? Object.keys(rows[0]).slice(0,4).join(', ') : '(빈 시트)';
 
-    return `<div style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
+    return html`<div style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div>
           <span style="font-size:13px;font-weight:500;color:var(--text)">${name}</span>
@@ -13827,7 +13787,7 @@ function buildCatSheetOptions() {
         </select>
       </div>
     </div>`;
-  }).join('');
+  })}`;
 }
 
 // 파싱
@@ -13885,13 +13845,13 @@ function renderCatPreview(descResult, midResult, errors) {
 
   if (!total) {
     res.className = 'import-result err';
-    res.innerHTML = `파싱된 데이터가 없습니다.<br>${errors.slice(0,5).map(e=>`• ${e}`).join('<br>')}`;
+    res.innerHTML = html`파싱된 데이터가 없습니다.<br>${errors.slice(0,5).map((e,i)=>html`${i?raw('<br>'):''}• ${e}`)}`;
     return;
   }
 
   res.className = 'import-result ' + (errors.length ? 'warn' : 'ok');
-  res.innerHTML = `<strong>거래내용→중분류 ${totalDesc}건</strong>, <strong>중분류→대분류 ${totalMid}건</strong> 파싱 완료`
-    + (errors.length ? ` &nbsp;|&nbsp; 오류 <strong>${errors.length}건</strong> 제외` : '');
+  res.innerHTML = html`<strong>거래내용→중분류 ${totalDesc}건</strong>, <strong>중분류→대분류 ${totalMid}건</strong> 파싱 완료`
+    + (errors.length ? html` &nbsp;|&nbsp; 오류 <strong>${errors.length}건</strong> 제외` : '');
 
   // 거래내용→중분류 미리보기
   if (totalDesc) {
@@ -13899,9 +13859,9 @@ function renderCatPreview(descResult, midResult, errors) {
     document.getElementById('cat-prev-desc-count').textContent = `(${totalDesc}건)`;
     const tbody = document.querySelector('#cat-prev-desc-tbl tbody');
     const entries = Object.entries(descResult).slice(0, 30);
-    tbody.innerHTML = entries.map(([d,m]) =>
-      `<tr><td style="color:var(--text)">${d}</td><td><span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 7px;border-radius:4px">${m}</span></td></tr>`
-    ).join('') + (totalDesc > 30 ? `<tr><td colspan="2" style="text-align:center;color:var(--text3)">... 외 ${totalDesc-30}건</td></tr>` : '');
+    tbody.innerHTML = html`${entries.map(([d,m]) =>
+      html`<tr><td style="color:var(--text)">${d}</td><td><span class="badge" style="background:rgba(49,72,64,0.15);color:var(--blue);font-size:11px;padding:2px 7px;border-radius:4px">${m}</span></td></tr>`
+    )}${totalDesc > 30 ? html`<tr><td colspan="2" style="text-align:center;color:var(--text3)">... 외 ${totalDesc-30}건</td></tr>` : ''}`;
   }
 
   // 중분류→대분류 미리보기
@@ -13909,9 +13869,9 @@ function renderCatPreview(descResult, midResult, errors) {
     document.getElementById('cat-preview-mid').style.display = '';
     document.getElementById('cat-prev-mid-count').textContent = `(${totalMid}건)`;
     const tbody = document.querySelector('#cat-prev-mid-tbl tbody');
-    tbody.innerHTML = Object.entries(midResult).map(([m,b]) =>
-      `<tr><td style="color:var(--text)">${m}</td><td><span class="badge" style="background:rgba(0,212,180,0.15);color:var(--teal);font-size:11px;padding:2px 7px;border-radius:4px">${b}</span></td></tr>`
-    ).join('');
+    tbody.innerHTML = html`${Object.entries(midResult).map(([m,b]) =>
+      html`<tr><td style="color:var(--text)">${m}</td><td><span class="badge" style="background:rgba(0,212,180,0.15);color:var(--teal);font-size:11px;padding:2px 7px;border-radius:4px">${b}</span></td></tr>`
+    )}`;
   }
 }
 
@@ -14358,23 +14318,23 @@ async function handleCFFile(file) {
     const res = document.getElementById('cf-import-result');
     if (!parsed.length) {
       res.className = 'import-result err';
-      res.innerHTML = `가져올 수 있는 행이 없습니다. (오류 ${errors.length}건)
+      res.innerHTML = html`가져올 수 있는 행이 없습니다. (오류 ${errors.length}건)
         <div style="margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:6px;font-size:12px;max-height:180px;overflow-y:auto;line-height:1.8">
-          ${errors.map((e,i)=>`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`).join('')}
+          ${errors.map((e,i)=>html`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`)}
         </div>`;
       document.getElementById('cf-preview-box').style.display = 'none';
       return;
     }
     const dupCount = parsed.filter(r => cfData.some(d => d.date===r.date && d.desc===r.desc && Math.abs(d.amount-r.amount)<1 && d.status===r.status)).length;
     res.className = 'import-result ' + (errors.length ? 'warn' : 'ok');
-    res.innerHTML = `<strong>${parsed.length}건</strong> 파싱 완료`
-      + (dupCount ? ` &nbsp;|&nbsp; 기존 중복 <strong style="color:var(--amber)">${dupCount}건</strong> 감지 (가져오기 시 처리 방법 선택)` : '')
-      + (errors.length ? `
+    res.innerHTML = html`<strong>${parsed.length}건</strong> 파싱 완료`
+      + (dupCount ? html` &nbsp;|&nbsp; 기존 중복 <strong style="color:var(--amber)">${dupCount}건</strong> 감지 (가져오기 시 처리 방법 선택)` : '')
+      + (errors.length ? html`
         <span style="margin-left:8px;opacity:.8">
           오류 <button id="cf-err-toggle" onclick="var d=document.getElementById('cf-err-list');d.style.display=d.style.display==='none'?'block':'none';this.textContent=d.style.display==='none'?'${errors.length}건 ▼':'${errors.length}건 ▲'" style="background:none;border:none;cursor:pointer;color:inherit;font-weight:700;text-decoration:underline;padding:0;font-size:12px">${errors.length}건 ▼</button> 제외
         </span>
         <div id="cf-err-list" style="display:none;margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:6px;font-size:12px;max-height:180px;overflow-y:auto;line-height:1.8">
-          ${errors.map((e,i)=>`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`).join('')}
+          ${errors.map((e,i)=>html`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`)}
         </div>` : '');
 
     renderCFPreview(parsed);
@@ -14785,23 +14745,23 @@ async function handleARFile(file) {
     const res = document.getElementById('ar-import-result');
     if (!parsed.length) {
       res.className = 'import-result err';
-      res.innerHTML = `가져올 수 있는 행이 없습니다. (오류 ${errors.length}건)
+      res.innerHTML = html`가져올 수 있는 행이 없습니다. (오류 ${errors.length}건)
         <div style="margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:6px;font-size:12px;max-height:180px;overflow-y:auto;line-height:1.8">
-          ${errors.map((e,i)=>`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`).join('')}
+          ${errors.map((e,i)=>html`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`)}
         </div>`;
       document.getElementById('ar-preview-box').style.display = 'none';
       return;
     }
     const dupCount = parsed.filter(r => arData.some(d => d.partner===r.partner && d.start===r.start && Math.abs((d.expected||0)-(r.expected||0))<1)).length;
     res.className = 'import-result ' + (errors.length ? 'warn' : 'ok');
-    res.innerHTML = `<strong>${parsed.length}건</strong> 파싱 완료`
-      + (dupCount ? ` &nbsp;|&nbsp; 기존 중복 <strong style="color:var(--amber)">${dupCount}건</strong> 감지 (가져오기 시 처리 방법 선택)` : '')
-      + (errors.length ? `
+    res.innerHTML = html`<strong>${parsed.length}건</strong> 파싱 완료`
+      + (dupCount ? html` &nbsp;|&nbsp; 기존 중복 <strong style="color:var(--amber)">${dupCount}건</strong> 감지 (가져오기 시 처리 방법 선택)` : '')
+      + (errors.length ? html`
         <span style="margin-left:8px;opacity:.8">
           오류 <button id="ar-err-toggle" onclick="var d=document.getElementById('ar-err-list');d.style.display=d.style.display==='none'?'block':'none';this.textContent=d.style.display==='none'?'${errors.length}건 ▼':'${errors.length}건 ▲'" style="background:none;border:none;cursor:pointer;color:inherit;font-weight:700;text-decoration:underline;padding:0;font-size:12px">${errors.length}건 ▼</button> 제외
         </span>
         <div id="ar-err-list" style="display:none;margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.06);border-radius:6px;font-size:12px;max-height:180px;overflow-y:auto;line-height:1.8">
-          ${errors.map((e,i)=>`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`).join('')}
+          ${errors.map((e,i)=>html`<div style="padding:1px 0;border-bottom:1px solid rgba(0,0,0,0.05)">${i+1}. ${e}</div>`)}
         </div>` : '');
     renderARPreview(parsed);
   } catch(e) {
