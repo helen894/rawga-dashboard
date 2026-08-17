@@ -5257,41 +5257,43 @@ function renderCFTable() {
   const cfBalances = computeCFBalances(); // 전체 cfData 기준(필터와 무관) — 아래 주석 참고
 
   const tbody = document.getElementById('cf-tbody');
-  tbody.innerHTML = slice.map(r => {
+  // html`` 태그드 템플릿 — ${} 가 자동 이스케이프된다(escapeHtml 직접 호출 금지: 이중 이스케이프).
+  // 배열도 자동으로 이어붙으므로 .join('') 이 없다.
+  tbody.innerHTML = html`${slice.map(r => {
     const statusBadge = r.status.includes('예정')
-      ? `<span class="badge 예정">${escapeHtml(r.status)}</span>`
-      : `<span class="badge ${escapeHtml(r.type)}">${escapeHtml(r.status)}</span>`;
+      ? html`<span class="badge 예정">${r.status}</span>`
+      : html`<span class="badge ${r.type}">${r.status}</span>`;
     const bal = cfBalances.get(r._id);
     const balCell = !bal ? '—'
       : bal.kind === 'projected'
-        ? `<span style="color:var(--amber);font-family:var(--mono);border-bottom:1px dashed var(--amber);padding-bottom:1px" title="예정 거래 포함 — 확정 전 잠정 잔액">~${fmt(bal.val)}</span>`
-        : `<span style="font-family:var(--mono)">${fmt(bal.val)}</span>`;
-    return `<tr>
+        ? html`<span style="color:var(--amber);font-family:var(--mono);border-bottom:1px dashed var(--amber);padding-bottom:1px" title="예정 거래 포함 — 확정 전 잠정 잔액">~${fmt(bal.val)}</span>`
+        : html`<span style="font-family:var(--mono)">${fmt(bal.val)}</span>`;
+    return html`<tr>
       <td style="text-align:center">
         <input type="checkbox" class="cf-row-check" data-id="${r._id}" ${cfSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
       </td>
-      <td class="date-cell">${escapeHtml(r.date)}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.desc)}">${escapeHtml(r.desc)}</td>
-      <td class="num">${r.in > 0 ? '<span style="color:var(--green)">+' + fmt(r.in) + '</span>' : '—'}</td>
-      <td class="num">${r.out > 0 ? '<span style="color:var(--red)">-' + fmt(r.out) + '</span>' : '—'}</td>
+      <td class="date-cell">${r.date}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</td>
+      <td class="num">${r.in  > 0 ? html`<span style="color:var(--green)">+${fmt(r.in)}</span>`  : '—'}</td>
+      <td class="num">${r.out > 0 ? html`<span style="color:var(--red)">-${fmt(r.out)}</span>` : '—'}</td>
       <td class="num">${balCell}</td>
-      <td>${r.type ? `<span class="badge ${escapeHtml(r.type)}">${escapeHtml(r.type)}</span>` : ''}</td>
+      <td>${r.type ? html`<span class="badge ${r.type}">${r.type}</span>` : ''}</td>
       <td>${statusBadge}</td>
-      <td style="color:var(--text2);font-size:11px">${escapeHtml(r.mid_cat||'—')}</td>
-      <td style="color:var(--text2);font-size:11px">${escapeHtml(r.big_cat||'—')}</td>
+      <td style="color:var(--text2);font-size:11px">${r.mid_cat||'—'}</td>
+      <td style="color:var(--text2);font-size:11px">${r.big_cat||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn sm cf-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
         <button class="btn sm red cf-del-btn" data-id="${r._id}">삭제</button>
         ${r.type === '입금' && r.mid_cat ? (() => {
           if (r.ar_applied === '완료')
-            return `<span title="차감일: ${escapeHtml(r.ar_applied_date||'—')}" style="margin-left:4px;font-size:10px;color:var(--green);cursor:default">💰완료</span>`;
+            return html`<span title="차감일: ${r.ar_applied_date||'—'}" style="margin-left:4px;font-size:10px;color:var(--green);cursor:default">💰완료</span>`;
           if (r.ar_applied === '실패')
-            return `<span title="${escapeHtml(r.ar_applied_error||'')}" style="margin-left:4px;font-size:10px;color:var(--red);cursor:default">💰실패</span>`;
+            return html`<span title="${r.ar_applied_error||''}" style="margin-left:4px;font-size:10px;color:var(--red);cursor:default">💰실패</span>`;
           return '';
         })() : ''}
       </td>
     </tr>`;
-  }).join('');
+  })}`;
 
   // 건수 옆 금액 합계 — 현재 필터로 걸러진 전체(cfFiltered) 기준(건수와 동일 범위)
   let sumIn = 0, sumOut = 0;
@@ -6391,7 +6393,7 @@ function renderARTable() {
       </td>
       <td><span class="badge ${escapeHtml(dispStatus)}">${escapeHtml(dispStatus)}</span></td>
       <td class="num">${elapsedHtml}</td>
-      <td style="white-space:nowrap"><span class="ar-upd ${_upd.cls}">${_upd.label}</span>${_upd.date ? `<br><span style="font-size:10px;color:var(--text3)">${_upd.date}</span>` : ''}</td>
+      <td style="white-space:nowrap"><span class="ar-upd ${_upd.cls}">${escapeHtml(_upd.label)}</span>${_upd.date ? `<br><span style="font-size:10px;color:var(--text3)">${escapeHtml(_upd.date)}</span>` : ''}</td>
       <td class="ar-memo-cell" data-id="${r._id}" title="클릭하여 메모 편집" style="cursor:text;font-size:11px;color:var(--text2);max-width:170px;overflow:hidden;text-overflow:ellipsis">${_memo ? escapeHtml(_memo) : '<span style="color:var(--text3)">＋ 메모</span>'}</td>
       <td style="white-space:nowrap">
         ${AR_READONLY
@@ -8311,6 +8313,41 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+/* ===== html`` — 이스케이프를 "기본값"으로 만드는 태그드 템플릿 ==========
+ *
+ * 왜 있는가: 예전엔 표를 그릴 때마다 escapeHtml() 을 손으로 불러야 했고,
+ * 한 군데라도 빠지면 저장형 XSS 가 됐다(입출금 거래내용 사고). 사람이 기억해야
+ * 하는 방어는 언젠가 빠진다. 그래서 "안 부르면 안전"이 되도록 뒤집는다.
+ *
+ *   tbody.innerHTML = html`<td title="${r.desc}">${r.desc}</td>`;
+ *
+ * 규칙:
+ *  · ${값} 은 전부 자동 이스케이프된다 — escapeHtml() 을 같이 쓰면 이중 이스케이프다
+ *  · 중첩 html`` 은 그대로 통과 → 조각을 조립해도 안전
+ *  · 배열은 자동으로 이어붙는다 → .map(...) 뒤에 .join('') 불필요
+ *  · null·undefined·false 는 빈 문자열 → ${cond && html`...`} 조건부 렌더 가능
+ *  · 진짜 raw 마크업을 넣어야 하면 raw() 로 명시한다. raw() 사용처는
+ *    scripts/check-html-escaping.mjs 가 전부 보고하므로 감사 대상이 된다.
+ *
+ * 주의: 신뢰할 수 없는 값을 raw() 에 넣으면 이 모든 게 무의미하다.
+ * (class 대신 함수 선언 — 호이스팅되어 정의 위치보다 앞에서 호출해도 안전)
+ */
+function raw(value) {
+  const s = String(value ?? '');
+  return { __html: s, toString() { return s; } };
+}
+function _htmlFragment(v) {
+  if (v === null || v === undefined || v === false) return '';
+  if (typeof v === 'object' && typeof v.__html === 'string') return v.__html; // html`` / raw()
+  if (Array.isArray(v)) return v.map(_htmlFragment).join('');
+  return escapeHtml(v);
+}
+function html(strings, ...values) {
+  let out = strings[0];
+  for (let i = 0; i < values.length; i++) out += _htmlFragment(values[i]) + strings[i + 1];
+  return raw(out);
+}
+
 /** ISO 문자열 → 'YYYY-MM-DD HH:mm' (KST) 변환
  *  유효하지 않거나 null이면 '-' 반환 */
 function formatUpdatedAtKST(iso) {
@@ -9404,7 +9441,7 @@ function renderDailyReport(){
 
     blk(4,'통보 — 승인 불필요',
       (R.notify.length
-        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(dlLabel(r, note))}<small>${r.date} ${dayTag(r).replace(/^· /,'')}</small></span>`
+        ? R.notify.map(r => `<div class="dl-row"><span class="k">${escapeHtml(dlLabel(r, note))}<small>${escapeHtml(r.date)} ${dayTag(r).replace(/^· /,'')}</small></span>`
             + `<span class="v" style="display:flex;align-items:center;gap:8px">${dlWon(r.out)}${dlBucketSel(r, note, R.thr)}</span></div>`).join('')
           + `<div class="dl-row tot"><span class="k">합계</span><span class="v">${dlWon(R.notifySum)}</span></div>`
         : '<div class="dl-empty">이 범위에 통보할 예정 출금이 없습니다.</div>')
@@ -9418,7 +9455,7 @@ function renderDailyReport(){
         : '')) +
 
     blk(5,'위험 · 향후 7일',
-      `<div class="dl-row"><span class="k">7일 내 최저 잔액</span><span class="v" style="color:${R.low.bal>=R.floor?'var(--green)':'var(--red)'}">${dlWon(R.low.bal)} <span style="color:var(--text3)">(${R.low.date})</span></span></div>` +
+      `<div class="dl-row"><span class="k">7일 내 최저 잔액</span><span class="v" style="color:${R.low.bal>=R.floor?'var(--green)':'var(--red)'}">${dlWon(R.low.bal)} <span style="color:var(--text3)">(${escapeHtml(R.low.date)})</span></span></div>` +
       (R.risks.length
         ? R.risks.map(x => `<div class="dl-risk"><i class="dot" style="background:${x.lv==='hot'?'var(--red)':x.lv==='warn'?'var(--amber)':'var(--soft,var(--text3))'}"></i><p style="margin:0;color:var(--text2)">${escapeHtml(x.t)}</p></div>`).join('')
         : '<div class="dl-empty">특이 위험 신호 없음.</div>'));
@@ -10322,7 +10359,7 @@ function openLoanModal(idx){
       const step = f.type==='num'?' step="any"':'';
       inp = `<input type="${t}"${step} data-k="${f.k}" value="${escapeHtml(String(v))}">`;
     }
-    return `<label class="${f.star?'star':''}">${f.label}${inp}</label>`;
+    return `<label class="${f.star?'star':''}">${escapeHtml(f.label)}${inp}</label>`;
   }).join('');
   document.getElementById('loan-modal').classList.remove('hidden');
 }
@@ -10544,7 +10581,7 @@ function renderCheckTab(){
           기재하면 대장으로 옮겨지고 이 목록에서 사라집니다.</p>
        ${s.cand.map(c => `<div class="chk-cand-row">
           <span class="chk-kind ${c.kind==='수표'?'sure':''}">${c.kind}</span>
-          <span class="d">${c.date}</span>
+          <span class="d">${escapeHtml(c.date)}</span>
           <span class="a">${chkWon(c.amount)}</span>
           <span class="t">${escapeHtml(c.desc)}</span>
           <button class="chk-btn" data-cand="${escapeHtml(c.link)}">기재하기</button>
@@ -10656,8 +10693,8 @@ function openCheckModal(idx, cand){
     const cls = (f.star?'star ':'') + (f.wide?'wide':'');
     const inp = f.type === 'select'
       ? `<select id="chkf-${f.k}">${f.opts.map(o=>`<option value="${o}"${o===(v||'발행')?' selected':''}>${o}</option>`).join('')}</select>`
-      : `<input id="chkf-${f.k}" type="${f.type==='num'?'number':f.type}" value="${escapeHtml(String(v))}"${f.type==='num'?' step="1"':''}>`;
-    return `<label class="${cls}">${f.label}${inp}</label>`;
+      : `<input id="chkf-${f.k}" type="${f.type==='num'?'number':escapeHtml(f.type)}" value="${escapeHtml(String(v))}"${f.type==='num'?' step="1"':''}>`;
+    return `<label class="${cls}">${escapeHtml(f.label)}${inp}</label>`;
   }).join('');
   document.getElementById('chk-modal').classList.remove('hidden');
 }
