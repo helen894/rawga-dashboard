@@ -10621,6 +10621,133 @@ function generateLoanPlanned(showToastMsg = true){
   return added;
 }
 
+/* ═══ 카드 대금 예정 자동 생성 (예정 파이프 2단계) ═══════════════════════
+ * card_data 의 결제일 + corp_card_tx_data 의 승인액으로 cf_data 에 '지출 예정' 을 만든다.
+ *
+ * ⚠⚠ **국민·비씨만 만든다** (2026-08-17 사용자 지정). 실측 정확도가 카드사마다 크게 달랐다:
+ *     사용 2026-02~06 → 결제 03~07, 5개월 실측 절대오차 중앙값
+ *       국민 0.1% · 비씨 1.2% · 신한 13.1% · **롯데 36.1%(최대 81.7%)**
+ *     신한·롯데는 선결제(결제일이 아닌 날 임의 금액을 미리 냄)가 잦아 월 배분이 무너진다.
+ *     그런 줄을 궤적에 세우면 오히려 판단을 흐린다. 필요해지면 CARD_PLAN_ISSUERS 에 더할 것.
+ *
+ * 금액 근거 — 전월 승인액이 원칙이지만, 그 달이 **아직 안 끝났으면 쓰면 안 된다**.
+ *   8/17 에 8월 승인액을 쓰면 절반만 잡혀 예정이 실제의 절반으로 들어간다.
+ *   → 대응 사용월이 완결(월말이 지남)이면 그 달 실적, 아니면 **최근 3개월 평균**으로 추정하고
+ *     어느 근거인지 card_basis 에 남긴다.
+ *
+ * ⚠ 선결제는 원리적으로 예측 불가다 — 사람이 임의 시점에 임의 금액을 낸다.
+ *   실제 선결제가 들어오면 그달 예정을 사람이 지워야 한다(소멸 로직 보류 중). */
+const CARD_PLAN_ISSUERS = ['국민', '비씨'];
+const CARD_PLAN_MONTHS  = 2;      // 대출과 같은 이유로 2개월 — 만든 만큼 사람이 지워야 한다
+
+/* 적재된 카드번호(마스킹)에서 '보이는 뒤자리' 를 뽑는다. `490298******9450` → `9450`,
+   `************7823` → `7823`, 마스킹이 없으면 숫자 전체. */
+function cardVisibleTail(no){
+  const s = String(no || '');
+  const after = s.includes('*') ? s.slice(s.lastIndexOf('*') + 1) : s;
+  return after.replace(/\D/g, '');
+}
+/* 적재 카드번호 → card_data 의 카드 1장. 현재번호·이전번호 양쪽 끝자리로 맞춘다
+   (국민카드가 7823 → 0814 로 바뀌었는데 적재는 아직 7823 으로 들어온다).
+   둘 이상 걸리면 애매하므로 매칭하지 않는다 — 잘못된 카드사로 합산되는 것보다 낫다. */
+function cardMatchIssuer(txCardNo){
+  const tail = cardVisibleTail(txCardNo);
+  if (!tail) return null;
+  const hits = [];
+  for (const c of (Array.isArray(cardData) ? cardData : [])) {
+    if ((c.status || '활성') === '해지') continue;
+    for (const no of [c.cardNo, c.prevCardNo]) {
+      const d = String(no || '').replace(/\D/g, '');
+      if (d && d.endsWith(tail)) { hits.push(c); break; }
+    }
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/* 카드사별 월 승인액 합계 — key `YYYY-MM` */
+function cardApprovalByMonth(issuer){
+  const out = {};
+  for (const r of (Array.isArray(corpCardTxData) ? corpCardTxData : [])) {
+    const c = cardMatchIssuer(r.card_no);
+    if (!c || c.issuer !== issuer) continue;
+    const k = String(r.use_date || '').slice(0, 7);
+    if (!k) continue;
+    out[k] = (out[k] || 0) + (Number(r.billing_amount) || 0);
+  }
+  return out;
+}
+
+function generateCardPlanned(showToastMsg = true){
+  if (!_cardLoaded || !Array.isArray(cardData) || !cardData.length) return 0;
+  if (!Array.isArray(corpCardTxData) || !corpCardTxData.length) return 0;
+  const today = todayKST();
+  const [ty, tm] = today.split('-').map(Number);
+  const todayDay = Number(today.slice(8, 10));
+  let added = 0;
+
+  for (const issuer of CARD_PLAN_ISSUERS) {
+    /* 결제일은 카드사 안에서 같다(실측: 국민 15일·비씨 23일). 여러 장이면 첫 장 기준. */
+    const cards = cardData.filter(c => c.issuer === issuer && (c.status || '활성') !== '해지'
+                                    && Number(c.payDay) >= 1 && Number(c.payDay) <= 31);
+    if (!cards.length) continue;
+    const payDay = Number(cards[0].payDay);
+    const byMonth = cardApprovalByMonth(issuer);
+
+    /* 최근 3개월 평균 — '완결된 달' 만 쓴다(진행 중인 달을 섞으면 평균이 내려앉는다) */
+    const doneMonths = Object.keys(byMonth).filter(k => {
+      const [y, m] = k.split('-').map(Number);
+      return `${y}-${String(m).padStart(2,'0')}-${new Date(y, m, 0).getDate()}` < today;
+    }).sort();
+    const recent = doneMonths.slice(-3).map(k => byMonth[k]).filter(v => v > 0);
+    const avg = recent.length ? Math.round(recent.reduce((a,b)=>a+b,0) / recent.length) : 0;
+
+    const offsets = [];
+    if (payDay >= todayDay) offsets.push(0);
+    for (let i = 1; i <= CARD_PLAN_MONTHS; i++) offsets.push(i);
+
+    for (const off of offsets) {
+      let nm = tm + off, ny = ty;
+      while (nm > 12) { nm -= 12; ny++; }
+      const last = new Date(ny, nm, 0).getDate();
+      const base = `${ny}-${String(nm).padStart(2,'0')}-${String(Math.min(payDay, last)).padStart(2,'0')}`;
+      const date = loanShiftToBizDay(base);       // 주말이면 다음 영업일 (대출과 같은 규칙)
+      if (date < today) continue;
+
+      /* 이 결제에 대응하는 사용월 = 결제월의 전월 */
+      let um = nm - 1, uy = ny;
+      if (um < 1) { um = 12; uy--; }
+      const useKey = `${uy}-${String(um).padStart(2,'0')}`;
+      const useLast = `${uy}-${String(um).padStart(2,'0')}-${new Date(uy, um, 0).getDate()}`;
+      const complete = useLast < today;           // 그 사용월이 이미 끝났는가
+
+      const amt = complete ? Math.round(byMonth[useKey] || 0) : avg;
+      const basis = complete ? `${useKey} 승인액` : '최근 3개월 평균';
+      if (!(amt > 0)) continue;
+
+      const cardKey = `card_${issuer}`;
+      if (cfData.some(r => r.card_bill_id === cardKey && r.date === date)) continue;
+
+      _cfIdCounter++;
+      cfData.push(normalizeCFRow({
+        _id: 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2,9),
+        date,
+        desc: `${issuer}카드 대금(추정)`,
+        in: 0, out: amt, amount: -amt,
+        type: '지출', status: '지출 예정',
+        mid_cat: '법인카드 대금', big_cat: getBigCat('법인카드 대금'),
+        card_bill_id: cardKey,     // 소멸 로직이 쓸 출처 태그
+        card_basis: basis,         // 이 금액이 무엇에 근거했는지 (사람이 판단할 근거)
+      }));
+      added++;
+    }
+  }
+
+  if (added > 0) { cfData.sort((a,b) => a.date.localeCompare(b.date)); saveData(); }
+  if (showToastMsg && added > 0)
+    showToast(`💳 카드 대금 예정 ${added}건이 생성됐습니다 (국민·비씨만 · 추정치).`, 'green');
+  return added;
+}
+
 async function saveLoanData(){
   try{
     if(typeof _supa!=='undefined' && _supa && (typeof _isInitialized==='undefined' || _isInitialized)){
@@ -14524,11 +14651,15 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
        ⚠ 대출은 지연 로드라 여기서 **명시적으로 기다려야** 한다. loadLoanData 는 진행 중인
        로드를 공유하므로(_loanLoadPromise) 앞선 renderAll 의 호출과 겹쳐도 안전하다.
        초기화 전에 만들면 저장이 가드에 막히고 Supabase 응답에 덮여 사라진다(2026-08-17 실측). */
-    let loanGenerated = 0;
+    let loanGenerated = 0, cardGenerated = 0;
     try {
       await loadLoanData();
       migrateLoanPlanDesc();                       // 적요 형식 변경분 소급 정리(멱등)
       loanGenerated = generateLoanPlanned(false);
+      /* 카드 대금 예정 — card_data(결제일)와 corp_card_tx_data(승인액) 둘 다 필요하다.
+         카드 원장도 지연 로드라 여기서 명시적으로 기다린다(대출과 같은 이유). */
+      await loadCardData();
+      cardGenerated = generateCardPlanned(false);
     } catch (e) { console.warn('[boot] 대출 예정 생성 실패', e); }
     renderAll();
     // Supabase 로드 완료 후 대시보드가 활성 탭이면 KPI/차트를 rAF로 한 번 더 보장 갱신
@@ -14542,6 +14673,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
     if (loanGenerated > 0) showToast(`🏦 대출 이자 예정 ${loanGenerated}건이 생성됐습니다 (추정치 — 실제 출금 후 예정 행을 지워 주세요).`, 'green');
+    if (cardGenerated > 0) showToast(`💳 카드 대금 예정 ${cardGenerated}건이 생성됐습니다 (국민·비씨만 · 추정치).`, 'green');
 
     // 딥링크 처리 — Supabase 데이터 로드 완료 후 탭 전환 + renderWeeklyReport() 재실행
     // (조기 처리에서 skipRender=true 로 탭만 열었으므로, 여기서 데이터와 함께 전체 렌더)
