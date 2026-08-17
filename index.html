@@ -1692,6 +1692,70 @@
   </div>
   <div class="corp-table-wrap" id="corp-table-container"></div>
 
+  <!-- ======== 카드 원장 (card_data) ========
+       카드사·결제일·결제계좌를 담는 마스터. 종전엔 카드번호→사용자(card-alias-map.json, 스크립트 전용)
+       뿐이라 대시보드가 '이 카드가 언제 얼마로 결제되는지' 를 알 방법이 없었다.
+       카드 대금 예정 파이프가 이 표를 읽는다. 대출 탭(loan_data)과 같은 자체 완결형 모듈. -->
+  <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border2)">
+    <details class="card-ledger" id="card-ledger">
+      <summary id="card-ledger-summary">🗂 카드 원장</summary>
+      <div style="margin-top:12px">
+        <style>
+          #panel-corp-card .card-ledger > summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;list-style:none;padding:2px 0;}
+          #panel-corp-card .card-ledger > summary::-webkit-details-marker{display:none;}
+          #panel-corp-card .card-ledger > summary::before{content:'▸';font-size:11px;color:var(--text3);}
+          #panel-corp-card .card-ledger[open] > summary::before{content:'▾';}
+          #panel-corp-card .card-ledger > summary:hover{color:var(--blue);}
+          #panel-corp-card .cl-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+          #panel-corp-card .cl-btn{font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;}
+          #panel-corp-card .cl-btn.primary{background:var(--blue);color:#fff;border-color:transparent;}
+          #panel-corp-card .cl-count{margin-left:auto;font-size:12px;color:var(--text2);}
+          #panel-corp-card .cl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--card);}
+          #panel-corp-card table.cl-t{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1000px;}
+          #panel-corp-card table.cl-t th{background:var(--bg3);color:var(--text2);font-size:11px;font-weight:700;text-align:left;padding:9px 11px;white-space:nowrap;border-bottom:1px solid var(--border);}
+          #panel-corp-card table.cl-t td{padding:9px 11px;border-bottom:1px solid var(--border);color:var(--text);white-space:nowrap;}
+          #panel-corp-card table.cl-t tr:last-child td{border-bottom:none;}
+          #panel-corp-card table.cl-t .empty{text-align:center;color:var(--text3);padding:24px;}
+          #panel-corp-card table.cl-t td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+          #panel-corp-card .cl-dead{opacity:.5;}
+          #panel-corp-card .cl-row-btn{font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;margin-left:4px;}
+          #panel-corp-card .cl-row-btn.del{color:var(--red);border-color:var(--red2);}
+          #panel-corp-card .cl-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:2000;padding:20px;}
+          #panel-corp-card .cl-modal.hidden{display:none;}
+          #panel-corp-card .cl-modal-box{background:var(--card);border-radius:14px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.25);}
+          #panel-corp-card .cl-modal-box h3{margin:0 0 4px;font-size:17px;color:var(--text);}
+          #panel-corp-card .cl-modal-box .hint{margin:0 0 16px;font-size:12px;color:var(--text2);line-height:1.55;}
+          #panel-corp-card .cl-form{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+          #panel-corp-card .cl-form label{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:4px;}
+          #panel-corp-card .cl-form label.wide{grid-column:1/-1;}
+          #panel-corp-card .cl-form label.star::after{content:" ★";color:var(--blue);}
+          #panel-corp-card .cl-form input,#panel-corp-card .cl-form select{padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:13px;width:100%;font-family:inherit;}
+          #panel-corp-card .cl-modal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;}
+        </style>
+
+        <div class="cl-toolbar">
+          <button class="cl-btn primary" id="cl-add-btn">+ 카드 추가</button>
+          <span class="cl-count" id="cl-count"></span>
+        </div>
+        <div class="cl-wrap">
+          <table class="cl-t" id="cl-table"><thead></thead><tbody></tbody></table>
+        </div>
+
+        <div class="cl-modal hidden" id="cl-modal">
+          <div class="cl-modal-box">
+            <h3 id="cl-modal-title">카드 추가</h3>
+            <p class="hint">결제일·결제계좌는 <b>카드 대금 예정 자동 생성</b>의 재료입니다. 명의자와 집계 귀속이 다를 수 있어 따로 받습니다(예: 김현민 명의 비씨카드를 SO 비용으로 처리).</p>
+            <div class="cl-form" id="cl-form"></div>
+            <div class="cl-modal-act">
+              <button class="cl-btn" id="cl-modal-cancel">취소</button>
+              <button class="cl-btn primary" id="cl-modal-save">저장</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+
   <!-- ======== 법인카드 청구내역 ======== -->
   <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border2)">
     <!-- 툴바 -->
@@ -10162,6 +10226,192 @@ document.getElementById('kpi-ar-card').addEventListener('click', () => {
    - 코어 loadDataFromSupabase / Realtime 은 건드리지 않음(안전)
    - 대출 탭 첫 진입 시 지연 로드
    =================================================================== */
+/* ═══════════ 카드 원장 (card_data) ═══════════════════════════════════════
+ * 카드사·결제일·결제계좌를 담는 마스터. 카드 대금 예정 파이프가 이 표를 읽는다.
+ *
+ * 왜 새로 만드나: 종전엔 카드 정보가 scripts/card-alias-map.json(카드번호→사용자, **스크립트 전용**
+ * 이라 대시보드가 안 읽음)과 corp_card_tx_data(사용내역)뿐이라, '이 카드가 언제 얼마로 결제되는지'
+ * 를 화면이 알 방법이 없었다.
+ *
+ * ⚠ owner(명의자)와 alias(집계 귀속)를 따로 둔다 — 다를 수 있다.
+ *   실제 사례: 비씨카드 4140…4957 은 김현민 명의지만 비용은 SO 로 잡는다(2026-08-07 사용자 지정).
+ *   alias 는 법인카드 집계표의 열 이름과 같아야 한다(normalizeCCTxAlias 가 아는 값).
+ * ⚠ prevCardNo — 카드를 교체해도 클로브가 한동안 옛 번호로 보낸다. 실제로 국민카드가
+ *   7823 → 0814 로 바뀌었는데 적재는 아직 7823 으로 들어온다. 둘 다 같은 카드로 묶어야
+ *   사용액이 교체 시점에서 끊기지 않는다. */
+const CARD_ISSUERS = ['신한', '롯데', '국민', '비씨', '기타'];
+const CARD_FIELDS = [
+  { k:'issuer',     label:'카드사',        type:'select', star:true, opts:['', '신한', '롯데', '국민', '비씨', '기타'] },
+  { k:'alias',      label:'집계 귀속(열)',  type:'text',   star:true },
+  { k:'owner',      label:'명의자',        type:'text' },
+  { k:'cardNo',     label:'카드번호',      type:'text',   star:true, wide:true },
+  { k:'prevCardNo', label:'이전 카드번호(교체 전)', type:'text', wide:true },
+  { k:'expiry',     label:'유효기간(MM/YY)', type:'text' },
+  { k:'payDay',     label:'결제일',        type:'num',    star:true },
+  { k:'payAccount', label:'결제계좌',      type:'text',   wide:true },
+  { k:'status',     label:'상태',          type:'select', opts:['활성','해지'] },
+  { k:'memo',       label:'비고',          type:'text',   wide:true },
+];
+
+/* 최초 1회 시드 — 2026-08-17 사용자가 준 목록 + 적재 데이터 대조 결과.
+ * 이미 저장된 card_data 가 있으면 절대 덮지 않는다(아래 loadCardData 참고). */
+const DEFAULT_CARD_DATA = [
+  { issuer:'비씨', alias:'SO',    owner:'김현민', cardNo:'4140-0318-5053-4957', prevCardNo:'', expiry:'04/29', payDay:23, payAccount:'기업은행 487-060219-01-015', status:'활성', memo:'명의는 김현민, 비용은 SO 귀속(2026-08-07 지정)' },
+  { issuer:'롯데', alias:'김현민', owner:'김현민', cardNo:'3792-204000-47921', prevCardNo:'', expiry:'07/29', payDay:14, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'롯데', alias:'SO',    owner:'SO',    cardNo:'5566-0800-2188-3555', prevCardNo:'', expiry:'07/30', payDay:14, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'국민', alias:'김현민', owner:'김현민', cardNo:'4265-8697-2583-0814', prevCardNo:'************7823', expiry:'10/32', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'번호 교체 — 클로브는 아직 옛 번호(7823)로 보냄' },
+  { issuer:'신한', alias:'SO',    owner:'SO',    cardNo:'4902-9841-1341-4557', prevCardNo:'', expiry:'02/29', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'박우현', owner:'박우현', cardNo:'4902-9841-1675-1187', prevCardNo:'', expiry:'03/30', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'SO',    owner:'SO',    cardNo:'9410-8101-3570-7511', prevCardNo:'', expiry:'',      payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'2본부', owner:'2본부', cardNo:'4902-9841-1075-4674', prevCardNo:'', expiry:'04/30', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'적재 별칭은 BX' },
+  { issuer:'신한', alias:'문성삼', owner:'문성삼', cardNo:'4902-9841-1936-5696', prevCardNo:'', expiry:'07/30', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'하경수', owner:'하경수', cardNo:'4902-9841-1441-6940', prevCardNo:'', expiry:'',      payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'1본부', owner:'1본부', cardNo:'4902-9841-1651-7083', prevCardNo:'', expiry:'11/30', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'적재 별칭은 M01' },
+  { issuer:'신한', alias:'IL',    owner:'IL',    cardNo:'4902-9841-1407-6157', prevCardNo:'', expiry:'03/31', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'SO',    owner:'SO',    cardNo:'5525-7642-1556-3210', prevCardNo:'', expiry:'05/31', payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'' },
+  { issuer:'신한', alias:'세종',  owner:'세종',  cardNo:'4902-9841-1330-9450', prevCardNo:'', expiry:'',      payDay:15, payAccount:'신한은행 140-013-243160', status:'활성', memo:'2026-08-17 SO→세종 귀속 변경(과거 27건 소급)' },
+  { issuer:'신한', alias:'SO',    owner:'SO',    cardNo:'490298******7181', prevCardNo:'', expiry:'',      payDay:15, payAccount:'신한은행 140-013-243160', status:'해지', memo:'2026-01 초까지만 사용' },
+  { issuer:'신한', alias:'SO',    owner:'SO',    cardNo:'490298******4799', prevCardNo:'', expiry:'',      payDay:15, payAccount:'신한은행 140-013-243160', status:'해지', memo:'2026-01~03 사용' },
+];
+
+let cardData = [];
+let _cardLoaded = false, _cardLoadPromise = null, _cardEditIdx = null;
+
+const cardNum = v => { const n = parseInt(String(v ?? '').replace(/[^0-9]/g,''), 10); return isNaN(n) ? 0 : n; };
+/* 카드번호 비교용 — 하이픈·공백·마스킹(*)을 걷어낸 숫자의 뒤 4자리.
+   적재 데이터는 마스킹(490298******9450)이라 앞자리로는 못 맞춘다(card-alias-map 과 같은 규칙). */
+const cardTail4 = v => { const d = String(v ?? '').replace(/\D/g,''); return d.length >= 4 ? d.slice(-4) : ''; };
+
+async function loadCardData(){
+  if(_cardLoadPromise) return _cardLoadPromise;
+  _cardLoadPromise = (async () => {
+    try{ const ls=JSON.parse(localStorage.getItem('card_data')||'null'); if(Array.isArray(ls)) cardData=ls; }catch(e){}
+    try{
+      if(typeof _supa!=='undefined' && _supa){
+        const { data, error } = await _supa.from('cat_data').select('data').eq('key','card_data').maybeSingle();
+        if(!error && data && Array.isArray(data.data)) cardData = data.data;
+      }
+    }catch(e){ console.warn('[card] 로드 실패', e); }
+    /* 시드 — 한 번도 저장된 적이 없을 때만. 사용자가 전부 지운 상태를 되살리지 않으려고
+       'card_data_seeded' 플래그를 함께 본다. 초기화 전에는 저장이 가드에 막히므로
+       (_isInitialized) 그때는 시드하지 않는다 — 대출 예정에서 겪은 것과 같은 함정. */
+    if (!cardData.length && localStorage.getItem('card_data_seeded') !== '1'
+        && typeof _isInitialized !== 'undefined' && _isInitialized) {
+      cardData = structuredClone(DEFAULT_CARD_DATA);
+      try{ localStorage.setItem('card_data_seeded','1'); }catch(e){}
+      await saveCardData();
+      console.log('[card] 원장 초기 시드', cardData.length, '건');
+    }
+    _cardLoaded = true;
+    renderCardLedger();
+  })();
+  return _cardLoadPromise;
+}
+
+async function saveCardData(){
+  try{ localStorage.setItem('card_data', JSON.stringify(cardData)); }catch(e){}
+  try{
+    if(typeof _supa!=='undefined' && _supa && (typeof _isInitialized==='undefined' || _isInitialized)){
+      const { error } = await _supa.from('cat_data').upsert([{ key:'card_data', data:cardData }], { onConflict:'key' });
+      if(error) throw error;
+    }
+    return { error:null };
+  }catch(e){
+    console.warn('[card] 저장 실패', e);
+    try{ showToast('⚠ 카드 원장 서버 저장 실패 — 로컬에만 남았습니다', 'red'); }catch(e2){}
+    return { error:e };
+  }
+}
+
+function renderCardLedger(){
+  const tbl = document.getElementById('cl-table'); if(!tbl) return;
+  if(!_cardLoaded){ loadCardData(); return; }   // 지연 로드 (완료 시 재호출)
+  const live = cardData.filter(c => (c.status||'활성') !== '해지');
+  const sum  = document.getElementById('card-ledger-summary');
+  if(sum) sum.textContent = '🗂 카드 원장 — ' + live.length + '장 사용 중'
+    + (cardData.length>live.length ? ' · 해지 ' + (cardData.length-live.length) + '장' : '');
+  const cnt = document.getElementById('cl-count');
+  if(cnt) cnt.textContent = cardData.length + '장';
+
+  tbl.querySelector('thead').innerHTML =
+    html`<tr><th>카드사</th><th>집계 귀속</th><th>명의자</th><th>카드번호</th><th>이전 번호</th><th>유효기간</th><th>결제일</th><th>결제계좌</th><th>상태</th><th>비고</th><th></th></tr>`;
+  tbl.querySelector('tbody').innerHTML = !cardData.length
+    ? html`<tr><td colspan="11" class="empty">등록된 카드가 없습니다. + 카드 추가로 등록하세요.</td></tr>`
+    : html`${cardData.map((c,i)=>html`
+        <tr class="${(c.status||'활성')==='해지' ? 'cl-dead' : ''}">
+          <td>${c.issuer||'—'}</td>
+          <td>${c.alias||'—'}</td>
+          <td>${c.owner||'—'}</td>
+          <td class="mono">${c.cardNo||'—'}</td>
+          <td class="mono">${c.prevCardNo||'—'}</td>
+          <td>${c.expiry||'—'}</td>
+          <td>${c.payDay ? c.payDay+'일' : '—'}</td>
+          <td>${c.payAccount||'—'}</td>
+          <td>${c.status||'활성'}</td>
+          <td>${c.memo||''}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="cl-row-btn" onclick="openCardModal(${i})">수정</button>
+            <button class="cl-row-btn del" onclick="deleteCard(${i})">삭제</button>
+          </td>
+        </tr>`)}`;
+}
+
+function openCardModal(idx){
+  _cardEditIdx = (typeof idx==='number') ? idx : null;
+  const C = _cardEditIdx!=null ? cardData[_cardEditIdx] : { status:'활성' };
+  document.getElementById('cl-modal-title').textContent = _cardEditIdx!=null ? '카드 수정' : '카드 추가';
+  document.getElementById('cl-form').innerHTML = html`${CARD_FIELDS.map(f=>{
+    const v = C[f.k]!=null ? C[f.k] : '';
+    let inp;
+    if(f.type==='select'){
+      inp = html`<select data-k="${f.k}">${f.opts.map(o=>html`<option value="${o}"${String(v)===o?' selected':''}>${o||'(선택)'}</option>`)}</select>`;
+    } else {
+      inp = html`<input type="${f.type==='num'?'number':'text'}" data-k="${f.k}" value="${String(v)}">`;
+    }
+    return html`<label class="${[f.wide?'wide':'', f.star?'star':''].filter(Boolean).join(' ')}">${f.label}${inp}</label>`;
+  })}`;
+  document.getElementById('cl-modal').classList.remove('hidden');
+}
+function closeCardModal(){ document.getElementById('cl-modal').classList.add('hidden'); _cardEditIdx=null; }
+
+async function saveCardModal(){
+  if(typeof blockIfOffline==='function' && blockIfOffline('카드 원장 저장')) return;
+  const obj={};
+  document.getElementById('cl-form').querySelectorAll('[data-k]').forEach(el=>{
+    const k=el.dataset.k, f=CARD_FIELDS.find(x=>x.k===k);
+    obj[k] = f.type==='num' ? cardNum(el.value) : (el.value||'').trim();
+  });
+  if(!obj.cardNo){ alert('카드번호를 입력하세요.'); return; }
+  if(!(obj.payDay>=1 && obj.payDay<=31)){ alert('결제일은 1~31 사이로 입력하세요.'); return; }
+  /* 집계 귀속이 대시보드가 모르는 값이면 그 카드 사용내역이 집계표에서 조용히 빠진다
+     ('세종' 을 추가할 때 겪은 것과 같은 문제) — 저장은 하되 경고한다. */
+  if(obj.alias && typeof normalizeCCTxAlias==='function' && !normalizeCCTxAlias(obj.alias))
+    alert('⚠ ' + obj.alias + ' 는 집계표에 없는 이름입니다.\n법인카드 탭 상단 [+ 카드명칭] 으로 열을 먼저 만들어야 이 카드 사용액이 집계에 잡힙니다.');
+  const backup = structuredClone(cardData);
+  if(_cardEditIdx!=null) cardData[_cardEditIdx]=obj; else cardData.push(obj);
+  const wasEdit = _cardEditIdx!=null;
+  closeCardModal();
+  const { error } = await saveCardData();
+  if(error){ cardData=backup; alert('저장 실패: '+(error.message||error)); }
+  else if(typeof logAudit==='function') logAudit('data_modify', '카드 원장 ' + (wasEdit?'수정':'추가') + ': ' + (obj.issuer||'') + ' ' + (obj.alias||'') + ' ' + (obj.cardNo||''));
+  renderCardLedger();
+}
+
+async function deleteCard(idx){
+  if(typeof blockIfOffline==='function' && blockIfOffline('카드 원장 삭제')) return;
+  const C=cardData[idx]; if(!C) return;
+  if(!confirm((C.issuer||'') + ' ' + (C.alias||'') + ' ' + (C.cardNo||'') + '\n\n이 카드를 원장에서 삭제할까요?\n(적재된 사용내역은 그대로 남습니다)')) return;
+  const backup=structuredClone(cardData);
+  cardData.splice(idx,1);
+  const { error } = await saveCardData();
+  if(error){ cardData=backup; alert('삭제 실패: '+(error.message||error)); }
+  renderCardLedger();
+}
+
+document.getElementById('cl-add-btn')?.addEventListener('click', ()=>openCardModal(null));
+document.getElementById('cl-modal-cancel')?.addEventListener('click', closeCardModal);
+document.getElementById('cl-modal-save')?.addEventListener('click', saveCardModal);
+
 const LOAN_FIELDS = [
   { k:'bank',       label:'금융기관',     type:'text',   xls:['금융기관'] },
   { k:'account',    label:'대출계좌',     type:'text',   xls:['대출계좌','계좌번호'] },
@@ -11263,6 +11513,7 @@ function renderCorporateCardTab() {
   updateCCTxAliasFilter();                  // 집계표가 월 선택기를 읽으므로 선택기 갱신이 먼저다
   renderCorpCardTab();                      // 상단 카드×계정과목 집계 표
   renderCCTxTable();
+  try{ renderCardLedger(); }catch(e){ console.warn('[card] 원장 렌더 실패', e); }   // 카드 원장(card_data)
 }
 
 function addCorpCardColumn() {

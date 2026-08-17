@@ -242,7 +242,10 @@ function check(file) {
           misuse.push({ line: e.line, kind: '이중 이스케이프', expr: txt.slice(0, 80) });
         // (2) .join('') — 조각들이 문자열로 합쳐진 뒤 통째로 이스케이프돼 태그가 그대로 보인다.
         //     html`` 은 배열을 알아서 이어붙이므로 .join('') 을 빼야 한다.
-        else if (/\.join\s*\(\s*['"]\s*['"]\s*\)\s*$/.test(txt))
+        //     ⚠ **빈 문자열로 잇는 것만** 잡는다. `.join(' ')`(공백)은 class 속성처럼
+        //     구분자가 꼭 필요한 정상 용법이다 — 종전 `['"]\s*['"]` 는 \s* 가 공백을 삼켜
+        //     `.join(' ')` 까지 오탐했다(2026-08-17). 역참조로 따옴표가 맞붙은 경우만 본다.
+        else if (/\.join\s*\(\s*(['"])\1\s*\)\s*$/.test(txt))
           misuse.push({ line: e.line, kind: "불필요한 .join('')", expr: txt.slice(0, 80) });
       }
       continue;
