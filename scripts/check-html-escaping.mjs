@@ -198,9 +198,23 @@ function check(file) {
   const src = fs.readFileSync(abs, 'utf8');
   const templates = scanTemplates(src);
   const violations = [];
+  const misuse = [];
 
   for (const t of templates) {
-    if (t.tagged) continue;                        // html`` → 자동 이스케이프
+    if (t.tagged) {
+      // html`` 로 옮기다가 나오는 두 가지 실수 — 눈으로 잡지 말고 여기서 잡는다
+      for (const e of t.exprs) {
+        const txt = e.text.replace(/\s+/g, ' ').trim();
+        // (1) 이중 이스케이프: html`` 안에서 또 감싸면 'A&B' 가 'A&amp;B' 로 보인다
+        if (/\b(?:escapeHtml|_acEsc|safeText)\s*\(/.test(txt))
+          misuse.push({ line: e.line, kind: '이중 이스케이프', expr: txt.slice(0, 80) });
+        // (2) .join('') — 조각들이 문자열로 합쳐진 뒤 통째로 이스케이프돼 태그가 그대로 보인다.
+        //     html`` 은 배열을 알아서 이어붙이므로 .join('') 을 빼야 한다.
+        else if (/\.join\s*\(\s*['"]\s*['"]\s*\)\s*$/.test(txt))
+          misuse.push({ line: e.line, kind: "불필요한 .join('')", expr: txt.slice(0, 80) });
+      }
+      continue;
+    }
     if (!/<\/?[a-zA-Z]/.test(t.literal)) continue; // HTML 이 아닌 템플릿(로그·키 조립 등)은 대상 아님
     for (const e of t.exprs) {
       const txt = e.text.replace(/\s+/g, ' ').trim();
@@ -208,7 +222,7 @@ function check(file) {
       violations.push({ line: e.line, expr: txt.slice(0, 90) });
     }
   }
-  return { file, violations, templates };
+  return { file, violations, misuse, templates };
 }
 
 const audit = process.argv.includes('--audit');
@@ -217,7 +231,7 @@ const files = argFiles.length ? argFiles : TARGETS;   // 인자로 특정 파일
 let total = 0;
 
 for (const f of files) {
-  const { file, violations, templates } = check(f);
+  const { file, violations, misuse, templates } = check(f);
   // 마크업을 담은 템플릿만 모수로 잡는다(로그·키 조립용 템플릿은 제외).
   // 태그드 비율은 "구조적 방어가 어디까지 퍼졌는가"를 보는 지표다.
   const markup = templates.filter(t => /<\/?[a-zA-Z]/.test(t.literal));
@@ -233,6 +247,20 @@ for (const f of files) {
     total += violations.length;
     console.log(`  ❌ 이스케이프 누락 ${violations.length}건`);
     for (const v of violations) console.log(`     ${file}:${v.line}  \${${v.expr}}`);
+  }
+
+  if (misuse.length) {
+    total += misuse.length;
+    console.log(`  ❌ html\`\` 오용 ${misuse.length}건`);
+    for (const m of misuse) console.log(`     ${file}:${m.line}  [${m.kind}] \${${m.expr}}`);
+  }
+
+  if (process.argv.includes('--list')) {
+    // 값이 안 들어가는 정적 마크업은 html`` 로 바꿔도 얻는 게 없다 — 데이터가 꽂히는 것만 센다
+    const todo = markup.filter(t => !t.tagged && t.exprs.length).sort((a, b) => a.line - b.line);
+    const staticOnly = markup.filter(t => !t.tagged && !t.exprs.length).length;
+    console.log(`  — 전환 대상(값이 꽂히는 마크업) ${todo.length}개 / 정적 마크업 ${staticOnly}개는 대상 아님`);
+    console.log('    ' + todo.map(t => t.line).join(' '));
   }
 
   if (audit) {
