@@ -665,6 +665,10 @@
   <!-- 데이터 신선도 배지 (P0-2) — 소스별 커버리지·갱신 상태 -->
   <div id="data-freshness"></div>
 
+  <!-- 잔액 궤적 요약 (renderCashTrajBanner) — 차트는 아래에 있어 스크롤해야 보이므로
+       "언제 얼마까지 떨어지나" 한 줄을 여기 띄운다. 안전선은 일간 리포트와 같은 설정(dl_floor). -->
+  <div id="cash-traj-banner"></div>
+
   <!-- 은행 실잔액 대조 (P0 잔액 정합성) — bank_snapshot 있을 때만 렌더 -->
   <div id="bank-recon"></div>
 
@@ -715,7 +719,7 @@
 
   <div class="chart-row" style="grid-template-columns:1fr">
     <div class="chart-box">
-      <div class="chart-title">일별 현금 잔액 추이 <small id="chart-date-range"></small></div>
+      <div class="chart-title">일별 현금 잔액 추이·궤적 <small id="chart-date-range"></small></div>
       <div class="chart-wrap" style="height:240px"><canvas id="cashChart" role="img" aria-label="일별 현금잔액 추이 차트">현금잔액 추이</canvas></div>
     </div>
   </div>
@@ -4885,19 +4889,117 @@ function renderCashChart() {
     vals.push(last);
   }
 
-  document.getElementById('chart-date-range').textContent = `${minDate} ~ ${maxDate}`;
+  /* ── 여기서부터 궤적(예정 구간) ────────────────────────────────────
+   * 과거 90일 확정 잔액 오른쪽에 예정 거래를 이어 그린다. 별도 화면을 만들지 않은 이유:
+   * 같은 축·같은 잔액 개념이 이미 이 차트에 있어서, 따로 만들면 숫자가 두 개가 된다.
+   * 시작점은 위에서 구한 확정 잔액(last)이고 거기에 예정을 날짜순으로 누적한다 —
+   * computeCFBalances(잔액 열)와 같은 기준(INIT_CASH + FX_ADJ)이라 두 화면이 안 어긋난다.
+   * ⚠ 기한이 지난 예정(연체)은 미래가 아니라 **오늘 시점에 한꺼번에** 얹는다. 돈은 아직
+   *   안 나갔으므로 과거로 그리면 확정 구간을 왜곡한다(만기 예정 경고가 별도로 알린다). */
+  const HORIZON_DAYS = 56;                    // 8주
+  const futEnd = (() => { const d = new Date(maxDate+'T00:00:00'); d.setDate(d.getDate()+HORIZON_DAYS); return d.toISOString().slice(0,10); })();
+  const futDates = [];
+  for (let d = new Date(maxDate+'T00:00:00'); ; ) {
+    d.setDate(d.getDate()+1);
+    const k = d.toISOString().slice(0,10);
+    if (k > futEnd) break;
+    futDates.push(k);
+  }
+  const planRows = cfData.filter(r => r.status === '입금 예정' || r.status === '지출 예정');
+  const planDelta = {};                        // 날짜 → 순증감
+  let overdueSum = 0, overdueN = 0;
+  for (const r of planRows) {
+    const v = (r.status === '입금 예정') ? (r.in || 0) : -(r.out || 0);
+    if (!r.date || r.date <= maxDate) { overdueSum += v; overdueN++; continue; }   // 연체 → 오늘로
+    if (r.date > futEnd) continue;
+    planDelta[r.date] = (planDelta[r.date] || 0) + v;
+  }
+  const projStart = last + overdueSum;         // last = 기준일 확정 잔액
+  const projVals = [];
+  let run = projStart;
+  for (const d of futDates) { run += (planDelta[d] || 0); projVals.push(run); }
 
-  const skip = Math.max(1, Math.floor(labels.length/20));
+  const allLabels = labels.concat(futDates.map(d => d.slice(5)));
+  const nPast = vals.length;
+  // 확정: 과거 구간만 값, 이후 null / 예정: 경계에서 확정 끝값을 물려 선이 끊기지 않게 한다
+  const actualSeries = vals.concat(futDates.map(() => null));
+  const projSeries   = vals.map((_, i) => (i === nPast - 1 ? projStart : null)).concat(projVals);
+
+  const floor = (typeof dlFloor === 'function') ? dlFloor() : 0;
+  const floorSeries = floor > 0 ? allLabels.map(() => floor) : null;
+
+  // 최저점(예정 구간 기준) — 여기가 자금 판단의 핵심이라 점으로 강조하고 툴팁에 표시한다
+  let lowIdx = -1, lowVal = Infinity;
+  projVals.forEach((v, i) => { if (v < lowVal) { lowVal = v; lowIdx = i; } });
+  const lowLabelIdx = lowIdx >= 0 ? nPast + lowIdx : -1;
+
+  document.getElementById('chart-date-range').textContent =
+    `${minDate} ~ ${maxDate} 확정 · ~${futEnd} 예정` + (overdueN ? ` (연체 예정 ${overdueN}건은 기준일에 반영)` : '');
+
+  const datasets = [
+    { label: '확정 잔액', data: actualSeries, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)',
+      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840',
+      fill: true, tension: 0.3, spanGaps: false },
+    { label: '예정 포함(추정)', data: projSeries, borderColor: '#314840', borderDash: [6,4],
+      backgroundColor: 'rgba(49,72,64,0.05)', borderWidth: 1.5, fill: true, tension: 0.2,
+      pointRadius: ctx2 => (ctx2.dataIndex === lowLabelIdx ? 5 : 0),
+      pointBackgroundColor: '#C24A38', pointBorderColor: '#C24A38',
+      pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
+  ];
+  if (floorSeries) datasets.push(
+    { label: '안전선', data: floorSeries, borderColor: '#9BA79F', borderDash: [2,4], borderWidth: 2,
+      pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 });
+
+  /* 안전선 하회 구간 음영 — Chart.js annotation 플러그인이 없어 직접 그린다.
+     예정 구간에서 안전선을 밑도는 x 범위를 옅은 붉은 띠로 덮는다. */
+  const belowBandPlugin = {
+    id: 'belowBand',
+    beforeDatasetsDraw(chart) {
+      if (!(floor > 0) || lowIdx < 0 || lowVal >= floor) return;
+      const { ctx: c, chartArea: a, scales } = chart;
+      let from = -1;
+      for (let i = 0; i < projVals.length; i++) {
+        const below = projVals[i] < floor;
+        if (below && from < 0) from = i;
+        if ((!below || i === projVals.length - 1) && from >= 0) {
+          const to = below ? i : i - 1;
+          const x1 = scales.x.getPixelForValue(nPast + from);
+          const x2 = scales.x.getPixelForValue(nPast + to);
+          c.save();
+          c.fillStyle = 'rgba(194,74,56,0.09)';
+          c.fillRect(x1, a.top, Math.max(2, x2 - x1), a.bottom - a.top);
+          c.restore();
+          from = -1;
+        }
+      }
+    }
+  };
+
   cashChartInst = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [{ label: '현금잔액', data: vals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840', fill: true, tension: 0.3 }] },
+    data: { labels: allLabels, datasets },
+    plugins: [belowBandPlugin],
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: { display: true, position: 'bottom',
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478', usePointStyle: false } },
         tooltip: {
-          callbacks: { label: c => '잔액: ₩' + fmt(c.raw) },
+          callbacks: {
+            label: c2 => {
+              if (c2.raw === null || c2.raw === undefined) return null;
+              const base = c2.dataset.label + ': ₩' + fmt(c2.raw);
+              return (c2.dataIndex === lowLabelIdx && c2.datasetIndex === 1) ? base + '  ← 최저' : base;
+            },
+            afterBody: items => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined || i < nPast) return '';
+              const d = futDates[i - nPast];
+              const dl = planDelta[d];
+              return dl ? `당일 변동 ${dl >= 0 ? '+' : ''}${fmt(dl)}` : '';
+            }
+          },
           backgroundColor: 'rgba(255,255,255,0.96)',
           titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
@@ -4909,6 +5011,43 @@ function renderCashChart() {
       }
     }
   });
+
+  /* 궤적 요약 — 차트는 스크롤해야 보이므로 핵심 한 줄을 KPI 아래에 따로 띄운다(renderCashTrajBanner) */
+  _cashTraj = { start: projStart, floor, lowVal, lowDate: lowIdx >= 0 ? futDates[lowIdx] : '',
+                end: projVals.length ? projVals[projVals.length-1] : projStart, endDate: futEnd,
+                belowDays: floor > 0 ? projVals.filter(v => v < floor).length : 0,
+                overdueN, overdueSum, planN: planRows.length };
+  try { renderCashTrajBanner(); } catch (e) { console.warn('[traj] 배너 실패', e); }
+}
+
+/* 궤적 요약 배너 — "언제 얼마까지 떨어지나" 를 첫 화면에서 바로 보게 한다.
+ * 대표님 지시의 본체가 이 한 줄이다(잔액 궤적 → 부족 시점 → 조달 판단). */
+let _cashTraj = null;
+function renderCashTrajBanner(){
+  const el = document.getElementById('cash-traj-banner');
+  if (!el || !_cashTraj) return;
+  const t = _cashTraj;
+  if (!t.planN) { el.innerHTML = ''; return; }        // 예정이 없으면 궤적이 무의미
+  const hit = t.floor > 0 && t.lowVal < t.floor;
+  const eok = v => (Number(v||0)/1e8).toFixed(2);
+  const dday = t.lowDate ? Math.round((Date.parse(t.lowDate+'T00:00:00') - Date.parse(todayKST()+'T00:00:00'))/86400000) : null;
+  el.innerHTML = html`
+    <div class="chart-box" style="margin-bottom:20px;border-left:3px solid ${hit?'var(--red)':'var(--green)'};background:${hit?'var(--red2)':'var(--green2)'}">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:700;color:${hit?'var(--red)':'var(--green)'}">
+          ${hit ? '⚠ 8주 안에 안전선을 밑돕니다' : '✅ 8주 안에는 안전선을 지킵니다'}</span>
+        <span style="font-size:12px;color:var(--text2)">
+          최저 <b style="font-family:var(--mono)">${fmt(t.lowVal)}</b>
+          ${t.lowDate ? `· ${t.lowDate}${dday!==null?` (${dday>=0?'D+'+dday:'지남'})`:''}` : ''}
+          ${t.floor>0 ? `· 안전선 ${eok(t.floor)}억` : ''}
+          ${hit ? html`· <b style="color:var(--red)">${eok(t.floor-t.lowVal)}억 부족</b> · ${t.belowDays}일간` : ''}
+        </span>
+        <span style="margin-left:auto;font-size:11.5px;color:var(--text3)">
+          예정 ${t.planN}건 반영 · ${t.endDate} 예상 ${fmt(t.end)}
+          ${t.overdueN ? ` · 연체 예정 ${t.overdueN}건 기준일 반영` : ''}
+        </span>
+      </div>
+    </div>`;
 }
 
 function renderDonutChart() {
@@ -5291,7 +5430,13 @@ function makeCfChronoCompare(rows) {
 function computeCFBalances() {
   const sorted = [...cfData].sort(makeCfChronoCompare(cfData));
   const balances = new Map();
-  let real = INIT_CASH, pending = 0;
+  /* ⚠ 외화 환산손익(FX_ADJ)을 얹는다 — 2026-08-18 변경. 종전엔 뺐는데(과거 시점에 오늘 기준
+   * 평가손익을 얹으면 과거가 왜곡된다는 이유) 그러면 **잔액 열만 KPI·추이 차트와 어긋난다.**
+   * 추이 차트(renderCashChart)는 이미 같은 절충을 택해 FX_ADJ 를 더하고 있고, 궤적을 그 차트에
+   * 이어 그리기로 했으므로 기준이 하나여야 한다. 숫자가 두 개면 사람이 안 믿는다(대출잔액이
+   * 세 군데서 달랐던 문제와 같은 구조). 상수를 더하는 것이라 인접 행 역산은 영향 없다. */
+  computeFxAdj();
+  let real = INIT_CASH + FX_ADJ, pending = 0;
   for (const r of sorted) {
     if (r.status === '실제 입금')      { real += (r.in  || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
     else if (r.status === '실제 지출') { real -= (r.out || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
