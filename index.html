@@ -191,15 +191,25 @@
   @media (max-width: 1100px) { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 460px)  { .corp-card-grid.corp-card-grid-8 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  /* 9장(2026-08-17 '세종' 추가). 9 = 3×3 이라 좁아지면 3열로 떨어뜨려 마지막 줄이 안 남게 한다.
+  /* 9장(2026-08-17 '세종' 추가) — **개인 4명 / 조직 5개를 각각 한 줄로** 나눈다(2026-08-17 사용자 지정).
+     5열로 두고 1본부(조직 첫 장)에 강제 줄바꿈을 걸면
+       1줄 = 하경수·김현민·박우현·문성삼 (+빈칸 1)
+       2줄 = 1본부·2본부·IL·SO·세종
+     이 되어 딥그린(개인)/라이트그린(조직) 색 덩어리가 줄 단위로 갈린다.
      ⚠ .corp-card-grid.corp-card-grid-9(0,2,0)가 기본 .corp-card-grid(0,1,0)를 항상 이기므로
         중간 구간도 여기서 전부 다시 써야 한다(8장 때 겪은 것과 같은 특정성 함정). */
-  .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(9, minmax(0, 1fr)); }
-  /* 9열은 1320px 이상에서만 — 그 아래로 가면 칸이 ~125px 로 좁아져 8자리 금액이 두 줄로 깨진다
-     (8장 때 900px 에서 겪은 것과 같은 문제라 여유를 크게 잡았다). */
-  @media (max-width: 1320px) { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
-  @media (max-width: 900px)  { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 460px)  { .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .corp-card-grid.corp-card-grid-9 .corp-card-rowbreak { grid-column-start: 1; }
+  /* 좁아지면 3열·2열로 떨어뜨리고 **강제 줄바꿈은 푼다** — 안 풀면 4개짜리 줄 뒤에 빈 줄이
+     남아 카드가 띄엄띄엄 흩어진다(3열이면 하경수·김현민·박우현 / 문성삼만 / 1본부… 꼴). */
+  @media (max-width: 900px) {
+    .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .corp-card-grid.corp-card-grid-9 .corp-card-rowbreak { grid-column-start: auto; }
+  }
+  @media (max-width: 460px) {
+    .corp-card-grid.corp-card-grid-9 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .corp-card-grid.corp-card-grid-9 .corp-card-rowbreak { grid-column-start: auto; }
+  }
   /* 법인카드 탭 사용현황 표 */
   .corp-table-wrap { overflow: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
   .corp-usage-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -695,7 +705,7 @@
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">김현민</div><div class="corp-card-value" id="corp-card-kim">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">박우현</div><div class="corp-card-value" id="corp-card-park">0</div></div>
       <div class="corp-mini-card corp-person-card"><div class="corp-card-label">문성삼</div><div class="corp-card-value" id="corp-card-moon">0</div></div>
-      <div class="corp-mini-card corp-code-card"><div class="corp-card-label">1본부</div><div class="corp-card-value" id="corp-card-hq1">0</div></div>
+      <div class="corp-mini-card corp-code-card corp-card-rowbreak"><div class="corp-card-label">1본부</div><div class="corp-card-value" id="corp-card-hq1">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">2본부</div><div class="corp-card-value" id="corp-card-hq2">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">IL</div><div class="corp-card-value" id="corp-card-il">0</div></div>
       <div class="corp-mini-card corp-code-card"><div class="corp-card-label">SO</div><div class="corp-card-value" id="corp-card-so">0</div></div>
