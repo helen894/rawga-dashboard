@@ -836,7 +836,6 @@
       <option value="done">분류완료(중+대)</option>
     </select>
     <button class="btn" id="cf-autoclass-btn" style="white-space:nowrap;color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)" title="중분류 미분류 행을 학습된 매핑으로 자동 추천 → 검토 후 적용">✨ 자동분류 추천</button>
-    <button class="btn" id="cf-overdue-btn" style="white-space:nowrap;color:var(--amber);border-color:var(--amber)" title="보고기준일 또는 오늘 이하인 예정 거래 목록 확인 및 전환">⚠ 만기 예정 확인</button>
   </div>
 
   <!-- 금액 범위 필터 -->
@@ -847,6 +846,13 @@
     <input type="number" id="cf-amount-max" placeholder="최댓값" min="0" style="width:120px">
     <button class="btn sm" id="cf-filter-reset-btn" style="color:var(--text2);font-size:11px">초기화</button>
   </div>
+
+  <!-- 만기 지난 예정 거래 경고 (renderCFOverdueWarn) — 알림만, 전환 버튼 없음.
+       종전 '⚠ 만기 예정 확인 → 실제 전환' 버튼은 2026-08-17 제거했다. 그 기능은 예정 행의 status 를
+       제자리에서 '실제' 로 바꾸는데, 클로브 자동적재가 같은 거래를 clobe_id 를 달고 **별도 행으로 또**
+       넣으므로(중복판정이 clobe_id 로만 비교 → 예정 행엔 clobe_id 가 없어 안 걸림) 실제 행이 두 개가 되어
+       구분조차 안 됐다. 올바른 처리는 '전환' 이 아니라 실제 거래 적재 확인 후 **예정 행 삭제**다. -->
+  <div id="cf-overdue-warn"></div>
 
   <!-- 일괄 작업 액션 바 -->
   <div id="cf-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.22);border-radius:8px">
@@ -2104,21 +2110,6 @@
       <button class="btn" id="cf-dup-skip-btn" style="color:var(--text2)">건너뛰기</button>
       <button class="btn green" id="cf-dup-overwrite-btn">덮어쓰기</button>
       <button class="btn" id="cf-dup-cancel-btn" style="color:var(--red);margin-left:auto">취소</button>
-    </div>
-  </div>
-</div>
-
-<!-- ======== 만기 지난 예정 거래 확인 모달 ======== -->
-<div class="modal-backdrop hidden" id="cf-overdue-modal">
-  <div class="modal" style="width:660px;max-width:96vw">
-    <div class="modal-header">
-      <span class="modal-title">⚠ 만기 지난 예정 거래 확인</span>
-      <button class="modal-close" onclick="closeCFOverdueModal()">×</button>
-    </div>
-    <div id="cf-overdue-body" style="padding:4px 0 8px"></div>
-    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
-      <button class="btn green" id="cf-overdue-apply-btn" onclick="applyOverduePlannedConvert()">실제 전환</button>
-      <button class="btn" onclick="closeCFOverdueModal()">취소</button>
     </div>
   </div>
 </div>
@@ -4149,139 +4140,6 @@ function autoUpdateStatus() {
 }
 
 /* ===== 만기 지난 예정 거래 확인 / 전환 모달 ===== */
-function openCFOverdueModal() {
-  const today   = todayKST();
-  const cutoff  = refDate >= today ? refDate : today;
-  const esc     = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const targets = cfData
-    .filter(r => (r.status === '입금 예정' || r.status === '지출 예정') && (r.date || '') <= cutoff)
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-
-  const modal    = document.getElementById('cf-overdue-modal');
-  const body     = document.getElementById('cf-overdue-body');
-  const applyBtn = document.getElementById('cf-overdue-apply-btn');
-  if (!modal || !body) return;
-
-  if (!targets.length) {
-    body.innerHTML =
-      `<div style="padding:20px;text-align:center;color:var(--text2);font-size:13px">
-         ✅ 기준일(<strong>${cutoff}</strong>) 이하의 예정 거래가 없습니다.
-       </div>`;
-    if (applyBtn) applyBtn.style.display = 'none';
-    modal.classList.remove('hidden');
-    return;
-  }
-  if (applyBtn) applyBtn.style.display = '';
-
-  const trs = targets.map(r => {
-    const isIn  = r.status === '입금 예정';
-    const amt   = isIn ? (r.in || 0) : (r.out || 0);
-    const after = isIn ? '실제 입금' : '실제 지출';
-    const col   = isIn ? 'var(--green)' : 'var(--red)';
-    return `<tr>
-      <td style="text-align:center;padding:5px 8px">
-        <input type="checkbox" class="cf-overdue-chk" data-id="${esc(r._id)}" checked style="cursor:pointer;accent-color:var(--blue)">
-      </td>
-      <td style="padding:5px 8px;font-size:12px;white-space:nowrap">${esc(r.date || '')}</td>
-      <td style="padding:5px 8px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.desc || '')}">${esc(r.desc || '-')}</td>
-      <td style="padding:5px 8px;font-size:12px;text-align:right;font-family:var(--mono,monospace);white-space:nowrap">${amt.toLocaleString()}원</td>
-      <td style="padding:5px 8px;font-size:12px;color:var(--text2);white-space:nowrap">${esc(r.status)}</td>
-      <td style="padding:5px 8px;font-size:12px;font-weight:600;color:${col};white-space:nowrap">${after}</td>
-    </tr>`;
-  }).join('');
-
-  body.innerHTML =
-    `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;padding:8px 10px;background:var(--bg3);border-radius:6px;line-height:1.7">
-       기준일 <strong style="color:var(--text)">${cutoff}</strong> 이하의 예정 거래 <strong style="color:var(--text)">${targets.length}건</strong>이 있습니다.
-       <span style="color:var(--text3);margin-left:6px">(refDate: ${refDate} / 오늘: ${today})</span>
-     </div>
-     <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px">
-       <label style="font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;user-select:none">
-         <input type="checkbox" id="cf-overdue-all" checked
-           onchange="document.querySelectorAll('.cf-overdue-chk').forEach(c=>{c.checked=this.checked}); updateCFOverdueSummary()">
-         전체 선택/해제
-       </label>
-     </div>
-     <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:7px">
-       <table style="width:100%;border-collapse:collapse">
-         <thead>
-           <tr style="background:var(--bg3)">
-             <th style="width:38px;padding:6px 8px;position:sticky;top:0;background:var(--bg3);z-index:1"></th>
-             <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--bg3);z-index:1">거래일</th>
-             <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--bg3);z-index:1">거래내용</th>
-             <th style="padding:6px 8px;text-align:right;font-size:11px;color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--bg3);z-index:1">금액</th>
-             <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--bg3);z-index:1">현재 상태</th>
-             <th style="padding:6px 8px;text-align:left;font-size:11px;color:var(--text2);font-weight:600;position:sticky;top:0;background:var(--bg3);z-index:1">전환 후</th>
-           </tr>
-         </thead>
-         <tbody>${trs}</tbody>
-       </table>
-     </div>
-     <div id="cf-overdue-summary" style="margin-top:10px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:12px;line-height:1.8"></div>`;
-
-  body.querySelectorAll('.cf-overdue-chk').forEach(chk => {
-    chk.addEventListener('change', updateCFOverdueSummary);
-  });
-  updateCFOverdueSummary();
-  modal.classList.remove('hidden');
-}
-
-function updateCFOverdueSummary() {
-  const summary = document.getElementById('cf-overdue-summary');
-  const allChk  = document.getElementById('cf-overdue-all');
-  const boxes   = [...document.querySelectorAll('.cf-overdue-chk')];
-  const checked = boxes.filter(c => c.checked);
-  if (!summary) return;
-  if (allChk) {
-    allChk.indeterminate = checked.length > 0 && checked.length < boxes.length;
-    if (!allChk.indeterminate) allChk.checked = checked.length === boxes.length;
-  }
-  if (!checked.length) {
-    summary.innerHTML = `<span style="color:var(--text2)">항목을 선택하면 전환 내용이 표시됩니다.</span>`;
-    return;
-  }
-  let inCnt = 0, inAmt = 0, outCnt = 0, outAmt = 0;
-  for (const chk of checked) {
-    const r = cfData.find(x => x._id === chk.dataset.id);
-    if (!r) continue;
-    if (r.status === '입금 예정') { inCnt++;  inAmt  += (r.in  || 0); }
-    else                           { outCnt++; outAmt += (r.out || 0); }
-  }
-  const parts = [];
-  if (inCnt)  parts.push(`<span style="color:var(--green)">입금 예정→실제 입금: ${inCnt}건 (${inAmt.toLocaleString()}원)</span>`);
-  if (outCnt) parts.push(`<span style="color:var(--red)">지출 예정→실제 지출: ${outCnt}건 (${outAmt.toLocaleString()}원)</span>`);
-  summary.innerHTML = `<strong>전환 ${checked.length}건</strong> &nbsp;— &nbsp;` + parts.join(' &nbsp;|&nbsp; ');
-}
-
-async function applyOverduePlannedConvert() {
-  const checked = [...document.querySelectorAll('.cf-overdue-chk:checked')];
-  if (!checked.length) { alert('전환할 항목을 선택해주세요.'); return; }
-  const idSet   = new Set(checked.map(c => c.dataset.id));
-  const targets = cfData.filter(r => idSet.has(r._id));
-  let inCnt = 0, inAmt = 0, outCnt = 0, outAmt = 0;
-  for (const r of targets) {
-    if (r.status === '입금 예정') { inCnt++;  inAmt  += (r.in  || 0); }
-    else                           { outCnt++; outAmt += (r.out || 0); }
-  }
-  const lines = [];
-  if (inCnt)  lines.push(`입금 예정 → 실제 입금: ${inCnt}건 (${inAmt.toLocaleString()}원)`);
-  if (outCnt) lines.push(`지출 예정 → 실제 지출: ${outCnt}건 (${outAmt.toLocaleString()}원)`);
-  if (!confirm(`아래 내용으로 상태를 변경하고 저장하시겠습니까?\n\n${lines.join('\n')}\n\n합계 ${targets.length}건`)) return;
-
-  cfData = cfData.map(r => {
-    if (!idSet.has(r._id)) return r;
-    return { ...r, status: r.status === '입금 예정' ? '실제 입금' : '실제 지출' };
-  });
-  saveDataExplicit();
-  closeCFOverdueModal();
-  renderAll();
-  showToast(`✅ ${targets.length}건 전환 완료 (입금 ${inCnt}건 / 지출 ${outCnt}건)`, 'green');
-}
-
-function closeCFOverdueModal() {
-  document.getElementById('cf-overdue-modal')?.classList.add('hidden');
-}
-
 function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return new Intl.NumberFormat('ko-KR').format(Math.round(n));
@@ -5351,7 +5209,46 @@ function computeCFBalances() {
   return balances;
 }
 
+/* 만기 지난 예정 거래 경고 — 기한이 지났는데 아직 '예정' 으로 남은 행을 알린다.
+ * **알림만 한다. 상태를 바꾸는 버튼은 두지 않는다**(위 HTML 주석 참고 — '실제 전환' 은 중복을 만든다).
+ * 왜 필요한가: 잔액 열이 예정 행을 누적하므로, 실제 거래가 적재된 뒤에도 예정 행이 남아 있으면
+ * 그 금액만큼 잔액이 이중 계상된다. 예정↔실제 자동 매칭·소멸 로직은 2026-08-17 사용자 지시로 보류 중이라
+ * 그때까지는 이 경고를 보고 사람이 예정 행을 지우는 것이 유일한 통제 수단이다.
+ * 기준일은 refDate 와 오늘 중 **늦은 쪽** — 과거를 조회 중일 때 아직 오지 않은 예정까지 연체로 몰지 않는다. */
+function renderCFOverdueWarn() {
+  const el = document.getElementById('cf-overdue-warn');
+  if (!el) return;
+  const today  = todayKST();
+  const cutoff = refDate >= today ? refDate : today;
+  const rows = cfData.filter(r =>
+    (r.status === '입금 예정' || r.status === '지출 예정') && (r.date || '') <= cutoff);
+  if (!rows.length) { el.innerHTML = ''; return; }
+
+  const inAmt  = rows.filter(r => r.status === '입금 예정').reduce((s, r) => s + (r.in  || 0), 0);
+  const outAmt = rows.filter(r => r.status === '지출 예정').reduce((s, r) => s + (r.out || 0), 0);
+  const oldest = rows.reduce((a, r) => (!a || r.date < a ? r.date : a), '');
+  const bits = [];
+  if (inAmt)  bits.push(`입금 예정 <span style="color:var(--green);font-family:var(--mono)">+${fmt(inAmt)}</span>`);
+  if (outAmt) bits.push(`지출 예정 <span style="color:var(--red);font-family:var(--mono)">-${fmt(outAmt)}</span>`);
+
+  el.innerHTML =
+    `<div class="chart-box" style="margin-bottom:12px;border-left:3px solid var(--amber);background:var(--amber2)">
+       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+         <span style="font-size:13px;font-weight:700;color:var(--amber)">
+           ⚠ 기한이 지난 예정 거래 ${rows.length}건</span>
+         <span style="font-size:12px;color:var(--text2)">${bits.join(' · ')}</span>
+         <span style="font-size:11.5px;color:var(--text3)">가장 오래된 건 ${escapeHtml(oldest)} · 기준 ${escapeHtml(cutoff)}</span>
+       </div>
+       <div style="margin-top:7px;font-size:11.5px;color:var(--text2);line-height:1.6">
+         실제 거래가 이미 들어왔다면 <b style="color:var(--text)">그 예정 행을 삭제</b>해 주세요 —
+         남겨 두면 같은 돈이 두 번 잡혀 <b style="color:var(--text)">잔액 열이 그만큼 틀어집니다</b>.
+         (자동 적재된 실제 거래와 예정 행은 서로 다른 행이라 저절로 합쳐지지 않습니다.)
+       </div>
+     </div>`;
+}
+
 function renderCFTable() {
+  renderCFOverdueWarn();
   cfFiltered = getFilteredCF();
   const total = cfFiltered.length;
   const pages = Math.max(1, Math.ceil(total / cfPerPage));
@@ -5785,7 +5682,6 @@ document.getElementById('cf-unassigned-btn').addEventListener('change', e => {
   cfPage = 1;
   renderCFTable();
 });
-document.getElementById('cf-overdue-btn').addEventListener('click', openCFOverdueModal);
 
 // ── 중분류 자동분류 추천 (레벨1: 정규화/부분일치 → 검토 후 적용 + 학습) ──
 let _autoClassRows = [];
