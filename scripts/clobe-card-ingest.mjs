@@ -349,4 +349,14 @@ if (!res.ok || out.ok === false) {
   console.error(`\n적재 실패 (HTTP ${res.status}):`, JSON.stringify(out).slice(0, 300));
   process.exit(3);
 }
-console.log(`\n적재 완료 — 추가 ${out.added} · 중복 skip ${out.skipped} · 카드내역 총 ${out.total}건`);
+console.log(`
+적재 완료 — 추가 ${out.added} · 금액 갱신 ${out.amended ?? 0} · 중복 skip ${out.skipped} · 카드내역 총 ${out.total}건`);
+/* 금액 갱신은 조용히 넘기면 안 된다 — 이미 적재된 과거 숫자가 바뀌는 일이라 사람이 알아야 한다.
+   해외 결제 원화 확정액이 늦게 오는 게 정상 사유다(2026-08-18 확인). 국내 건이 바뀌면 이상 신호. */
+if (out.amended > 0) {
+  console.log('금액이 바뀐 건:');
+  for (const a of (out.amendments || []))
+    console.log(`   ${a.use_date}  ${String(a.merchant).slice(0, 28).padEnd(30)} ${won(a.before).padStart(11)} → ${won(a.after).padStart(11)}`);
+  const shown = (out.amendments || []).length;
+  if (shown < out.amended) console.log(`   … 외 ${out.amended - shown}건 (응답은 50건까지만 돌려준다)`);
+}

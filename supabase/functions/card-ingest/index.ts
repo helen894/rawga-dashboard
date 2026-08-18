@@ -22,6 +22,9 @@
  *
  * 세 가지 모드:
  *   • 적재  { secret, rows:  [{use_date, card_alias, card_no, merchant, billing_amount, memo, approval_id}] }
+ *     같은 approval_id 가 이미 있고 **billing_amount 만 달라졌으면 그 금액을 갱신**한다(amended).
+ *     해외 결제는 원화 확정액이 나중에 오기 때문 — 예전엔 무조건 skip 이라 낡은 금액이 남았다.
+ *     memo·card_alias 는 사람이 손본 값일 수 있어 갱신 대상이 아니다.
  *   • 수정  { secret, patch: [{approval_id | _id, memo?, billing_amount?}] }
  *     선택자는 approval_id 또는 _id. 수기 업로드분은 approval_id 가 없어 _id 로만 잡힌다
  *     (_id 는 inspect 로 확인). 금액 수정은 청구 확정액으로 맞출 때 쓴다.
@@ -308,11 +311,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const seenApproval = new Set(cur.map((r) => str(r.approval_id)).filter(Boolean));
+    /* approval_id → 기존 행. Set 이 아니라 Map 인 이유는 아래 '금액 갱신' 때문이다. */
+    const byApproval = new Map<string, any>();
+    for (const r of cur) { const a = str(r.approval_id); if (a) byApproval.set(a, r); }
     // 수기 업로드분(approval_id 없음)만 복합키 대상 — 위 주석의 오탈락 방지
     const seenComposite = new Set(cur.filter((r) => !str(r.approval_id)).map(compositeKey));
 
-    let added = 0, skipped = 0;
+    let added = 0, skipped = 0, amended = 0;
+    const amendments: Array<Record<string, unknown>> = [];
     const now = Date.now();
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -327,11 +333,31 @@ Deno.serve(async (req) => {
         approval_id:    str(r.approval_id),
       };
       if (!rec.use_date || rec.billing_amount <= 0) { skipped++; continue; }
-      if (rec.approval_id && seenApproval.has(rec.approval_id)) { skipped++; continue; }
+      if (rec.approval_id && byApproval.has(rec.approval_id)) {
+        /* ── 같은 승인건이 이미 있다: 금액이 달라졌으면 최신값으로 맞춘다 ──────────
+           **해외 결제는 원화 금액이 나중에 확정된다.** 최초엔 아주 작은 값으로 들어왔다가
+           환율이 잡히면서 바뀌는데, 예전에는 여기서 무조건 skip 해 낡은 금액이 영원히 남았다.
+           실측(2026-08-18): ANTHROPIC CLAUDE SUB 2,200 → 34,190 · TIRO BY THEPLATO 1,300 → 19,846.
+           7월 비씨 청구서 대조에서 드러났다.
+           ⚠ 금액만 고친다. memo(계정과목)·card_alias 는 사람이 손본 값일 수 있어 건드리지 않는다.
+           ⚠ 취소된 건은 여기 못 온다 — 적재 스크립트가 순액 0 을 빼고, 위 가드도 막는다.
+             즉 '적재 후에 취소된 건' 은 여전히 남는다(대조 스크립트가 유령으로 잡아준다). */
+        const prev = byApproval.get(rec.approval_id)!;
+        const before = num(prev.billing_amount);
+        if (before !== rec.billing_amount) {
+          prev.billing_amount = rec.billing_amount;
+          amendments.push({
+            approval_id: rec.approval_id, use_date: str(prev.use_date),
+            merchant: str(prev.merchant), before, after: rec.billing_amount,
+          });
+          amended++;
+        } else skipped++;
+        continue;
+      }
       const ck = compositeKey(rec);
       if (seenComposite.has(ck)) { skipped++; continue; }   // 수기 업로드분과 중복
       cur.push(rec);
-      if (rec.approval_id) seenApproval.add(rec.approval_id);
+      if (rec.approval_id) byApproval.set(rec.approval_id, rec);
       else seenComposite.add(ck);   // 방금 넣은 승인건까지 복합키에 넣으면 배치 안에서 또 오탈락한다
       added++;
     }
@@ -350,7 +376,7 @@ Deno.serve(async (req) => {
     });
     if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
 
-    return json({ ok: true, added, skipped, total: cur.length });
+    return json({ ok: true, added, skipped, amended, amendments: amendments.slice(0, 50), total: cur.length });
   } catch (e) {
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);
   }
