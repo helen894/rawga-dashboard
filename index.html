@@ -11011,7 +11011,7 @@ function generateCardPlanned(showToastMsg = true){
   const today = todayKST();
   const [ty, tm] = today.split('-').map(Number);
   const todayDay = Number(today.slice(8, 10));
-  let added = 0, updated = 0;
+  let added = 0, updated = 0, stamped = 0;
 
   for (const issuer of CARD_PLAN_ISSUERS) {
     /* 결제일은 카드사 안에서 같다(실측: 국민 15일·비씨 23일). 여러 장이면 첫 장 기준. */
@@ -11076,16 +11076,22 @@ function generateCardPlanned(showToastMsg = true){
            ⚠ card_est_amt 가 없는 행은 이 기능 이전에 만들어진 것이라 현재 금액을 생성값으로
              간주한다. 안 그러면 구 행이 영원히 갱신에서 빠진다(파이프가 하루밖에 안 됐으니
              사람이 고쳤을 가능성은 사실상 없다).
+           ⚠⚠ **스탬프는 값이 안 변해도 반드시 남긴다** (prev !== amt 조건). 안 그러면 계산값과
+             저장값이 우연히 같은 행은 스탬프 없이 남고, 나중에 사람이 실제 청구서 금액으로
+             고쳐도 보호가 안 걸려 다음 로드에 추정치로 되돌려버린다.
+             2026-08-18 비씨 8/24(추정 2,048,614 → 실제 청구 18,544,957) 반영하려다 발견했다.
+             그 행은 금액·근거가 모두 계산값과 일치해서 갱신이 한 번도 안 돌던 상태였다.
            ⚠ 갱신은 **토스트를 띄우지 않는다** — 페이지 열 때마다 뜨면 소음이다. */
         if (exist.status !== '지출 예정') continue;
         const cur  = Math.round(Number(exist.out) || 0);
         const prev = Math.round(Number(exist.card_est_amt) || 0);
         if (prev > 0 && prev !== cur) continue;             // 사람이 고친 금액은 그대로 둔다
-        if (cur !== amt || exist.card_basis !== basis) {
+        if (cur !== amt || exist.card_basis !== basis || prev !== amt) {
+          const changed = cur !== amt;
           exist.out = amt; exist.amount = -amt;
           exist.card_est_amt = amt;
           exist.card_basis = basis;
-          updated++;
+          if (changed) updated++; else stamped++;
         }
         continue;
       }
@@ -11106,11 +11112,12 @@ function generateCardPlanned(showToastMsg = true){
     }
   }
 
-  if (added > 0 || updated > 0) {
+  if (added > 0 || updated > 0 || stamped > 0) {
     if (added > 0) cfData.sort((a,b) => a.date.localeCompare(b.date));
-    saveData();
+    saveData();     // stamped 만 있어도 저장해야 한다 — 스탬프가 사람 수정을 지키는 근거다
   }
   if (updated > 0) console.log(`[card] 예정 금액 ${updated}건 갱신 (일할 환산은 매일 정확해진다)`);
+  if (stamped > 0) console.log(`[card] 예정 ${stamped}건에 생성값 스탬프 기록(금액 변화 없음)`);
   if (showToastMsg && added > 0)
     showToast(`💳 카드 대금 예정 ${added}건이 생성됐습니다 (추정치).`, 'green');
   return added;

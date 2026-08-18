@@ -117,6 +117,22 @@ setup(withNext(cardRow({ out:AVG }))); api.run(false);
 check('금액 갱신', find()?.out, EXPECT_PRORATE);
 check('card_est_amt 채움', find()?.card_est_amt, EXPECT_PRORATE);
 
+console.log('');
+console.log('[5b] 스탬프 없는 행을 사람이 고친 경우 — 보호돼야 한다');
+/* 시나리오: 파이프 계산값과 저장값이 같아 갱신이 안 일어난 행(= card_est_amt 미기록)을
+   사람이 실제 청구서 금액으로 고쳤다. 다음 로드에서 추정치로 되돌려지면 안 된다.
+   2026-08-18 비씨 8/24 실제 청구(18,544,957) 반영 때 드러난 구멍. */
+/* ⚠ 금액'과' 근거가 둘 다 계산값과 같아야 한다. 하나라도 다르면 갱신이 돌면서
+   스탬프가 찍혀 버그가 가려진다 — 실제 비씨 8/24 행이 바로 이 '완전 일치' 상태였다. */
+setup(withNext(cardRow({ out: EXPECT_PRORATE, basis: '2026-08 일할환산(16일)' })));
+api.run(false);                                      // 1회차 — 여기서 스탬프가 남아야 한다
+check('1회차에 스탬프 기록', find()?.card_est_amt, EXPECT_PRORATE);
+find().out = 18544957; find().amount = -18544957;    // 사람이 실제 청구서로 수정
+api.resetSaves(); api.run(false);                    // 2회차
+check('사람 수정값 유지', find()?.out, 18544957);
+check('되돌리지 않음', api.saves, 0);
+
+
 console.log('\n[6] 게이트 — 8월 5일이면 아직 3개월 평균');
 setup([], '2026-08-05'); api.run(false);
 const r6 = api.cf.find(r => r.card_bill_id==='card_국민' && r.date==='2026-09-15');
