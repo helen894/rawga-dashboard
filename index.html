@@ -9554,8 +9554,23 @@ function dlSetting(key, lsKey, dflt){
   const fromLocal = Number(localStorage.getItem(lsKey));
   return fromLocal > 0 ? fromLocal : dflt;
 }
+/* ⚠ 빈 입력칸이 **이미 아는 값을 덮어쓰지 못하게** 한다.
+ * 2026-08-18 사고: 보고 범위만 1 로 바꾸려고 '다시 계산' 을 눌렀는데, 안전선 입력칸이 비어 있어
+ * dlFloor() 가 기본값 15억까지 떨어졌고 그 값이 서버에 저장돼 10억 설정이 조용히 날아갔다.
+ * 한 항목을 고치려다 다른 항목이 바뀌면 안 된다 — 기존 값을 바탕에 깔고, **입력칸에 실제로 값이
+ * 있을 때만** 덮어쓴다. 아무 값도 없을 때만 기본값을 쓴다. */
 async function saveDailySettings(){
-  dailySettings = { floor: dlFloor(), thr: dlThr(), days: dlDays() };
+  const next = { ...(dailySettings || {}) };
+  const numOf = id => { const el = document.getElementById(id); return el && el.value !== '' ? Number(el.value) : NaN; };
+  const fl = numOf('dlrpt-floor');
+  if (fl > 0) next.floor = fl; else if (!(Number(next.floor) > 0)) next.floor = dlFloor();
+  const th = numOf('dlrpt-thr');
+  if (th > 0) next.thr = th;   else if (!(Number(next.thr)   > 0)) next.thr   = dlThr();
+  /* 보고 범위는 0(오늘만)이 유효값이라 >0 으로 못 거른다 — 비었는지로만 판단한다 */
+  const dy = numOf('dlrpt-days');
+  if (Number.isFinite(dy) && dy >= 0) next.days = Math.min(dy, 14);
+  else if (!Number.isFinite(Number(next.days))) next.days = dlDays();
+  dailySettings = next;
   try {
     localStorage.setItem('dl_floor', String(dailySettings.floor));
     localStorage.setItem('dl_thr',   String(dailySettings.thr));

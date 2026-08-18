@@ -17,7 +17,8 @@
  *
  * 모드 (하나만 골라 보낸다)
  *   • 적재 { secret, action:"push", rows:[...] }                       — 종전과 동일
- *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly? } }
+ *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly?, meta? } }
+ *     meta: true → settings·bank_snapshot / meta: ["키",…] → 그 cat_data 키들(읽기 전용)
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at? }], midToBig?:{중분류:대분류} }
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *
@@ -245,7 +246,15 @@ Deno.serve(async (req) => {
       const ids = new Set((Array.isArray(inspect.clobeIds) ? inspect.clobeIds : []).map((v) => str(v)).filter(Boolean));
       const from = str(inspect.from), to = str(inspect.to), descQ = str(inspect.desc);
       const unclassifiedOnly = inspect.unclassifiedOnly === true;
-      const wantMeta = inspect.meta === true;
+      /* meta: true → 기본 키, meta: ["a","b"] → 그 키들. cat_data 는 RLS 때문에 publishable
+         키로 못 읽어서 확인할 때마다 Edge 를 고쳐 배포해야 했다(settings·bank_snapshot·
+         daily_settings…). 키 목록을 받게 해서 그 반복을 끝낸다. 읽기 전용이다. */
+      const META_DEFAULT = ["settings", "bank_snapshot"];
+      const metaKeys = inspect.meta === true ? META_DEFAULT
+        : (Array.isArray(inspect.meta)
+            ? (inspect.meta as unknown[]).map((v) => str(v)).filter((k) => /^[a-zA-Z0-9_]+$/.test(k)).slice(0, 20)
+            : []);
+      const wantMeta = metaKeys.length > 0;
 
       const getRes = await fetch(
         `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
@@ -274,7 +283,7 @@ Deno.serve(async (req) => {
       let meta: Record<string, unknown> | undefined;
       if (wantMeta) {
         const metaRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/cat_data?select=key,data&key=in.(settings,bank_snapshot)`,
+          `${SUPABASE_URL}/rest/v1/cat_data?select=key,data&key=in.(${metaKeys.join(",")})`,
           { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
         );
         if (metaRes.ok) {
