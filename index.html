@@ -3847,6 +3847,15 @@ async function loadDataFromSupabase() {
           fxAdjustBase = row.data;
           localStorage.setItem('fx_adjust_base', JSON.stringify(fxAdjustBase));
         }
+        // 일간 리포트·궤적 공용 설정(안전선 등) — 회사 기준이라 서버가 원본
+        if (row.key === 'daily_settings' && row.data && typeof row.data === 'object') {
+          dailySettings = row.data;
+          try {
+            if (Number(dailySettings.floor) > 0) localStorage.setItem('dl_floor', String(dailySettings.floor));
+            if (Number(dailySettings.thr)   > 0) localStorage.setItem('dl_thr',   String(dailySettings.thr));
+            if (Number(dailySettings.days)  > 0) localStorage.setItem('dl_days',  String(dailySettings.days));
+          } catch(e) {}
+        }
         if (row.key === 'corp_card_tx_data') {
           // 방어적 파싱: JSONB 배열 또는 JSON 문자열 모두 처리
           let raw = row.data;
@@ -4234,6 +4243,19 @@ function subscribeRealtime() {
               fxAdjustBase = row.data;
               localStorage.setItem('fx_adjust_base', JSON.stringify(fxAdjustBase));
               if (typeof renderBankRecon === 'function') { try { renderBankRecon(); } catch (e) {} }
+            }
+            /* 안전선이 서버에서 바뀌면 궤적 배너·하회 구간이 즉시 따라와야 한다 —
+               안 그리면 다른 사람이 바꾼 기준으로 계산된 값과 화면이 어긋난 채로 남는다. */
+            if (row.key === 'daily_settings' && row.data && typeof row.data === 'object') {
+              dailySettings = row.data;
+              try {
+                if (Number(dailySettings.floor) > 0) localStorage.setItem('dl_floor', String(dailySettings.floor));
+                if (Number(dailySettings.thr)   > 0) localStorage.setItem('dl_thr',   String(dailySettings.thr));
+                if (Number(dailySettings.days)  > 0) localStorage.setItem('dl_days',  String(dailySettings.days));
+              } catch(e) {}
+              const fl = document.getElementById('dlrpt-floor');
+              if (fl && Number(dailySettings.floor) > 0) fl.value = dailySettings.floor;
+              if (typeof renderCashChart === 'function') { try { renderCashChart(); } catch (e) {} }
             }
           }
           ['cf-midcat','edit-cf-midcat'].forEach(id => {
@@ -9519,11 +9541,48 @@ function dlShift(base, days){
   return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
 }
 function dlKey(r){ return r.clobe_id ? 'c:'+r.clobe_id : 'i:'+r._id; }
-function dlFloor(){ const v = Number(document.getElementById('dlrpt-floor')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_floor')) || 1500000000; }
-function dlThr(){ const v = Number(document.getElementById('dlrpt-thr')?.value); return v > 0 ? v : Number(localStorage.getItem('dl_thr')) || 10000000; }
+/* ═══ 일간 리포트·궤적 공용 설정 (cat_data.daily_settings) ═══════════════
+ * 안전선(floor)은 **회사 기준**이지 개인 취향이 아니다. 종전엔 localStorage 에만 있어서
+ * 다른 PC 로 열거나 브라우저 데이터를 지우면 조용히 기본값(15억)으로 돌아갔고, 같은 대시보드인데
+ * 하회 경고가 다르게 떴다. 궤적 배너까지 이 값을 쓰게 되면서 어긋남의 파급이 커져 서버로 옮긴다.
+ * localStorage 는 **오프라인 캐시**로만 남긴다(서버 로드 전에도 화면이 그려져야 하므로).
+ * 우선순위: 입력칸(사람이 지금 고치는 중) > 서버 > 로컬 캐시 > 기본값. */
+let dailySettings = null;      // { floor, thr, days } — cat_data.daily_settings
+function dlSetting(key, lsKey, dflt){
+  const fromServer = dailySettings && Number(dailySettings[key]);
+  if (fromServer > 0) return fromServer;
+  const fromLocal = Number(localStorage.getItem(lsKey));
+  return fromLocal > 0 ? fromLocal : dflt;
+}
+async function saveDailySettings(){
+  dailySettings = { floor: dlFloor(), thr: dlThr(), days: dlDays() };
+  try {
+    localStorage.setItem('dl_floor', String(dailySettings.floor));
+    localStorage.setItem('dl_thr',   String(dailySettings.thr));
+    localStorage.setItem('dl_days',  String(dailySettings.days));
+  } catch(e) {}
+  try {
+    if (typeof _supa !== 'undefined' && _supa && (typeof _isInitialized === 'undefined' || _isInitialized)) {
+      const { error } = await _supa.from('cat_data')
+        .upsert([{ key: 'daily_settings', data: dailySettings }], { onConflict: 'key' });
+      if (error) throw error;
+    }
+    return { error: null };
+  } catch(e) {
+    console.warn('[daily-settings] 저장 실패', e);
+    try { showToast('⚠ 안전선 설정 서버 저장 실패 — 이 브라우저에만 남았습니다', 'red'); } catch(e2) {}
+    return { error: e };
+  }
+}
+function dlFloor(){ const v = Number(document.getElementById('dlrpt-floor')?.value); return v > 0 ? v : dlSetting('floor', 'dl_floor', 1500000000); }
+function dlThr(){ const v = Number(document.getElementById('dlrpt-thr')?.value); return v > 0 ? v : dlSetting('thr', 'dl_thr', 10000000); }
 function dlDays(){
   const el = document.getElementById('dlrpt-days');
-  const v = el && el.value !== '' ? Number(el.value) : Number(localStorage.getItem('dl_days'));
+  /* 0 이 유효값(오늘만)이라 dlSetting 의 >0 규칙을 못 쓴다 — 여기서만 따로 판단한다 */
+  if (el && el.value !== '') { const v = Number(el.value); if (Number.isFinite(v) && v >= 0) return Math.min(v, 14); }
+  const fromServer = dailySettings ? Number(dailySettings.days) : NaN;
+  if (Number.isFinite(fromServer) && fromServer >= 0) return Math.min(fromServer, 14);
+  const v = Number(localStorage.getItem('dl_days'));
   return Number.isFinite(v) && v >= 0 ? Math.min(v, 14) : 1;   // 기본 오늘+1일
 }
 /* 어느 블록에 놓을지 — 임계는 기본값일 뿐이고 사람이 건별로 덮어쓴다.
@@ -9840,15 +9899,12 @@ function dailyReportText(){
 document.getElementById('dlrpt-prev')?.addEventListener('click', () => { dlDate = dlShift(dlD(), -1); renderDailyReport(); });
 document.getElementById('dlrpt-next')?.addEventListener('click', () => { dlDate = dlShift(dlD(),  1); renderDailyReport(); });
 document.getElementById('dlrpt-refresh')?.addEventListener('click', () => {
-  try{
-    localStorage.setItem('dl_floor', String(dlFloor()));
-    localStorage.setItem('dl_thr',   String(dlThr()));
-    localStorage.setItem('dl_days',  String(dlDays()));
-  }catch(e){}
+  saveDailySettings();                 // 서버(cat_data.daily_settings) + 로컬 캐시
   renderDailyReport();
+  try{ renderCashChart(); }catch(e){}   // 안전선이 바뀌면 궤적 배너·하회 구간도 다시 그린다
 });
 document.getElementById('dlrpt-days')?.addEventListener('change', () => {
-  try{ localStorage.setItem('dl_days', String(dlDays())); }catch(e){}
+  saveDailySettings();
   renderDailyReport();
 });
 document.getElementById('dlrpt-copy')?.addEventListener('click', async () => {
