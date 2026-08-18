@@ -10909,15 +10909,30 @@ function generateLoanPlanned(showToastMsg = true){
  *   ⚠ 신한은 할부(신한카드할부, 매월 600,790 정액)가 별도로 나가는데 **전월 승인액에는 안 잡힌다**
  *     — 과거 승인 건이 분할 청구되는 것이라서다. 그만큼 신한 추정은 과소계상된다(위 13% 에 포함).
  *
- * 금액 근거 — 전월 승인액이 원칙이지만, 그 달이 **아직 안 끝났으면 쓰면 안 된다**.
- *   8/17 에 8월 승인액을 쓰면 절반만 잡혀 예정이 실제의 절반으로 들어간다.
- *   → 대응 사용월이 완결(월말이 지남)이면 그 달 실적, 아니면 **최근 3개월 평균**으로 추정하고
- *     어느 근거인지 card_basis 에 남긴다.
+ * 금액 근거 — 대응 사용월(=결제월의 전월)이 어느 단계냐에 따라 3가지다. card_basis 에 남긴다.
+ *   ① 사용월이 끝났다            → 그 달 **실적 승인액** (확정, 더 이상 안 움직임)
+ *   ② 사용월이 진행 중이고 8일째~ → **일할 환산** = 어제까지 승인액 × 말일 / 어제
+ *   ③ 그 외(진행 1~7일·미래월)   → **최근 3개월 평균**
+ *
+ * ②를 넣은 근거 — 2026-04~07 × 카드사 4곳(표본 16)으로 백테스트한 절대오차:
+ *     최근 3개월 평균   중앙값 28% · 평균 109% · 최대 614%
+ *     일할 환산(7일~)   중앙값 40% · 평균  47% · 최대 110%
+ *   중앙값은 평균 쪽이 조금 낫지만 **평균·최대가 자릿수로 차이난다**. 궤적에서 위험한 건
+ *   "보통 몇 % 틀리냐" 가 아니라 1,462만으로 잡힌 게 실제 205만인 경우(비씨 7월)라서,
+ *   대형 실패를 없애는 쪽을 골랐다. 혼합(평균×가중 + 일할×가중)도 재봤는데 평균이 A 에
+ *   끌려가 전 구간에서 더 나빴다 — 쓰지 말 것.
+ *
+ * ⚠ 게이트를 7일로 둔 이유: 걸리는 구간이 사용월 1~7일뿐이고 그때 그 결제일은 5~6주 뒤다.
+ *   그 구간은 ③(=종전 동작)이라 현행 대비 후퇴가 없다. 표본 16개로는 7일과 8일을 구분 못 한다.
+ * ⚠ 분모는 '어제' 가 아니라 **적재가 실제 커버한 마지막 날**이다 — cardIngestWatermarkDay().
+ *   2026-08-18 에 적재가 8/16 까지였는데 분모를 17 로 잡으면 금액이 6% 낮게 나왔다.
+ *   지출 예정을 과소계상하는 방향이라 위험하다. 자세한 건 그 함수 주석 참고.
  *
  * ⚠ 선결제는 원리적으로 예측 불가다 — 사람이 임의 시점에 임의 금액을 낸다.
  *   실제 선결제가 들어오면 그달 예정을 사람이 지워야 한다(소멸 로직 보류 중). */
 const CARD_PLAN_ISSUERS = ['국민', '비씨', '신한', '롯데'];   // 정확도 차이는 위 주석 참고
 const CARD_PLAN_MONTHS  = 2;      // 대출과 같은 이유로 2개월 — 만든 만큼 사람이 지워야 한다
+const CARD_PRORATE_MIN_DAYS = 7;  // 이만큼 쌓여야 일할 환산을 쓴다(그 전엔 3개월 평균)
 
 /* 적재된 카드번호(마스킹)에서 '보이는 뒤자리' 를 뽑는다. `490298******9450` → `9450`,
    `************7823` → `7823`, 마스킹이 없으면 숫자 전체. */
@@ -10956,13 +10971,47 @@ function cardApprovalByMonth(issuer){
   return out;
 }
 
+/* 한 사용월(`YYYY-MM`)의 1일~throughDay 까지 누적 승인액 — 일할 환산의 분자 */
+function cardApprovalUpTo(issuer, useKey, throughDay){
+  let sum = 0;
+  for (const r of (Array.isArray(corpCardTxData) ? corpCardTxData : [])) {
+    const c = cardMatchIssuer(r.card_no);
+    if (!c || c.issuer !== issuer) continue;
+    const d = String(r.use_date || '');
+    if (d.slice(0, 7) !== useKey) continue;
+    if (Number(d.slice(8, 10)) > throughDay) continue;
+    sum += Number(r.billing_amount) || 0;
+  }
+  return sum;
+}
+
+/* 일할 환산의 **분모** — 그 달에 적재가 실제로 커버한 마지막 날(수집 워터마크).
+ * ⚠ '어제' 를 쓰면 안 된다(2026-08-18 실측): 적재가 8/16 까지인데 분모를 17 로 잡으면
+ *   데이터 없는 날이 분모에 들어가 금액이 매번 6% 낮게 나온다. 지출 예정을 과소계상하는
+ *   방향이라 위험하다.
+ * ⚠ 카드사별이 아니라 **전체 카드 기준**이어야 한다. 어느 카드든 그날 승인이 있으면 스크랩이
+ *   그날까지 돌았다는 뜻이다. 카드사별로 잡으면 안 쓰는 카드가 분모를 5일로 끌어내려
+ *   금액이 6배로 튄다.
+ * 반환 0 = 그 달에 적재된 게 아직 없음. */
+function cardIngestWatermarkDay(useKey, capDay){
+  let day = 0;
+  for (const r of (Array.isArray(corpCardTxData) ? corpCardTxData : [])) {
+    const d = String(r.use_date || '');
+    if (d.slice(0, 7) !== useKey) continue;
+    if (!cardMatchIssuer(r.card_no)) continue;      // 매칭 안 되는 카드는 합산에도 안 들어간다
+    const n = Number(d.slice(8, 10));
+    if (n > day && n <= capDay) day = n;
+  }
+  return day;
+}
+
 function generateCardPlanned(showToastMsg = true){
   if (!_cardLoaded || !Array.isArray(cardData) || !cardData.length) return 0;
   if (!Array.isArray(corpCardTxData) || !corpCardTxData.length) return 0;
   const today = todayKST();
   const [ty, tm] = today.split('-').map(Number);
   const todayDay = Number(today.slice(8, 10));
-  let added = 0;
+  let added = 0, updated = 0;
 
   for (const issuer of CARD_PLAN_ISSUERS) {
     /* 결제일은 카드사 안에서 같다(실측: 국민 15일·비씨 23일). 여러 장이면 첫 장 기준. */
@@ -10995,16 +11044,51 @@ function generateCardPlanned(showToastMsg = true){
       /* 이 결제에 대응하는 사용월 = 결제월의 전월 */
       let um = nm - 1, uy = ny;
       if (um < 1) { um = 12; uy--; }
-      const useKey = `${uy}-${String(um).padStart(2,'0')}`;
-      const useLast = `${uy}-${String(um).padStart(2,'0')}-${new Date(uy, um, 0).getDate()}`;
-      const complete = useLast < today;           // 그 사용월이 이미 끝났는가
+      const useKey  = `${uy}-${String(um).padStart(2,'0')}`;
+      const useLast = new Date(uy, um, 0).getDate();       // 그 사용월의 말일
+      const useDone = `${useKey}-${String(useLast).padStart(2,'0')}` < today;
 
-      const amt = complete ? Math.round(byMonth[useKey] || 0) : avg;
-      const basis = complete ? `${useKey} 승인액` : '최근 3개월 평균';
+      /* 금액 3단계 — 실적 / 일할환산 / 평균 (근거는 위 주석) */
+      let amt, basis;
+      if (useDone) {
+        amt   = Math.round(byMonth[useKey] || 0);
+        basis = `${useKey} 승인액`;
+      } else if (useKey === today.slice(0, 7)) {
+        /* 분모 = 적재가 커버한 마지막 날. 오늘은 하루가 안 끝났으니 어제까지로 자른다. */
+        const through = cardIngestWatermarkDay(useKey, todayDay - 1);
+        const part = through >= CARD_PRORATE_MIN_DAYS ? cardApprovalUpTo(issuer, useKey, through) : 0;
+        if (part > 0) { amt = Math.round(part * useLast / through); basis = `${useKey} 일할환산(${through}일)`; }
+        else          { amt = avg; basis = '최근 3개월 평균'; }
+      } else {
+        amt   = avg;
+        basis = '최근 3개월 평균';
+      }
       if (!(amt > 0)) continue;
 
       const cardKey = `card_${issuer}`;
-      if (cfData.some(r => r.card_bill_id === cardKey && r.date === date)) continue;
+      const exist = cfData.find(r => r.card_bill_id === cardKey && r.date === date);
+      if (exist) {
+        /* ── 기존 예정 행 금액 갱신 ────────────────────────────────────────
+           일할 환산은 날마다 정확해지므로 한 번 만들고 굳히면 넣는 의미가 없다.
+           대신 덮어도 되는 행인지 먼저 가린다:
+             · '지출 예정' 이 아니면(사람이 실제 거래로 바꿈) 손대지 않는다
+             · card_est_amt(생성 당시 금액) ≠ 현재 금액 이면 사람이 고친 것 → 존중
+           ⚠ card_est_amt 가 없는 행은 이 기능 이전에 만들어진 것이라 현재 금액을 생성값으로
+             간주한다. 안 그러면 구 행이 영원히 갱신에서 빠진다(파이프가 하루밖에 안 됐으니
+             사람이 고쳤을 가능성은 사실상 없다).
+           ⚠ 갱신은 **토스트를 띄우지 않는다** — 페이지 열 때마다 뜨면 소음이다. */
+        if (exist.status !== '지출 예정') continue;
+        const cur  = Math.round(Number(exist.out) || 0);
+        const prev = Math.round(Number(exist.card_est_amt) || 0);
+        if (prev > 0 && prev !== cur) continue;             // 사람이 고친 금액은 그대로 둔다
+        if (cur !== amt || exist.card_basis !== basis) {
+          exist.out = amt; exist.amount = -amt;
+          exist.card_est_amt = amt;
+          exist.card_basis = basis;
+          updated++;
+        }
+        continue;
+      }
 
       _cfIdCounter++;
       cfData.push(normalizeCFRow({
@@ -11016,14 +11100,19 @@ function generateCardPlanned(showToastMsg = true){
         mid_cat: '법인카드 대금', big_cat: getBigCat('법인카드 대금'),
         card_bill_id: cardKey,     // 소멸 로직이 쓸 출처 태그
         card_basis: basis,         // 이 금액이 무엇에 근거했는지 (사람이 판단할 근거)
+        card_est_amt: amt,         // 생성 당시 금액 — 사람이 고쳤는지 가리는 기준
       }));
       added++;
     }
   }
 
-  if (added > 0) { cfData.sort((a,b) => a.date.localeCompare(b.date)); saveData(); }
+  if (added > 0 || updated > 0) {
+    if (added > 0) cfData.sort((a,b) => a.date.localeCompare(b.date));
+    saveData();
+  }
+  if (updated > 0) console.log(`[card] 예정 금액 ${updated}건 갱신 (일할 환산은 매일 정확해진다)`);
   if (showToastMsg && added > 0)
-    showToast(`💳 카드 대금 예정 ${added}건이 생성됐습니다 (국민·비씨만 · 추정치).`, 'green');
+    showToast(`💳 카드 대금 예정 ${added}건이 생성됐습니다 (추정치).`, 'green');
   return added;
 }
 
@@ -14952,7 +15041,7 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     if (autoChanged2 > 0)    showToast(`🔄 ${autoChanged2}건 자동 업데이트 완료`, 'green');
     if (recurGenerated2 > 0) showToast(`🔄 반복 거래 ${recurGenerated2}건 예정 항목 생성됐습니다.`, 'green');
     if (loanGenerated > 0) showToast(`🏦 대출 이자 예정 ${loanGenerated}건이 생성됐습니다 (추정치 — 실제 출금 후 예정 행을 지워 주세요).`, 'green');
-    if (cardGenerated > 0) showToast(`💳 카드 대금 예정 ${cardGenerated}건이 생성됐습니다 (국민·비씨만 · 추정치).`, 'green');
+    if (cardGenerated > 0) showToast(`💳 카드 대금 예정 ${cardGenerated}건이 생성됐습니다 (추정치 — 실제 결제 후 예정 행을 지워 주세요).`, 'green');
 
     // 딥링크 처리 — Supabase 데이터 로드 완료 후 탭 전환 + renderWeeklyReport() 재실행
     // (조기 처리에서 skipRender=true 로 탭만 열었으므로, 여기서 데이터와 함께 전체 렌더)
