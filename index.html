@@ -4891,10 +4891,15 @@ function renderBudgetVsActual() {
     </div>`;
   }).filter(Boolean)}`;
 }
+/* 그 날짜가 속한 주의 월요일(주별 입출금 차트의 묶음 키).
+   ⚠ toISOString() 을 쓰면 KST 자정이 UTC 로 전날이 되어 **일요일**이 나온다 — 묶음 자체는
+   일관돼서 합계는 맞았지만 차트 x축 라벨이 하루 앞선 날짜로 표시됐다(앱의 나머지는 월요일 시작).
+   로컬 날짜로 만든다. 궤적·일간 리포트에서 겪은 것과 같은 함정. */
 function getWeekKey(dateStr) {
   const dt = new Date(dateStr + 'T00:00:00');
   const mon = new Date(dt); mon.setDate(dt.getDate() - ((dt.getDay()+6)%7));
-  return mon.toISOString().slice(0,10);
+  const p = n => String(n).padStart(2,'0');
+  return `${mon.getFullYear()}-${p(mon.getMonth()+1)}-${p(mon.getDate())}`;
 }
 
 function renderCashChart() {
