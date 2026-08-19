@@ -669,9 +669,6 @@
        "언제 얼마까지 떨어지나" 한 줄을 여기 띄운다. 안전선은 일간 리포트와 같은 설정(dl_floor). -->
   <div id="cash-traj-banner"></div>
 
-  <!-- 은행 실잔액 대조 (P0 잔액 정합성) — bank_snapshot 있을 때만 렌더 -->
-  <div id="bank-recon"></div>
-
   <!-- 예정 지출/입금 알림 -->
   <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
     <div class="chart-box">
@@ -745,7 +742,7 @@
     <div class="chart-wrap" id="ar-bar-wrap" style="height:220px"><canvas id="arBarChart" role="img" aria-label="거래처별 AR 미회수액">AR 잔액</canvas></div>
   </div>
 
-  <div class="chart-row" style="grid-template-columns:1fr 1fr">
+  <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
     <div class="chart-box">
       <div class="chart-title">주별 입출금 <small id="weekly-date-range" style="color:var(--text3);font-weight:400"></small></div>
       <div class="chart-wrap" style="height:220px"><canvas id="weeklyChart" role="img" aria-label="주별 입출금 막대 차트">주별 입출금</canvas></div>
@@ -756,6 +753,12 @@
       <div class="chart-wrap" style="height:180px"><canvas id="arDonutChart" role="img" aria-label="AR 상태 도넛 차트">AR 상태</canvas></div>
     </div>
   </div>
+
+  <!-- 은행 실잔액 대조 (P0 잔액 정합성) — bank_snapshot 있을 때만 렌더.
+       ⚠ 대시보드 **맨 아래**다(2026-08-18 이동). 원래는 KPI 바로 아래였는데, 매일 볼 것은
+       잔액 궤적이고 이 카드는 "숫자가 맞나" 를 확인할 때만 보는 점검용이라 위쪽 자리를
+       차지할 이유가 없었다. 렌더 순서는 위치와 무관하다(renderBankRecon 이 id 로 꽂는다). -->
+  <div id="bank-recon"></div>
 </div>
 
 <!-- ======== CASHFLOW TAB ======== -->
