@@ -3187,6 +3187,66 @@ function renderBankRecon() {
   if (det) det.addEventListener('toggle', () => {
     try { localStorage.setItem('bank_recon_open', det.open ? '1' : '0'); } catch (e) {}
   });
+
+  notifyBankRecon(ad, diff, stale, s.asOf);
+}
+
+/* ═══ 은행 실잔액 대조 알림 ═════════════════════════════════════════════
+ * 대조 카드를 대시보드 맨 아래로 내리면서(2026-08-18) 매번 스크롤해 확인해야 했다.
+ * → **어긋났을 때만** 토스트로 올려준다. 맞으면 아무것도 안 뜬다.
+ *
+ * ⚠ 숫자를 여기서 다시 계산하지 않는다. renderBankRecon 이 카드에 그린 값을 그대로 받는다 —
+ *   따로 계산하면 카드와 팝업이 다른 숫자를 말하는 일이 생긴다.
+ *
+ * ⚠⚠ 초기화 전에는 절대 알리지 않는다. renderBankRecon 은 Supabase 로드 **전에도** 한 번
+ *   도는데, 그때 cfData 가 비어 있어 차이가 기초잔액 통째로 잡힌다. 그 가짜 경보가
+ *   '하루 한 번' 기회를 써버려 진짜 경보를 삼킨다(대출 파이프에서 같은 함정을 밟았다).
+ *
+ * 판정 순서 — 위에서 걸리면 아래는 안 본다:
+ *   1) 은행 잔액 수집이 24시간 초과 → '갱신 필요'. 낡은 잔액으로 계산한 차이는 신뢰할 수
+ *      없으므로 금액 불일치라고 말하면 안 된다(어제 잔액 vs 오늘 거래 = 가짜 경보).
+ *   2) 차이 1,000만 초과 → 점검 필요(빨강)
+ *   3) 차이 100만 초과   → 확인 필요(노랑)
+ *   4) 그 외 → 조용
+ *
+ * 반복 억제: '날짜|종류' 를 localStorage 에 남겨 하루 한 번만. 종류가 바뀌면(갱신 필요 →
+ * 금액 불일치) 같은 날이라도 다시 알린다 — 상태가 달라진 건 새 정보다. */
+const RECON_ALERT_KEY = 'bank_recon_alert';
+function notifyBankRecon(ad, diff, stale, asOf) {
+  if (typeof _isInitialized === 'undefined' || !_isInitialized) return;   // 위 ⚠⚠ 참고
+
+  let kind = '', msg = '', tone = 'amber';
+  if (stale) {
+    const d = asOf ? Math.max(1, Math.floor((Date.now() - new Date(asOf).getTime()) / 86400000)) : 1;
+    kind = 'stale';
+    msg  = `🏦 은행 잔액이 ${d}일째 갱신되지 않았습니다 — 지금 대조 결과는 믿을 수 없습니다`;
+  } else if (ad > 10000000) {
+    kind = 'red';
+    msg  = `🏦 은행 실잔액과 ${fmt(Math.abs(diff))} 차이 — 점검 필요`;
+    tone = 'red';
+  } else if (ad > 1000000) {
+    kind = 'amber';
+    msg  = `🏦 은행 실잔액과 ${fmt(Math.abs(diff))} 차이 — 확인 필요`;
+  } else return;                                                          // 일치: 조용히 넘어간다
+
+  const token = `${todayKST()}|${kind}`;
+  try { if (localStorage.getItem(RECON_ALERT_KEY) === token) return; } catch (e) {}
+  try { localStorage.setItem(RECON_ALERT_KEY, token); } catch (e) {}
+
+  showToast(`${msg} (눌러서 보기)`, tone, {
+    ms: 9000,
+    onClick: () => {
+      const card = document.getElementById('bank-recon');
+      if (!card) return;
+      /* 대시보드 탭이 아니면 먼저 전환해야 카드가 화면에 있다 */
+      const panel = document.getElementById('panel-dashboard');
+      if (panel && !panel.classList.contains('active')) {
+        const tab = document.querySelector('.tab[data-tab="dashboard"]');
+        if (tab) tab.click();
+      }
+      requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    },
+  });
 }
 
 // 거래처별 집계 스냅샷 { 거래처: {n, exp, col} }
@@ -15840,20 +15900,35 @@ document.getElementById('ar-download-btn').addEventListener('click', () => {
 });
 
 // ==================== TOAST ====================
-function showToast(msg, type='green') {
+/* 토스트. opts 로 표시 시간·클릭 동작을 줄 수 있다(기본값은 종전 그대로라 기존 호출부는 안 바뀐다).
+ *   showToast(msg)                                   3.5초, 클릭 불가 (종전과 동일)
+ *   showToast(msg, 'amber', { ms: 9000, onClick })    오래 띄우고 누르면 이동
+ * ⚠ cssText 에 '+=' 로 색을 덧붙이는 구조라 앞선 호출의 스타일이 남는다. pointer-events 는
+ *   매번 명시적으로 다시 써야 한다 — 안 그러면 클릭 가능한 토스트 뒤에 뜬 일반 토스트가
+ *   화면 클릭을 계속 가로챈다. */
+function showToast(msg, type='green', opts={}) {
+  const ms = Number(opts.ms) > 0 ? Number(opts.ms) : 3500;
+  const onClick = typeof opts.onClick === 'function' ? opts.onClick : null;
   let t = document.getElementById('toast-el');
   if (!t) {
     t = document.createElement('div');
     t.id = 'toast-el';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;pointer-events:none;';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;';
     document.body.appendChild(t);
   }
-  const colors = { green: 'background:#183D2B;color:#8FD3AC;border:1px solid rgba(42,127,87,0.45)', red: 'background:#3D1C16;color:#E9A18F;border:1px solid rgba(255,77,106,0.4)' };
+  const colors = {
+    green: 'background:#183D2B;color:#8FD3AC;border:1px solid rgba(42,127,87,0.45)',
+    red:   'background:#3D1C16;color:#E9A18F;border:1px solid rgba(255,77,106,0.4)',
+    amber: 'background:#3B2E12;color:#E8C878;border:1px solid rgba(217,164,65,0.45)',
+  };
   t.style.cssText += colors[type] || colors.green;
+  t.style.pointerEvents = onClick ? 'auto' : 'none';
+  t.style.cursor = onClick ? 'pointer' : 'default';
+  t.onclick = onClick ? () => { t.style.opacity = '0'; onClick(); } : null;
   t.textContent = msg;
   t.style.opacity = '1';
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, ms);
 }
 
 </script>
