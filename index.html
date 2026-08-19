@@ -66,6 +66,10 @@
     --blue2: rgba(255,255,255,0.14);
     --green: #8FD3AC;
     --red: #F0A79C;
+    /* 어두운 브랜드 그린 배경 위에서 읽히는 밝은 오커. :root 의 --amber(#9E6A15)는
+       흰 배경용이라 헤더에 그대로 쓰면 어두운 초록 위 어두운 오커가 되어 안 보인다.
+       신선도 요약 배지가 이 색을 쓰기 시작해(2026-08-19) 필요해졌다. */
+    --amber: #E8C878;
   }
   .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); display: flex; align-items: center; gap: 11px; }
   /* CI 로고타입(벡터 원본) — 화면 최소 20px 준수(가이드 2.4), 비례 유지·임의 재색 금지(2.5).
@@ -87,6 +91,44 @@
   #brand-home:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { #brand-home { transition: none; } }
   .header-right { display: flex; align-items: center; gap: 16px; }
+
+  /* 데이터 신선도 — 헤더 요약 배지 + 펼침 패널.
+     ⚠ .fresh-wrap 의 position:relative 가 패널의 기준점이다. 이게 없으면 패널이 페이지
+       좌상단으로 튀어나간다. z-index 는 대시보드 카드(차트 캔버스 포함)보다 위여야 한다. */
+  .fresh-wrap { position: relative; display: flex; align-items: center; }
+  .fresh-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg3);
+    border: 1px solid var(--border2); border-radius: 6px; padding: 4px 9px; cursor: pointer;
+    font-family: var(--font); font-size: 11.5px; color: var(--text2); white-space: nowrap; }
+  .fresh-badge:hover { border-color: var(--blue); }
+  .fresh-badge b { font-weight: 700; }
+  .fresh-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .fresh-caret { font-size: 9px; color: var(--text3); }
+  /* ⚠⚠ 패널은 헤더 안이라 색 변수를 **본문 기준으로 되돌려야** 한다.
+     .header 는 --text/--text2/--border/--bg3 를 흰색 계열로 덮는데 --card 는 덮지 않는다.
+     그대로 두면 배경 var(--card)=#ffffff 위에 글자 var(--text2)=흰색 78% 가 얹혀
+     **흰 바탕에 흰 글씨**가 된다(2026-08-19 이동 중 실측). 칩 마크업이 본문 팔레트를
+     전제로 만들어져 있으므로 값을 :root 와 같게 되돌리는 게 맞다. */
+  .fresh-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 250;
+    background: var(--card); border: 1px solid var(--border2); border-radius: 10px;
+    padding: 12px 14px; box-shadow: 0 8px 24px rgba(27,43,48,0.18); min-width: 300px;
+    --text: #1B2B30;
+    --text2: #55655D;
+    --text3: #94A296;
+    --border: rgba(49,72,64,0.12);
+    --border2: rgba(49,72,64,0.22);
+    --bg3: #E9EFE7;
+    --green: #2A7F57;
+    --red: #C24A38;
+  }
+  .fresh-panel-head { font-size: 11.5px; font-weight: 700; color: var(--text2); margin-bottom: 9px; }
+  .fresh-chips { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .fresh-panel-foot { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); }
+
+  /* 좁은 화면에서는 신선도 배지를 숨긴다 — 기초잔액·보고 기준일은 매일 손대는 입력칸이라
+     폭 우선권을 준다. 새 버전 알림(#app-version-alert)은 눌러야 하는 일이라 남긴다. */
+  @media (max-width: 1180px) {
+    #data-freshness { display: none; }
+  }
   .ref-date-wrap { display: flex; align-items: center; gap: 8px; }
   .ref-date-wrap label { font-size: 12px; color: var(--text2); }
   .ref-date-wrap input[type=date] { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 13px; font-family: var(--font); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
@@ -554,7 +596,14 @@
       <span class="user-dot"></span><span id="user-email-label"></span>
       <button class="logout-btn" id="logout-btn">로그아웃</button>
     </div>
-    <div id="sync-status" style="font-size:12px;color:var(--text3);margin-right:12px">연결 중...</div>
+    <div id="sync-status" style="font-size:12px;color:var(--text3)">연결 중...</div>
+    <!-- 데이터 신선도 (P0-2) — 요약 배지 + 클릭 펼침. 2026-08-19 에 대시보드 본문에서
+         여기로 옮겼다: 본문 맨 위 전체 폭 밴드였는데 매번 스크롤해 봐야 했고, 헤더에 두면
+         모든 탭에서 보인다. 전체 폭 밴드를 그대로 옮기면 기초잔액·보고 기준일이 밀려 잘려서
+         '가장 낡은 항목 이름' 배지 하나로 줄이고 상세는 드롭다운에 넣었다. -->
+    <div id="data-freshness"></div>
+    <!-- 새 버전 알림 — 눌러야 하는 일이라 드롭다운이 아니라 헤더에 둔다(renderAppVersion 주석 참고) -->
+    <span id="app-version-alert"></span>
     <div class="ref-date-wrap">
       <span id="init-cash-info-wrap" style="display:flex;align-items:center;gap:6px">
         <label>기초잔액</label>
@@ -661,9 +710,6 @@
   <span id="kpi-monthly-range" style="display:none"></span>
   <span id="kpi-next-month-cash" style="display:none"></span>
   <span id="kpi-next-month-range" style="display:none"></span>
-
-  <!-- 데이터 신선도 배지 (P0-2) — 소스별 커버리지·갱신 상태 -->
-  <div id="data-freshness"></div>
 
   <!-- 잔액 궤적 요약 (renderCashTrajBanner) — 차트는 아래에 있어 스크롤해야 보이므로
        "언제 얼마까지 떨어지나" 한 줄을 여기 띄운다. 안전선은 일간 리포트와 같은 설정(dl_floor). -->
@@ -2950,6 +2996,15 @@ function relTime(ms) {
   return mins < 60 ? `${mins}분 전` : mins < 2880 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
 }
 
+/* 각 소스의 '정상 기준선'(초록 상한). sev = 경과 / 기준선 이므로 1 을 넘으면 지연이다.
+   ⚠ 소스마다 단위가 달라(은행 24시간 vs 매출채권 7일) 경과일을 그대로 비교하면 안 된다.
+     "3일 지남" 은 매출채권엔 정상이고 은행잔액엔 심각하다. 기준선으로 나눠 같은 자에 올린다.
+   ⚠ 법인카드의 lvl 은 '몇 달치가 비었나'(월 단위)로 판정하지만 sev 는 일 단위로 잰다.
+     월 단위는 정상 기준선이 0 이라 나눗셈이 안 되기 때문. sev 는 **같은 등급 안에서
+     순위를 가리는 용도**라 이 불일치는 문제가 되지 않는다.
+   데이터가 아예 없는 경우는 Infinity — 같은 등급 안에서는 '없음' 이 가장 나쁜 상태다. */
+const FRESH_LIMIT = { bank: 24, cf: 1, ar: 7, card: 40 };   // 시간 · 영업일 · 일 · 일
+
 function collectFreshness() {
   const today = todayKST();
   const md = d => (d && d.length >= 10) ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '—';
@@ -2960,9 +3015,10 @@ function collectFreshness() {
     const t = new Date(bankSnapshot.asOf).getTime();
     const h = (Date.now() - t) / 3600000;
     out.push({ name: '은행잔액', cover: relTime(t), lvl: h <= 24 ? 0 : (h <= 72 ? 1 : 2),
+               sev: h / FRESH_LIMIT.bank,
                tip: `클로브 수집 ${new Date(t).toLocaleString('ko-KR')} · 자동 매일 09:00` });
   } else {
-    out.push({ name: '은행잔액', cover: '없음', lvl: 2, tip: '스냅샷 없음 — 자동 갱신 미작동' });
+    out.push({ name: '은행잔액', cover: '없음', lvl: 2, sev: Infinity, tip: '스냅샷 없음 — 자동 갱신 미작동' });
   }
 
   // 입출금 — 실제 거래 커버리지(영업일 기준)
@@ -2972,8 +3028,9 @@ function collectFreshness() {
     const gap = bizDaysBetween(cfMax, today);
     const ing = Math.max(0, ...(cfData || []).map(r => idStamp(r._id, 'cf')));
     out.push({ name: '입출금', cover: `${md(cfMax)}까지`, lvl: gap <= 1 ? 0 : (gap <= 3 ? 1 : 2),
+               sev: gap / FRESH_LIMIT.cf,
                tip: `최근 실제거래 ${cfMax} (영업일 ${gap}일 경과)` + (ing ? ` · 마지막 적재 ${relTime(ing)}` : '') + ' · 자동 매일 09:20' });
-  } else out.push({ name: '입출금', cover: '없음', lvl: 2, tip: '실제 거래 없음' });
+  } else out.push({ name: '입출금', cover: '없음', lvl: 2, sev: Infinity, tip: '실제 거래 없음' });
 
   // 매출채권 — 시트 동기화 시각(arMeta)
   const arDays = (() => {
@@ -2983,8 +3040,9 @@ function collectFreshness() {
   })();
   if (arDays) {
     out.push({ name: '매출채권', cover: `${md(arDays.last)} 동기화`, lvl: arDays.d <= 7 ? 0 : (arDays.d <= 14 ? 1 : 2),
+               sev: arDays.d / FRESH_LIMIT.ar,
                tip: `마지막 시트 동기화 ${arDays.last} (${arDays.d}일 전) · 수동(시트 메뉴에서 실행)` });
-  } else out.push({ name: '매출채권', cover: '—', lvl: 1, tip: '동기화 이력 없음' });
+  } else out.push({ name: '매출채권', cover: '—', lvl: 1, sev: Infinity, tip: '동기화 이력 없음' });
 
   // 법인카드 — 월 1회 업로드라 '며칠 지났나'가 아니라 '몇 달치가 비었나'로 판정한다.
   //   (예: 8월 초에 6월까지만 있으면 7월 한 달이 통째로 비어 있는 것 → 33일밖에 안 지났어도 지연)
@@ -2997,8 +3055,9 @@ function collectFreshness() {
     const up   = Math.max(0, ...cc.map(r => idStamp(r._id, 'card')));
     const miss = gap > 0 ? ` · ${gap}개월치 미업로드` : '';
     out.push({ name: '법인카드', cover: `${Number(ccMax.slice(5, 7))}월까지`, lvl: gap <= 0 ? 0 : (gap === 1 ? 1 : 2),
+               sev: d / FRESH_LIMIT.card,
                tip: `최근 사용일 ${ccMax} (${d}일 전)${miss}` + (up ? ` · 마지막 업로드 ${relTime(up)}` : '') + ' · 월 1회 수동 업로드' });
-  } else out.push({ name: '법인카드', cover: '없음', lvl: 2, tip: '사용내역 없음' });
+  } else out.push({ name: '법인카드', cover: '없음', lvl: 2, sev: Infinity, tip: '사용내역 없음' });
 
   return out;
 }
@@ -3010,18 +3069,53 @@ function renderFreshness() {
   try { src = collectFreshness(); } catch (e) { console.warn('[freshness]', e); el.innerHTML = ''; return; }
   const COL = ['var(--green)', 'var(--amber)', 'var(--red)'];
   const worst = Math.max(...src.map(s => s.lvl));
+  /* 배지 문구 = **가장 낡은 항목의 이름**. 등급이 같으면 sev(자기 기준선 대비 초과 배수)가
+     큰 쪽이 낡은 것이다 — 경과일로 바로 비교하면 기준이 다른 소스끼리 불공정하다.
+     전부 정상(등급 0)이면 이름을 고를 근거가 없으므로 '최신' 이라고 쓴다. */
+  const worstOne = src.filter(s => s.lvl === worst)
+                      .sort((a, b) => (Number(b.sev) || 0) - (Number(a.sev) || 0))[0];
+  const label = worst === 0 ? '최신' : (worstOne ? worstOne.name : '확인');
+
   const chips = src.map(s =>
     html`<span title="${s.tip}" style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text2);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:3px 9px;white-space:nowrap;cursor:default">
       <span style="width:7px;height:7px;border-radius:50%;background:${COL[s.lvl]};flex:none"></span>
       <b style="color:var(--text);font-weight:600">${s.name}</b> ${s.cover}
     </span>`);
+
+  /* 헤더에 들어가므로 요약 배지 하나만 두고 상세는 눌러서 펼친다(2026-08-19 이동).
+     전체 폭 밴드를 그대로 옮기면 기초잔액·보고 기준일이 밀려 잘린다. */
   el.innerHTML =
-    html`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;padding:9px 12px;background:var(--bg3);border-radius:8px;border-left:3px solid ${COL[worst]}">
-      <span style="font-size:11.5px;font-weight:700;color:var(--text2);white-space:nowrap">📊 데이터 신선도</span>
-      ${chips}
-      ${worst > 0 ? html`<span style="font-size:11px;color:${COL[worst]}">← 갱신이 밀린 소스가 있습니다</span>` : ''}
-      <span id="app-version-chip" style="margin-left:auto"></span>
+    html`<div class="fresh-wrap">
+      <button type="button" class="fresh-badge" aria-expanded="false" aria-controls="fresh-panel"
+        title="데이터 신선도 — ${worst === 0 ? '모든 소스가 최신입니다' : `${label}이(가) 가장 낡았습니다`}. 눌러서 상세 보기">
+        <span class="fresh-dot" style="background:${COL[worst]}"></span>
+        <b style="color:${worst === 0 ? 'var(--text2)' : COL[worst]}">${label}</b>
+        <span class="fresh-caret">▾</span>
+      </button>
+      <div class="fresh-panel" id="fresh-panel" hidden>
+        <div class="fresh-panel-head">📊 데이터 신선도</div>
+        <div class="fresh-chips">${chips}</div>
+        ${worst > 0 ? html`<div style="font-size:11px;color:${COL[worst]};margin-top:8px">갱신이 밀린 소스가 있습니다</div>` : ''}
+        <div class="fresh-panel-foot"><span id="app-version-chip"></span></div>
+      </div>
     </div>`;
+
+  const btn = el.querySelector('.fresh-badge');
+  const panel = el.querySelector('.fresh-panel');
+  if (btn && panel) {
+    const close = () => { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = panel.hidden;
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    /* 바깥 클릭·Esc 로 닫기. 리스너를 el 안이 아니라 document 에 붙이므로 renderFreshness 가
+       다시 돌면 이전 리스너가 남는다 — 닫기만 하는 동작이라 중복돼도 해롭지 않고,
+       가리키던 DOM 이 사라지면 조건에서 걸러진다. */
+    document.addEventListener('click', (e) => { if (!el.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  }
   try { renderAppVersion(); } catch (e) { console.warn('[version]', e); }
 }
 
@@ -3045,21 +3139,38 @@ function appBuiltAt(){
 }
 let _appNewerAt = 0;          // 서버에 더 새 버전이 있으면 그 시각
 
+/* 두 자리에 나눠 그린다 (2026-08-19, 신선도가 헤더로 옮겨가면서):
+ *   · #app-version-alert (헤더)      — **새 버전 있을 때만**. 눌러야 하는 일이라 항상 보여야 한다.
+ *   · #app-version-chip  (드롭다운)  — 평상시 '화면 MM/DD HH:mm' 스탬프. 궁금할 때 보는 값이라
+ *                                      헤더 폭을 쓸 이유가 없다.
+ * ⚠ 새 버전 알림을 드롭다운에만 두면 안 된다 — 닫혀 있으면 못 보고, 그러면 옛 화면을 계속 쓴다.
+ *   실제로 2026-08-17 에 배포하고도 사용자가 옛 화면으로 같은 버그를 다시 확인한 일이 있었다. */
 function renderAppVersion(){
-  const el = document.getElementById('app-version-chip');
-  if (!el) return;
+  const chip  = document.getElementById('app-version-chip');
+  const alert = document.getElementById('app-version-alert');
   const built = appBuiltAt();
-  if (!built) { el.innerHTML = ''; return; }      // file:// 등에서는 의미 없는 값이라 숨긴다
+  if (!built) {                                  // file:// 등에서는 의미 없는 값이라 숨긴다
+    if (chip)  chip.innerHTML = '';
+    if (alert) alert.innerHTML = '';
+    return;
+  }
   const d = new Date(built);
   const p = n => String(n).padStart(2,'0');
   const stamp = `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  el.innerHTML = _appNewerAt > built
-    ? html`<span id="app-version-reload" title="새 버전이 배포됐습니다. 눌러서 새로고침합니다(캐시 무시)."
-        style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:#fff;background:var(--blue);border-radius:6px;padding:3px 10px;white-space:nowrap;cursor:pointer">
-        ⟳ 새 버전 있음 — 새로고침</span>`
-    : html`<span title="지금 보고 있는 화면이 배포된 시각입니다. 서버에 새 버전이 올라오면 여기에 알림이 뜹니다."
-        style="font-size:11px;color:var(--text3);white-space:nowrap;cursor:default">화면 ${stamp}</span>`;
-  document.getElementById('app-version-reload')?.addEventListener('click', () => location.reload(true));
+  const newer = _appNewerAt > built;
+
+  if (chip) chip.innerHTML =
+    html`<span title="지금 보고 있는 화면이 배포된 시각입니다. 서버에 새 버전이 올라오면 헤더에 알림이 뜹니다."
+      style="font-size:11px;color:var(--text3);white-space:nowrap;cursor:default">화면 ${stamp}</span>`;
+
+  if (alert) {
+    alert.innerHTML = newer
+      ? html`<span id="app-version-reload" title="새 버전이 배포됐습니다. 눌러서 새로고침합니다(캐시 무시)."
+          style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:#fff;background:var(--blue);border-radius:6px;padding:3px 10px;white-space:nowrap;cursor:pointer">
+          ⟳ 새 버전 — 새로고침</span>`
+      : '';
+    document.getElementById('app-version-reload')?.addEventListener('click', () => location.reload(true));
+  }
 }
 
 /* 서버에 새 버전이 있는지 확인한다. HEAD 로 헤더만 받아 가볍고,
