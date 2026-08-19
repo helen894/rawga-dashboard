@@ -129,6 +129,11 @@
   @media (max-width: 1180px) {
     #data-freshness { display: none; }
   }
+  /* ⚠ '새 버전 — 새로고침' 버튼(약 180px)이 떠 있는 동안은 신선도 배지도 비켜준다.
+     둘 다 있으면 1250px 에서 헤더가 넘쳐 가로 스크롤바가 생긴다(실측). 둘 중 눌러야 하는
+     쪽이 새 버전 알림이고, 그건 새로고침하면 사라지는 일시 상태다.
+     renderAppVersion 이 .has-update 를 켠다/끈다. */
+  .header.has-update #data-freshness { display: none; }
   .ref-date-wrap { display: flex; align-items: center; gap: 8px; }
   .ref-date-wrap label { font-size: 12px; color: var(--text2); }
   .ref-date-wrap input[type=date] { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 13px; font-family: var(--font); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
@@ -3170,6 +3175,8 @@ function renderAppVersion(){
           ⟳ 새 버전 — 새로고침</span>`
       : '';
     document.getElementById('app-version-reload')?.addEventListener('click', () => location.reload(true));
+    /* 알림이 떠 있는 동안 신선도 배지를 숨겨 헤더 폭을 확보한다(위 CSS 주석 참고) */
+    document.querySelector('.header')?.classList.toggle('has-update', newer);
   }
 }
 
