@@ -41,7 +41,8 @@ let edgeJs;
 try {
   const dir = mkdtempSync(path.join(tmpdir(), 'wkparity-'));
   const f = path.join(dir, 'edge.ts');
-  writeFileSync(f, grab(tsSrc, 'computeWeeklyCashSeries') + '\n' + grab(tsSrc, 'buildWeeklyTrajBlockHTML'), 'utf8');
+  writeFileSync(f, [grab(tsSrc, 'computeWeeklyCashSeries'), grab(tsSrc, 'buildWeeklyTrajBlockHTML'),
+                    grab(tsSrc, 'buildNextWeekPlanHTML'), grab(tsSrc, 'escapeHtml')].join('\n'), 'utf8');
   // 파일 확장자로 ts 를 알아본다 — --loader 는 stdin 전용 플래그라 파일 입력엔 못 쓴다
   edgeJs = execFileSync('npx', ['--yes', 'esbuild@0.24.0', '--format=esm', f],
                         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' });
@@ -52,6 +53,7 @@ try {
 }
 
 const addDaysSrc = grab(html, 'addDays');
+const addDaysJs = new Function(`${addDaysSrc}\nreturn addDays;`)();
 const appFn  = new Function(`${addDaysSrc}\n${grab(html, 'computeWeeklyCashSeries')}\nreturn computeWeeklyCashSeries;`)();
 const edgeFn = new Function(`${addDaysSrc}\n${edgeJs}\nreturn computeWeeklyCashSeries;`)();
 
@@ -72,8 +74,22 @@ const appBlock = new Function('TODAY', `
 const edgeBlock = new Function('fmt', `
   ${addDaysSrc}
   ${edgeJs}
-  return (ws, rows, init, floor, C, hz, today) =>
-    String(buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz, today));`);
+  return {
+    traj: (ws, rows, init, floor, C, hz, today) =>
+      String(buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz, today)),
+    nw:   (a, b, rows, init, floor, C, today) =>
+      String(buildNextWeekPlanHTML(a, b, rows, init, floor, C, today)),
+  };`);
+/* 차주 블록도 두 벌이다 — 같이 대조한다 */
+const appNw = new Function('TODAY', `
+  const todayKST = () => TODAY;
+  ${APP_DEPS}
+  ${addDaysSrc}
+  ${grab(html, 'buildNextWeekPlanHTML')}
+  return (a, b, rows, init, floor, C, today) => {
+    const r = buildNextWeekPlanHTML(a, b, rows, init, floor, C, today);
+    return (r && r.__html) ? r.__html : String(r);
+  };`);
 const C_MAIL = { green:'#2A7F57', red:'#C24A38', red2:'#F7E4DE', amber:'#9E6A15', blue:'#314840',
   text:'#1B2B30', t2:'#55655D', t3:'#94A296', bg:'#F2F5F1', bg3:'#E9EFE7', card:'#ffffff', border:'#DDE6DA' };
 
@@ -105,9 +121,10 @@ for (const [label, wStart] of CASES) {
   /* HTML 블록 비교 — 공백만 다른 건 무시(들여쓰기 관습이 두 파일에서 다르다) */
   const norm = (x) => String(x).replace(/\s+/g, ' ').trim();
   const ah = norm(appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H));
-  const bh = norm(edgeBlock(FMT)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, TODAY));
+  const E = edgeBlock(FMT);
+  const bh = norm(E.traj(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, TODAY));
   const hOk = ah === bh;
-  console.log(`  ${hOk ? '✅' : '❌'} ${label} — HTML 블록 일치 (${ah.length} bytes)`);
+  console.log(`  ${hOk ? '✅' : '❌'} ${label} — 궤적 HTML 일치 (${ah.length} bytes)`);
   if (!hOk) {
     let k = 0; while (k < Math.min(ah.length, bh.length) && ah[k] === bh[k]) k++;
     console.log(`       ${k} 번째 문자부터 다름`);
@@ -115,6 +132,20 @@ for (const [label, wStart] of CASES) {
     console.log(`       Edge    : …${bh.slice(Math.max(0, k - 40), k + 60)}`);
   }
   hOk ? pass++ : fail++;
+
+  /* 차주 예정 블록 — nwStart/nwEnd 는 선택 주차의 다음 주 */
+  const nwS = addDaysJs(wStart, 7), nwE = addDaysJs(wStart, 13);
+  const an = norm(appNw(TODAY)(nwS, nwE, ROWS, INIT + FX, 1500000000, C_MAIL, TODAY));
+  const bn = norm(E.nw(nwS, nwE, ROWS, INIT + FX, 1500000000, C_MAIL, TODAY));
+  const nOk = an === bn;
+  console.log(`  ${nOk ? '✅' : '❌'} ${label} — 차주 예정 HTML 일치 (${an.length} bytes)`);
+  if (!nOk) {
+    let k = 0; while (k < Math.min(an.length, bn.length) && an[k] === bn[k]) k++;
+    console.log(`       ${k} 번째 문자부터 다름`);
+    console.log(`       미리보기: …${an.slice(Math.max(0, k - 40), k + 60)}`);
+    console.log(`       Edge    : …${bn.slice(Math.max(0, k - 40), k + 60)}`);
+  }
+  nOk ? pass++ : fail++;
 
   /* ── 구조 검사 ─────────────────────────────────────────────────────────
      ⚠⚠ 2026-08-21: 메일에서 차트가 통째로 안 보였다. 중첩 table 에 width 가 없어

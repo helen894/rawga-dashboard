@@ -316,10 +316,15 @@ function buildWeeklyTrajBlockHTML(
   const stack = (marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[]) => {
     let cur = 0; let out = '';
     for (const m of marks.filter(x => x.h > 0).sort((a, b) => a.top - b.top)) {
-      const top = Math.round(m.top), h = Math.round(m.h);
+      let top = Math.round(m.top), h = Math.round(m.h);
+      /* ⚠⚠ 겹치면 앞 요소가 뒤 요소를 아래로 밀어낸다(일반 문서 흐름). 그 탓에 안전선
+         눈금이 연결선·점 뒤에 오면 2~5px 밀려 안전선이 흔들려 보였다(2026-08-21).
+         겹치는 만큼 잘라내 모든 요소가 제 높이에 오게 한다. */
+      if (top < cur) { h -= (cur - top); top = cur; }
+      if (h <= 0) continue;
       if (top > cur) out += sp(top - cur);
       out += bar(h, m.bg, m.w, m.round);
-      cur = Math.max(cur, top + h);
+      cur = top + h;
     }
     return out;
   };
@@ -334,8 +339,6 @@ function buildWeeklyTrajBlockHTML(
     const changed = prev !== null && prev !== v;
 
     const marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[] = [];
-    /* 안전선 눈금 — 두 칸마다 1px 로 찍어 점선처럼 보이게 한다(선과 헷갈리지 않게) */
-    if (floor > 0 && i % 2 === 0) marks.push({ top: yTop(floor), h: 1, bg: COL_FLOOR });
     if (changed) {
       /* 수직 연결선 — 선 두께만큼만 좁게(가운데 정렬) */
       const a = yTop(prev), b = yTop(v);
@@ -343,6 +346,14 @@ function buildWeeklyTrajBlockHTML(
       marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, w: DOT, round: true });
     } else {
       marks.push({ top: yTop(v), h: LW, bg: col });   // 가로선은 셀 폭 전체 → 옆 칸과 이어진다
+    }
+    /* 안전선 눈금 — 두 칸마다 1px.
+       ⚠⚠ stack() 은 위에서부터 쌓으므로 잔액 선과 겹치면 눈금이 아래로 밀려 **안전선이
+         위아래로 흔들려 보였다**(2026-08-21 배달 메일에서 확인). 겹치는 칸에는 찍지 않는다. */
+    if (floor > 0 && i % 2 === 0) {
+      const ft = yTop(floor);
+      const collide = marks.some(m => ft < m.top + m.h + 2 && ft + 1 > m.top - 2);
+      if (!collide) marks.push({ top: ft, h: 1, bg: COL_FLOOR });
     }
     /* 커서를 올리면 그날 잔액이 보인다 — 메일에서 :hover 는 못 믿지만 title 속성은
        웹메일(브라우저)에서 그대로 동작한다. 열 전체를 대상으로 해 잡기 쉽게 한다. */
@@ -382,6 +393,107 @@ function buildWeeklyTrajBlockHTML(
     <span style="display:inline-block;width:14px;height:1px;background:${COL_FLOOR};vertical-align:middle"></span> 안전선` : ''}
     &nbsp;· 점 = 잔액이 바뀐 날
   </div>
+</td></tr>`;
+}
+
+/* ═══ 차주 입출금 예정 + 잔액 (메일용) ════════════════════════════════════
+ * 궤적 차트는 "언제 얼마까지 떨어지나" 를 보여주지만 무엇 때문인지는 안 보여준다.
+ * 차주 한 주만 건별로 펼쳐 잔액이 어떻게 깎여 가는지 같이 본다.
+ * ⚠⚠ index.html 의 buildNextWeekPlanHTML 과 같은 내용의 사본이다 — 메일 HTML 이 미리보기와
+ *   실제 발송 두 벌로 관리되는 구조라서다. 한쪽만 고치면 다른 숫자가 나간다.
+ * ⚠ 잔액 기준을 차트와 똑같이 맞춘다 — 확정은 오늘까지, 그 뒤는 예정 누적, 연체 예정은
+ *   오늘 시점에 한꺼번에. 여기서 다르게 계산하면 차트의 그 날 값과 표의 잔액이 어긋난다. */
+function buildNextWeekPlanHTML(
+  nwStart: string, nwEnd: string, cfArr: Record<string, unknown>[], initCash: number,
+  floor: number, C: Record<string, string>, today: string,
+): string {
+  const rows = Array.isArray(cfArr) ? cfArr : [];
+  const eok = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
+  const md  = (d: string) => d.slice(5).replace('-', '/');
+  const DOW = ['일','월','화','수','목','금','토'];
+  const dow = (d: string) => DOW[new Date(d + 'T00:00:00').getDay()];
+  const num = (v: unknown) => Number(v) || 0;
+
+  /* 어떤 날짜 시점의 잔액 — 차트(computeWeeklyCashSeries)와 같은 규칙 */
+  const dayVal = (d: string) => {
+    let v = initCash, overdue = 0;
+    for (const r of rows) {
+      const rd = String(r.date || ''); if (!rd) continue;
+      const st = String(r.status || '');
+      if (st === '실제 입금')      { if (rd <= d) v += num(r.in); }
+      else if (st === '실제 지출') { if (rd <= d) v -= num(r.out); }
+      else if (st === '입금 예정' || st === '지출 예정') {
+        const dv = st === '입금 예정' ? num(r.in) : -num(r.out);
+        if (rd <= today) overdue += dv;          // 연체 → 오늘로 몰아 얹는다
+        else if (rd <= d) v += dv;
+      }
+    }
+    return v + (d >= today ? overdue : 0);
+  };
+
+  const open = dayVal(addDays(nwStart, -1));
+  const wk = rows.filter(r => String(r.date || '') >= nwStart && String(r.date || '') <= nwEnd
+                          && (num(r.in) > 0 || num(r.out) > 0))
+                 .sort((a, b) => String(a.date).localeCompare(String(b.date))
+                              || (Math.abs(num(b.in) || num(b.out)) - Math.abs(num(a.in) || num(a.out))));
+
+  const CAP = 30;
+  const shown = wk.slice(0, CAP);
+  let run = open;
+  const trs = shown.map(r => {
+    const st = String(r.status || '');
+    const isIn = st === '입금 예정' || st === '실제 입금';
+    const amt  = isIn ? num(r.in) : -num(r.out);
+    run += amt;
+    const planned = st === '입금 예정' || st === '지출 예정';
+    const low = floor > 0 && run < floor;
+    const bt = `border-top:1px solid ${C.border}`;
+    return `<tr>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.t2};white-space:nowrap;${bt}">${md(String(r.date))}(${dow(String(r.date))})</td>
+      <td style="padding:5px 6px;font-size:11px;color:${planned ? C.t3 : C.text};white-space:nowrap;${bt}">${planned ? '예정' : '실제'}</td>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.text};${bt}">${escapeHtml(String(r.desc || r.mid_cat || '—'))}</td>
+      <td style="padding:5px 6px;font-size:11.5px;color:${amt >= 0 ? C.green : C.red};text-align:right;white-space:nowrap;${bt}">${amt >= 0 ? '+' : ''}${fmt(amt)}</td>
+      <td style="padding:5px 6px;font-size:11.5px;font-weight:${low ? '700' : '400'};color:${low ? C.red : C.text};text-align:right;white-space:nowrap;${bt}">${fmt(run)}</td>
+    </tr>`;
+  }).join('');
+  const rest = wk.slice(CAP);
+  const restSum = rest.reduce((s, r) => s + (num(r.in) - num(r.out)), 0);
+  const endBal = open + wk.reduce((s, r) => s + (num(r.in) - num(r.out)), 0);
+  const inSum  = wk.reduce((s, r) => s + num(r.in), 0);
+  const outSum = wk.reduce((s, r) => s + num(r.out), 0);
+  const endLow = floor > 0 && endBal < floor;
+  const bt2 = `border-top:2px solid ${C.border}`;
+
+  return `
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<tr><td style="background:${C.card};padding:18px 18px 14px">
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📅 차주 입출금 예정</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${nwStart} ~ ${nwEnd} · 입금 ${fmt(inSum)} · 지출 ${fmt(outSum)} · ${wk.length}건</div>
+  ${wk.length === 0
+    ? `<div style="font-size:12.5px;color:${C.t3};padding:10px 0">등록된 예정이 없습니다.</div>`
+    : `<table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3};white-space:nowrap">날짜</td>
+        <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3}">구분</td>
+        <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3}">내용</td>
+        <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3};text-align:right">금액</td>
+        <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3};text-align:right">잔액</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="padding:5px 6px;font-size:11.5px;color:${C.t2};background:${C.bg3}">시작 잔액 (${md(addDays(nwStart, -1))} 기준)</td>
+        <td style="padding:5px 6px;font-size:11.5px;color:${C.text};text-align:right;white-space:nowrap;background:${C.bg3}">${fmt(open)}</td>
+      </tr>
+      ${trs}
+      ${rest.length ? `<tr>
+        <td colspan="4" style="padding:5px 6px;font-size:11px;color:${C.t3};border-top:1px solid ${C.border}">… 외 ${rest.length}건 (합계 ${restSum >= 0 ? '+' : ''}${fmt(restSum)})</td>
+        <td style="border-top:1px solid ${C.border}"></td>
+      </tr>` : ''}
+      <tr>
+        <td colspan="4" style="padding:7px 6px;font-size:12px;font-weight:700;color:${C.text};${bt2}">차주 말 잔액 (${md(nwEnd)})</td>
+        <td style="padding:7px 6px;font-size:13px;font-weight:700;color:${endLow ? C.red : C.text};text-align:right;white-space:nowrap;${bt2}">${fmt(endBal)}</td>
+      </tr>
+    </table>
+    ${floor > 0 && endLow ? `<div style="margin-top:8px;font-size:11px;color:${C.red}">차주 말 잔액이 안전선 ${eok(floor)}억을 ${eok(floor - endBal)}억 밑돕니다.</div>` : ''}`}
 </td></tr>`;
 }
 
@@ -713,6 +825,7 @@ function buildWeeklyReportHTML(
   </div>
 </td></tr>
 ${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul())}
+${buildNextWeekPlanHTML(nwStart, nwEnd, cfArr, initCash, floor, C, todaySeoul())}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 
 <!-- 📝 주간 요약 (주간 KPI 아래) -->
