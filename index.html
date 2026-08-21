@@ -9446,9 +9446,15 @@ function buildNextWeekPlanHTML(from, to, cfArr, initCash, floor, C, today) {
     return v + (d >= today ? overdue : 0);
   };
 
-  const open = dayVal(addDays(nwStart, -1));
-  /* 차주 구간의 거래 — 미래면 예정만, 과거 주차를 보고 있으면 실제도 섞인다 */
-  const wk = rows.filter(r => r.date >= nwStart && r.date <= nwEnd
+  /* 시작 잔액 = **당일 시점 잔액** (차트의 오늘 값과 같다).
+     ⚠ 차트 규칙상 기한이 지난 예정(연체)은 오늘 값에 이미 접혀 들어가 있다. 그래서 행은
+       **오늘 다음날부터** 잡는다 — 오늘자 예정을 행으로 또 세면 이중계상이다.
+       대신 연체가 있으면 몇 건 얼마가 포함됐는지 아래 줄에 밝힌다. */
+  const open = dayVal(today);
+  const overdue = rows.filter(r => (r.status === '입금 예정' || r.status === '지출 예정')
+                                && r.date && r.date <= today && (r.in > 0 || r.out > 0));
+  const overdueSum = overdue.reduce((t, r) => t + ((r.in || 0) - (r.out || 0)), 0);
+  const wk = rows.filter(r => r.date > today && r.date <= nwEnd
                           && (r.in > 0 || r.out > 0))
                  .sort((a, b) => a.date.localeCompare(b.date)
                               || (Math.abs(b.in || b.out || 0) - Math.abs(a.in || a.out || 0)));
@@ -9481,8 +9487,8 @@ function buildNextWeekPlanHTML(from, to, cfArr, initCash, floor, C, today) {
   return html`
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <tr><td style="background:${C.card};padding:18px 18px 14px">
-  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📅 입출금 예정 (당일 ~ +10일)</div>
-  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${nwStart} ~ ${nwEnd} · 입금 ${fmt(inSum)} · 지출 ${fmt(outSum)} · ${wk.length}건</div>
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📅 입출금 예정 (당일 잔액 기준 · 향후 10일)</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${addDays(today, 1)} ~ ${nwEnd} · 입금 ${fmt(inSum)} · 지출 ${fmt(outSum)} · ${wk.length}건</div>
   ${wk.length === 0
     ? html`<div style="font-size:12.5px;color:${C.t3};padding:10px 0">등록된 예정이 없습니다.</div>`
     : html`<table width="100%" cellpadding="0" cellspacing="0">
@@ -9494,7 +9500,7 @@ function buildNextWeekPlanHTML(from, to, cfArr, initCash, floor, C, today) {
         <td style="padding:0 6px 6px;font-size:10.5px;color:${C.t3};text-align:right">잔액</td>
       </tr>
       <tr>
-        <td colspan="4" style="padding:5px 6px;font-size:11.5px;color:${C.t2};background:${C.bg3}">시작 잔액 (${md(addDays(nwStart, -1))} 기준)</td>
+        <td colspan="4" style="padding:5px 6px;font-size:11.5px;color:${C.t2};background:${C.bg3}">시작 잔액 (당일 ${md(today)} 기준)${overdue.length ? raw(`<span style="font-size:10.5px;color:${C.t3}"> · 연체 예정 ${overdue.length}건 ${fmt(overdueSum)} 포함</span>`) : ''}</td>
         <td style="padding:5px 6px;font-size:11.5px;color:${C.text};text-align:right;white-space:nowrap;background:${C.bg3}">${fmt(open)}</td>
       </tr>
       ${trs}
