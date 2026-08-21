@@ -94,6 +94,7 @@ const CASES = [
   ['먼 미래',   '2026-07-13'],
 ];
 const TODAY = '2026-06-03', INIT = 1000, FX = 0, H = 56;
+const H_DAYS = H;   // 지평 일수 = 열 개수
 
 let pass = 0, fail = 0;
 console.log('');
@@ -114,6 +115,29 @@ for (const [label, wStart] of CASES) {
     console.log(`       Edge    : …${bh.slice(Math.max(0, k - 40), k + 60)}`);
   }
   hOk ? pass++ : fail++;
+
+  /* ── 구조 검사 ─────────────────────────────────────────────────────────
+     ⚠⚠ 2026-08-21: 메일에서 차트가 통째로 안 보였다. 중첩 table 에 width 가 없어
+       열 폭이 0 으로 접힌 것인데, 그때 검증이 **높이와 색만 재고 폭을 안 봐서** 통과했다.
+       같은 부류가 다시 나면 여기서 잡는다 — 브라우저 없이 마크업만 보고 판정한다. */
+  const raw = appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H);
+  const colTds = raw.match(/<td width="[\d.]+%" valign="bottom" height="\d+"/g) || [];
+  const segs   = raw.match(/<div style="height:(\d+)px;background:#[0-9A-Fa-f]{6}/g) || [];
+  const zeroH  = segs.filter(m => /height:0px/.test(m)).length;
+  /* 열 셀(height 속성이 붙은 td) 안에 table 이 있으면 폭 없는 셀에 의존하는 것 —
+     바깥 차트 컨테이너의 table 은 정상이므로 height 속성으로 열 셀만 골라 본다. */
+  const nestedTable = /<td[^>]*height="\d+"[^>]*>\s*<table/.test(raw);
+  const checks = [
+    [`열 ${H_DAYS}개가 폭을 명시함`, colTds.length, H_DAYS],
+    ['색칠 구간이 있음', segs.length > 0, true],
+    ['높이 0 인 색칠 구간 없음', zeroH, 0],
+    ['색칠을 중첩 table 에 의존하지 않음', nestedTable, false],
+  ];
+  for (const [label, got, want] of checks) {
+    const ok = JSON.stringify(got) === JSON.stringify(want);
+    console.log(`  ${ok ? '✅' : '❌'} ${label}${ok ? '' : ` — 기대 ${want}, 실제 ${got}`}`);
+    ok ? pass++ : fail++;
+  }
 
   for (const key of ['dates', 'actVals', 'projVals']) {
     const ok = JSON.stringify(a[key]) === JSON.stringify(b[key]);

@@ -296,19 +296,25 @@ function buildWeeklyTrajBlockHTML(
   const COL_ACT  = C.blue, COL_PRJ = '#8AA093';
   const COL_ACTB = C.red,  COL_PRJB = '#E0A99E';
   const COL_BAND = '#D3DFD6';
-  const cell = (h: number, bg: string) =>
-    `<tr><td height="${h}"${bg ? ` bgcolor="${bg}"` : ''} style="font-size:0;line-height:0">&nbsp;</td></tr>`;
+  /* 한 칸은 div 를 위→아래로 쌓아 만든다.
+     ⚠⚠ 중첩 <table> 로 만들었다가 **메일에서 차트가 통째로 안 보였다**(2026-08-21 실측).
+       안쪽 table 에 width 가 없고 셀 내용이 font-size:0 인 &nbsp; 뿐이라 폭이 0 으로
+       접혔다. div 는 블록 요소라 부모 셀 폭을 그대로 받아 이 문제가 없다.
+     ⚠ 바깥 td 에 width 를 명시한다 — 내용 폭이 0 인 셀들은 자동 분배로도 0 이 될 수 있다.
+     ⚠ mso-line-height-rule:exactly 는 Outlook 이 줄높이를 밀어넣는 걸 막는다. */
+  const colW = (100 / dates.length).toFixed(3);
+  const ZERO = 'font-size:0;line-height:0;mso-line-height-rule:exactly';
+  const seg = (h: number, bg: string) => h > 0 ? `<div style="height:${h}px;background:${bg};${ZERO}"></div>` : '';
   const cols = dates.map((_d, i) => {
     const v = line[i];
-    if (v === null) return '<td style="font-size:0;line-height:0">&nbsp;</td>';
+    if (v === null) return `<td width="${colW}%" style="${ZERO}">&nbsp;</td>`;
     const isAct = actVals[i] !== null;
     const h = px(v);
     const below = floor > 0 && v < floor;
-    /* 바깥 셀에 valign="bottom" + 고정 높이를 주면 위쪽 여백 셀이 필요 없다(메일 크기 절약) */
     const body = below
-      ? cell(h, isAct ? COL_ACTB : COL_PRJB)
-      : cell(Math.max(0, h - floorPx), isAct ? COL_ACT : COL_PRJ) + cell(floorPx, COL_BAND);
-    return `<td valign="bottom" height="${H}" style="font-size:0;line-height:0"><table cellpadding="0" cellspacing="0">${body}</table></td>`;
+      ? seg(h, isAct ? COL_ACTB : COL_PRJB)
+      : seg(Math.max(0, h - floorPx), isAct ? COL_ACT : COL_PRJ) + seg(floorPx, COL_BAND);
+    return `<td width="${colW}%" valign="bottom" height="${H}" style="${ZERO}">${body}</td>`;
   }).join('');
 
   const ticks = dates.map((d, i) => (i % 7 === 0)
