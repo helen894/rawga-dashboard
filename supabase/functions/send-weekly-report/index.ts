@@ -294,40 +294,94 @@ function buildWeeklyTrajBlockHTML(
      ⚠ 색칠은 반드시 div 로 한다 — 중첩 table 은 width 가 없으면 폭이 0 으로 접혀
        차트가 통째로 사라진다(2026-08-21 실측).
      ⚠ 안전선은 별도 레이어를 못 만드니 열마다 1px 눈금을 찍어 점선처럼 보이게 한다. */
-  const LW = 2, DOT = 5;                            // 선 두께 · 변화점 점 크기
-  const yTop = (v: number) => H - px(v);            // 위에서부터의 거리
-  const COL_ACT  = C.blue, COL_PRJ = '#8AA093';
-  const COL_ACTB = C.red,  COL_PRJB = '#E0A99E';
-  const COL_FLOOR = '#E8BDB4';
+  type Mark = { top: number; h: number; bg: string; w?: number; round?: boolean; ring?: boolean; txt?: string };
+  const LW = 2;                                     // 선 두께
+  const DOT = 5;                                    // 변화점 점 크기
+  const RING = 4;                                   // 속 빈 마커 내경(테두리 2px 포함 8px)
+  const LBL = 12;                                   // 값 라벨 줄높이
+  const yTop = (v: number) => H - px(v);                      // 위에서부터의 거리
+  const COL_ACT  = C.blue;      // 확정 · 정상 (RAWGA DEEP GREEN)
+  const COL_PRJ  = '#8AA093';   // 궤적 · 정상
+  const COL_ACTB = C.red;       // 확정 · 미달
+  const COL_PRJB = '#E0A99E';   // 궤적 · 미달
+  const COL_FLOOR= '#E8BDB4';   // 안전선 눈금
 
   const colW = (100 / dates.length).toFixed(3);
   /* ⚠ 이 문자열이 열마다 여러 번 반복돼 메일 크기를 좌우한다. div 는 내용이 없으니
-     font-size/line-height 만으로 충분하고, Outlook 용 mso 규칙은 td 에만 준다. */
+     font-size/line-height 만으로 충분하고, Outlook 용 mso 규칙은 td 에만 준다
+     (그것까지 div 마다 붙였다가 31KB → 필요 없는 7KB 를 실었다). */
   const Z  = 'font-size:0;line-height:0';
   const ZT = Z + ';mso-line-height-rule:exactly';
   const sp  = (h: number) => `<div style="height:${h}px;${Z}"></div>`;
   /* w 를 주면 가운데 정렬된 좁은 조각이 된다(수직 연결선·점). 안 주면 셀 폭 전체를 채워
      가로선이 옆 칸과 이어진다.
-     ⚠ 수직 연결선을 셀 폭 전체로 그렸다가 막대처럼 보여 선이 두껍다는 지적을 받았다
+     ⚠ 수직 연결선을 셀 폭 전체로 그렸다가 **막대처럼 보여 선이 두껍다는 지적을 받았다**
        (2026-08-21). 연결선은 선 두께만큼만 좁게 그려야 선으로 읽힌다. */
-  const bar = (h: number, bg: string, w?: number, round?: boolean) =>
-    `<div style="height:${h}px;background:${bg};${Z}${w ? `;width:${w}px;margin:0 auto` : ''}${round ? `;border-radius:${DOT}px` : ''}"></div>`;
-  /* td 가 고정 높이 + valign="top" 이라 아래쪽 여백 div 는 넣지 않는다(크기 절약) */
-  const stack = (marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[]) => {
-    let cur = 0; let out = '';
-    for (const m of marks.filter(x => x.h > 0).sort((a, b) => a.top - b.top)) {
-      let top = Math.round(m.top), h = Math.round(m.h);
-      /* ⚠⚠ 겹치면 앞 요소가 뒤 요소를 아래로 밀어낸다(일반 문서 흐름). 그 탓에 안전선
-         눈금이 연결선·점 뒤에 오면 2~5px 밀려 안전선이 흔들려 보였다(2026-08-21).
-         겹치는 만큼 잘라내 모든 요소가 제 높이에 오게 한다. */
-      if (top < cur) { h -= (cur - top); top = cur; }
-      if (h <= 0) continue;
-      if (top > cur) out += sp(top - cur);
-      out += bar(h, m.bg, m.w, m.round);
-      cur = top + h;
+  const bar = (h: number, bg: string, w?: number, round?: boolean) => `<div style="height:${h}px;background:${bg};${Z}${w ? `;width:${w}px;margin:0 auto` : ''}${round ? `;border-radius:${DOT}px` : ''}"></div>`;
+  /* 속 빈 원 마커 — 첨부 예시(주가 차트)의 마커 모양. Outlook 은 border-radius 를 무시해
+     작은 사각형으로 보이지만 위치·크기는 같아 정보 손실이 없다. */
+  const ring = (col: string) => `<div style="width:${RING}px;height:${RING}px;border:2px solid ${col};background:${C.card};border-radius:${RING + 4}px;margin:0 auto;${Z}"></div>`;
+  /* 값 라벨 — width:0 이라 열 폭을 늘리지 않고 오른쪽으로 흘러 넘친다(옆 칸은 비어 있다).
+     텍스트라 모든 클라이언트에서 보인다 — 이게 가독성 개선의 핵심이다. */
+  const label = (txt: string, col: string) => `<div style="height:${LBL}px;width:0;overflow:visible;white-space:nowrap;font-size:9.5px;line-height:${LBL}px;color:${col};font-weight:700;mso-line-height-rule:exactly">${txt}</div>`;
+  /* 마크를 y 순서로 쌓는다 — 겹치면 붙어 나오지만 1~3px 라 눈에 안 띈다.
+     td 가 고정 높이 + valign="top" 이라 **아래쪽 여백 div 는 넣지 않는다**(크기 절약). */
+  /* 마크 하나를 배치할 자리를 정한다.
+     ⚠⚠ 겹치면 앞 요소가 뒤 요소를 아래로 밀어낸다(일반 문서 흐름). 그래서 겹치는 만큼
+       **잘라내** 모든 요소가 제 높이에 오게 한다 — 잘리는 쪽은 1~2px 선이라 안 보인다.
+     ⚠⚠ 단 라벨·링은 높이가 CSS 로 고정돼 있어 **자를 수 없다**(자른 h 를 줘도 렌더 높이는
+       그대로다). 그걸 모르고 자른 값으로 계산했다가 안전선이 8px 밀렸다(2026-08-21).
+       고정 높이 요소는 자르지 않고 앞 요소 바로 뒤로 밀되, 그 사실을 계산에 반영한다. */
+  const place = (m: Mark, cur: number) => {
+    let top = Math.round(m.top), h = Math.round(m.h);
+    const fixed = m.txt !== undefined || m.ring;
+    if (top < cur) {
+      if (fixed) top = cur;                       // 높이는 그대로, 자리만 뒤로
+      else { h -= (cur - top); top = cur; }       // 겹친 만큼 잘라 위치를 지킨다
     }
-    return out;
+    return { top, h, skip: h <= 0 };
   };
+  const sortMarks = (marks: Mark[]) => marks.filter(x => x.h > 0).sort((a, b) => a.top - b.top);
+  /* 실제 배치 결과의 마지막 바닥 — 안전선 눈금을 어디 둘지 판정할 때 쓴다 */
+  const layoutEnd = (marks: Mark[]) => {
+    let cur = 0;
+    for (const m of sortMarks(marks)) {
+      const r = place(m, cur);
+      if (!r.skip) cur = r.top + r.h;
+    }
+    return cur;
+  };
+  const stack = (marks: Mark[]) => {
+    let cur = 0; const out: string[] = [];
+    for (const m of sortMarks(marks)) {
+      const r = place(m, cur);
+      if (r.skip) continue;
+      if (r.top > cur) out.push(sp(r.top - cur));
+      out.push(m.txt !== undefined ? label(m.txt, m.bg)
+             : m.ring ? ring(m.bg)
+             : bar(r.h, m.bg, m.w, m.round));
+      cur = r.top + r.h;
+    }
+    return out.join('');
+  };
+
+  /* ── 값 라벨을 붙일 칸 고르기 ────────────────────────────────────────
+     56칸 전부에 라벨을 달면 겹쳐서 못 읽는다. 중요한 것부터 넣고, 이미 넣은 라벨과
+     6칸 안에 붙으면 건너뛴다. 우선순위: 최저점 → 마지막 날 → 첫날 → 변동액이 큰 날.
+     최저점을 1순위로 두는 이유는 이 차트를 보는 목적이 '언제 얼마까지 떨어지나' 라서다. */
+  const chg: { i: number; d: number }[] = [];
+  for (let i = 1; i < line.length; i++)
+    if (line[i] !== null && line[i - 1] !== null && line[i] !== line[i - 1])
+      chg.push({ i, d: Math.abs(line[i] - line[i - 1]) });
+  let lowI = -1, lowV = Infinity;
+  line.forEach((v, i) => { if (v !== null && v < lowV) { lowV = v; lowI = i; } });
+  const cand = [lowI, line.length - 1, 0, ...chg.sort((a, b) => b.d - a.d).map(x => x.i)];
+  const labelAt = new Set<number>();
+  for (const i of cand) {
+    if (i < 0 || line[i] === null || labelAt.size >= 8) continue;
+    if ([...labelAt].some(j => Math.abs(j - i) < 6)) continue;
+    labelAt.add(i);
+  }
 
   const cols = dates.map((_d, i) => {
     const v = line[i];
@@ -338,29 +392,46 @@ function buildWeeklyTrajBlockHTML(
     const prev = i > 0 ? line[i - 1] : null;
     const changed = prev !== null && prev !== v;
 
-    const marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[] = [];
+    const marks: Mark[] = [];
     if (changed) {
-      /* 수직 연결선 — 선 두께만큼만 좁게(가운데 정렬) */
+      /* 수직 연결선 — 이전 값과 현재 값 사이를 잇는다. 선 두께만큼만 좁게(가운데 정렬). */
       const a = yTop(prev), b = yTop(v);
       marks.push({ top: Math.min(a, b), h: Math.abs(a - b) + LW, bg: col, w: LW });
-      marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, w: DOT, round: true });
+      /* 값 라벨이 붙는 칸은 속 빈 원(예시 이미지 모양), 아니면 작은 점 */
+      if (labelAt.has(i)) marks.push({ top: yTop(v) - 3, h: RING + 4, bg: col, ring: true });
+      else marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, w: DOT, round: true });
     } else {
       marks.push({ top: yTop(v), h: LW, bg: col });   // 가로선은 셀 폭 전체 → 옆 칸과 이어진다
     }
-    /* 안전선 눈금 — 두 칸마다 1px.
-       ⚠⚠ stack() 은 위에서부터 쌓으므로 잔액 선과 겹치면 눈금이 아래로 밀려 **안전선이
-         위아래로 흔들려 보였다**(2026-08-21 배달 메일에서 확인). 겹치는 칸에는 찍지 않는다. */
+    /* 값 라벨 — 선 위쪽에 억 단위로. 라벨 칸인데 변화가 없는 날이면 링도 같이 찍는다. */
+    if (labelAt.has(i)) {
+      if (!changed) marks.push({ top: yTop(v) - 3, h: RING + 4, bg: col, ring: true });
+      /* 위에 자리가 없으면 아래로 뒤집는다 — 억지로 0 에 붙이면 링과 겹쳐 배치가 밀린다.
+         실제 차트도 축에 붙은 점의 라벨은 반대쪽에 그린다. */
+      const above = yTop(v) - LBL - 6;
+      const lt = above >= 0 ? above : yTop(v) + RING + 6;
+      marks.push({ top: lt, h: LBL, bg: col, txt: `${(v / 1e8).toFixed(2)}억` });
+    }
+    /* 안전선 눈금 — 두 칸마다 찍어 점선처럼 보이게 한다(선과 헷갈리지 않게 1px).
+       ⚠⚠ stack() 은 위에서부터 쌓으므로 앞 요소와 겹치면 눈금이 아래로 밀려 **안전선이
+         흔들려 보였다**(2026-08-21). 명목 위치로 겹침을 판정했더니 라벨이 차트 위쪽에서
+         잘릴 때 연쇄로 밀리는 경우를 놓쳤다.
+       → **실제 배치 결과(layoutEnd)** 를 기준으로, 눈금이 다른 마크보다 확실히 위이거나
+         확실히 아래일 때만 찍는다. 그 두 경우는 여백 계산이 정확해 위치가 딱 맞는다.
+         사이에 끼면 생략한다 — 이미 점선이라 빈 칸이 자연스럽고, 틀린 높이보다 낫다. */
     if (floor > 0 && i % 2 === 0) {
       const ft = yTop(floor);
-      const collide = marks.some(m => ft < m.top + m.h + 2 && ft + 1 > m.top - 2);
-      if (!collide) marks.push({ top: ft, h: 1, bg: COL_FLOOR });
+      const topMost = Math.min(...marks.map(m => Math.round(m.top)));
+      const end = layoutEnd(marks);
+      if (ft + 1 < topMost || ft > end) marks.push({ top: ft, h: 1, bg: COL_FLOOR });
     }
     /* 커서를 올리면 그날 잔액이 보인다 — 메일에서 :hover 는 못 믿지만 title 속성은
        웹메일(브라우저)에서 그대로 동작한다. 열 전체를 대상으로 해 잡기 쉽게 한다. */
     const tip = `${dates[i]} 잔액 ${fmt(v)}${isAct ? ' (확정)' : ' (궤적)'}${below ? ' · 안전선 미달' : ''}`;
     return `<td width="${colW}%" valign="top" height="${H}" title="${tip}" style="${ZT}">${stack(marks)}</td>`;
-  }).join('');
+  }).join('');   // Edge 는 html`` 태그드 템플릿이 없어 배열을 직접 넣으면 콤마가 섞인다
 
+  /* x축 — 주 시작일마다 눈금 */
   const ticks = dates.map((d, i) => (i % 7 === 0)
     ? `<td colspan="7" style="font-size:9.5px;color:${C.t3};padding-top:4px;white-space:nowrap">${md(d)}</td>`
     : '').join('');
@@ -404,9 +475,10 @@ function buildWeeklyTrajBlockHTML(
  * ⚠ 잔액 기준을 차트와 똑같이 맞춘다 — 확정은 오늘까지, 그 뒤는 예정 누적, 연체 예정은
  *   오늘 시점에 한꺼번에. 여기서 다르게 계산하면 차트의 그 날 값과 표의 잔액이 어긋난다. */
 function buildNextWeekPlanHTML(
-  nwStart: string, nwEnd: string, cfArr: Record<string, unknown>[], initCash: number,
+  from: string, to: string, cfArr: Record<string, unknown>[], initCash: number,
   floor: number, C: Record<string, string>, today: string,
 ): string {
+  const nwStart = from, nwEnd = to;   // 이름만 유지 — 구간은 호출부가 정한다(당일+10일)
   const rows = Array.isArray(cfArr) ? cfArr : [];
   const eok = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
   const md  = (d: string) => d.slice(5).replace('-', '/');
@@ -467,7 +539,7 @@ function buildNextWeekPlanHTML(
   return `
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <tr><td style="background:${C.card};padding:18px 18px 14px">
-  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📅 차주 입출금 예정</div>
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📅 입출금 예정 (당일 ~ +10일)</div>
   <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${nwStart} ~ ${nwEnd} · 입금 ${fmt(inSum)} · 지출 ${fmt(outSum)} · ${wk.length}건</div>
   ${wk.length === 0
     ? `<div style="font-size:12.5px;color:${C.t3};padding:10px 0">등록된 예정이 없습니다.</div>`
@@ -489,11 +561,11 @@ function buildNextWeekPlanHTML(
         <td style="border-top:1px solid ${C.border}"></td>
       </tr>` : ''}
       <tr>
-        <td colspan="4" style="padding:7px 6px;font-size:12px;font-weight:700;color:${C.text};${bt2}">차주 말 잔액 (${md(nwEnd)})</td>
+        <td colspan="4" style="padding:7px 6px;font-size:12px;font-weight:700;color:${C.text};${bt2}">${md(nwEnd)} 잔액</td>
         <td style="padding:7px 6px;font-size:13px;font-weight:700;color:${endLow ? C.red : C.text};text-align:right;white-space:nowrap;${bt2}">${fmt(endBal)}</td>
       </tr>
     </table>
-    ${floor > 0 && endLow ? `<div style="margin-top:8px;font-size:11px;color:${C.red}">차주 말 잔액이 안전선 ${eok(floor)}억을 ${eok(floor - endBal)}억 밑돕니다.</div>` : ''}`}
+    ${floor > 0 && endLow ? `<div style="margin-top:8px;font-size:11px;color:${C.red}">${md(nwEnd)} 잔액이 안전선 ${eok(floor)}억을 ${eok(floor - endBal)}억 밑돕니다.</div>` : ''}`}
 </td></tr>`;
 }
 
@@ -825,7 +897,7 @@ function buildWeeklyReportHTML(
   </div>
 </td></tr>
 ${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul())}
-${buildNextWeekPlanHTML(nwStart, nwEnd, cfArr, initCash, floor, C, todaySeoul())}
+${buildNextWeekPlanHTML(todaySeoul(), addDays(todaySeoul(), 10), cfArr, initCash, floor, C, todaySeoul())}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 
 <!-- 📝 주간 요약 (주간 KPI 아래) -->
