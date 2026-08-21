@@ -1210,6 +1210,21 @@
     </div>
   </div>
 
+  <!-- ======== 일별 현금 잔액 추이·궤적 (KPI 카드 아래) ========
+       **선택한 주차의 월요일부터** 8주를 그린다. 오늘까지는 확정(실선), 이후는 예정을 얹은
+       궤적(점선)이다. 대시보드 추이 차트와 같은 기준(INIT_CASH + FX_ADJ)을 쓰므로 두 화면의
+       숫자가 어긋나지 않는다. -->
+  <div class="chart-box" id="wkrpt-cash-box" style="margin-bottom:20px">
+    <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span>📈 일별 현금 잔액 추이 · 궤적</span>
+      <small id="wkrpt-cash-range" style="color:var(--text3);font-weight:400"></small>
+      <span id="wkrpt-cash-note" style="margin-left:auto;font-size:11.5px;font-weight:400"></span>
+    </div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="wkrptCashChart" role="img" aria-label="선택 주차부터의 일별 현금 잔액 추이와 예정 반영 궤적">일별 현금 잔액</canvas>
+    </div>
+  </div>
+
   <!-- ======== 주간 요약 (KPI 카드 아래) ======== -->
   <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-bottom:20px">
     <div class="weekly-summary-head">
@@ -4873,7 +4888,7 @@ function showKPILoading() {
   subIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '연결 중...'; });
 }
 
-let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst;
+let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst, wkrptCashChartInst;
 
 function renderCharts() {
   // Chart.js는 display:none 캔버스에 렌더링 시 크기를 0×0으로 인식해 빈 차트가 됨
@@ -8614,9 +8629,202 @@ function groupWeeklyRowsByMid(rows, amtField) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+/* ═══ 주간 리포트 — 일별 현금 잔액 추이·궤적 ══════════════════════════════
+ * **선택한 주차의 월요일부터** 8주를 그린다. 주간 리포트는 주차를 앞뒤로 넘겨 보는 화면이라
+ * "그 주에 잔액이 어떻게 흘렀고 앞으로 어디로 가는가" 를 그 자리에서 보게 하는 게 목적이다.
+ *
+ * ⚠ 기준을 대시보드 추이 차트(renderCashChart)와 **똑같이** 맞춘다 — INIT_CASH + FX_ADJ 에
+ *   실제 입출금을 누적한다. 여기서 따로 계산하면 같은 날 잔액이 두 화면에서 다르게 나온다.
+ * ⚠ 확정/궤적의 경계는 **오늘**이다(선택 주차의 끝이 아니다). 과거 주차를 보면 구간 전체가
+ *   확정이고, 미래 주차를 보면 전체가 궤적이다.
+ * ⚠ 기한이 지난 예정(연체)은 미래가 아니라 **오늘 시점에 한꺼번에** 얹는다. 돈이 아직 안
+ *   나갔으므로 과거로 그리면 확정 구간을 왜곡한다(대시보드와 같은 규칙).
+ * ⚠ toISOString() 금지 — KST 자정이 UTC 로 전날 15:00 이라 하루가 밀린다. addDays() 를 쓴다. */
+const WKRPT_HORIZON_DAYS = 56;   // 8주 — 대시보드 궤적과 같은 지평
+
+/* 계산부를 그리기에서 떼어냈다 — 경계 조건(오늘 기준 · 미래 주차 · 연체 예정)이 많아
+   화면 없이 검증할 수 있어야 한다. scripts/test-weekly-cash-series.mjs 가 이 함수를 돌린다.
+   반환: { dates, actVals, projVals, actDelta, planDelta, overdueSum, overdueN, planN,
+           lastActualIdx, startProj } — actVals/projVals 는 dates 와 같은 길이이고
+   해당 구간이 아닌 칸은 null 이다(Chart.js 가 선을 끊는다). */
+function computeWeeklyCashSeries(wStart, rows, initCash, fxAdj, today, horizonDays) {
+  const from = wStart;
+  const to   = addDays(wStart, horizonDays - 1);
+  const dates = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+
+  const actDelta = {}, planAll = {};
+  let overdueSum = 0, overdueN = 0, planN = 0;
+  let beforeFrom = initCash + fxAdj;      // from 직전까지의 확정 잔액
+  let cashToday  = initCash + fxAdj;      // 오늘까지의 확정 잔액
+
+  for (const r of (rows || [])) {
+    const d = r.date;
+    if (!d) continue;
+    if (r.status === '실제 입금' || r.status === '실제 지출') {
+      const v = r.status === '실제 입금' ? (r.in || 0) : -(r.out || 0);
+      if (d <  from)  beforeFrom += v;
+      if (d <= today) cashToday  += v;
+      if (d >= from && d <= to) actDelta[d] = (actDelta[d] || 0) + v;
+    } else if (r.status === '입금 예정' || r.status === '지출 예정') {
+      const v = r.status === '입금 예정' ? (r.in || 0) : -(r.out || 0);
+      planN++;
+      /* 기한이 지난 예정(연체)은 오늘 시점에 한꺼번에 얹는다 — 돈이 아직 안 나갔으므로
+         과거로 그리면 확정 구간을 왜곡한다. 범위 밖 예정도 궤적 출발점에 영향을 주므로
+         planAll 은 to 로 자르지 않는다(미래 주차를 볼 때 필요하다). */
+      if (d <= today) { overdueSum += v; overdueN++; continue; }
+      planAll[d] = (planAll[d] || 0) + v;
+    }
+  }
+
+  /* 확정 선 — from ~ min(to, today). 거래 없는 날은 앞값을 이어 간다. */
+  const actVals = [];
+  let run = beforeFrom, lastActual = null, lastActualIdx = -1;
+  dates.forEach((d, i) => {
+    if (d <= today) {
+      run += (actDelta[d] || 0);
+      actVals.push(run);
+      lastActual = run; lastActualIdx = i;
+    } else actVals.push(null);
+  });
+
+  /* 궤적 — 오늘 확정 잔액(+연체 예정)에서 출발해 예정을 날짜순으로 누적한다.
+     from 이 오늘보다 뒤면(미래 주차) 오늘 다음날부터 from 직전까지의 예정도 먼저 반영한다. */
+  let prun = (lastActual === null ? cashToday : lastActual) + overdueSum;
+  if (from > today) {
+    for (const d of Object.keys(planAll).sort()) { if (d < from) prun += planAll[d]; }
+  }
+  const startProj = prun;
+  const hasProjection = to > today;      // 과거 주차면 그릴 궤적이 없다
+  const projVals = [];
+  dates.forEach((d, i) => {
+    /* 확정 마지막 점에서 이어 붙인다 — 그 점은 두 선이 같은 값이라 선이 끊겨 보이지 않는다.
+       ⚠ 궤적 구간이 아예 없으면(과거 주차) 이어 붙이지 않는다. 안 그러면 선도 없는 자리에
+         점 하나만 남아 범례에 '궤적' 이 뜨는데 실제로는 아무것도 안 그려진다.
+       ⚠ 이 점은 **연체 예정을 포함하지 않은** 확정값이다. 연체는 그 다음 칸부터 반영되므로
+         확정 끝 → 첫 궤적 점의 낙차로 보인다(대시보드 추이 차트와 같은 표현). */
+    if (d <= today) { projVals.push((hasProjection && i === lastActualIdx) ? actVals[i] : null); return; }
+    prun += (planAll[d] || 0);
+    projVals.push(prun);
+  });
+
+  const planDelta = {};
+  for (const d of dates) if (planAll[d]) planDelta[d] = planAll[d];
+
+  return { dates, from, to, actVals, projVals, actDelta, planDelta,
+           overdueSum, overdueN, planN, lastActualIdx, startProj };
+}
+
+function renderWeeklyCashChart(wStart) {
+  const cv = document.getElementById('wkrptCashChart');
+  if (!cv) return;
+  /* 리포팅 패널이나 주간 서브탭이 숨어 있으면 캔버스 크기가 0 이라 Chart.js 가 찌그러진
+     그림을 만든다. 탭을 열 때 renderActiveReportingSubTab 이 다시 부르므로 건너뛴다. */
+  if (!cv.offsetParent) return;
+
+  const today = todayKST();
+  computeFxAdj();
+  const S = computeWeeklyCashSeries(wStart, cfData, INIT_CASH, FX_ADJ, today, WKRPT_HORIZON_DAYS);
+  const { dates, from, to, actVals, projVals, actDelta, planDelta } = S;
+
+  const floor = dlFloor();
+  const floorVals = dates.map(() => floor > 0 ? floor : null);
+  const labels = dates.map(d => d.slice(5).replace('-', '/'));
+
+  /* 최저점 — 궤적 구간에서 가장 얇아지는 지점 */
+  let lowIdx = -1, lowVal = Infinity;
+  projVals.forEach((v, i) => { if (v !== null && v < lowVal) { lowVal = v; lowIdx = i; } });
+  const belowDays = floor > 0 ? projVals.filter(v => v !== null && v < floor).length : 0;
+
+  /* 안전선 하회 구간 음영 — annotation 플러그인이 없어 직접 그린다(대시보드와 같은 방식) */
+  const belowBand = {
+    id: 'wkrptBelowBand',
+    beforeDatasetsDraw(chart) {
+      if (!(floor > 0) || lowIdx < 0 || lowVal >= floor) return;
+      const { ctx: c, chartArea: a, scales } = chart;
+      let s0 = -1;
+      for (let i = 0; i < projVals.length; i++) {
+        const below = projVals[i] !== null && projVals[i] < floor;
+        if (below && s0 < 0) s0 = i;
+        if ((!below || i === projVals.length - 1) && s0 >= 0) {
+          const e0 = below ? i : i - 1;
+          const x1 = scales.x.getPixelForValue(s0), x2 = scales.x.getPixelForValue(e0);
+          c.save(); c.fillStyle = 'rgba(194,74,56,0.09)';
+          c.fillRect(x1, a.top, Math.max(2, x2 - x1), a.bottom - a.top); c.restore();
+          s0 = -1;
+        }
+      }
+    }
+  };
+
+  document.getElementById('wkrpt-cash-range').textContent = `${from} ~ ${to} (8주)`;
+  const noteEl = document.getElementById('wkrpt-cash-note');
+  if (noteEl) {
+    const hit = floor > 0 && lowVal < floor;
+    noteEl.style.color = hit ? 'var(--red)' : 'var(--green)';
+    noteEl.textContent = lowIdx < 0
+      ? '예정 없음 — 확정 구간만 표시'
+      : (hit ? `최저 ${fmt(lowVal)} (${dates[lowIdx]}) · 안전선 ${belowDays}일 하회`
+             : `최저 ${fmt(lowVal)} (${dates[lowIdx]}) · 안전선 유지`);
+  }
+
+  if (wkrptCashChartInst) wkrptCashChartInst.destroy();
+  wkrptCashChartInst = new Chart(cv.getContext('2d'), {
+    type: 'line',
+    plugins: [belowBand],
+    data: { labels, datasets: [
+      /* ⚠ Chart.js 는 CSS 변수를 해석하지 못한다 — var(--blue) 를 주면 선이 안 그려진다.
+         색·굵기·점선 패턴을 대시보드 추이 차트와 **똑같이** 맞춘다. 같은 개념의 그래프가
+         두 화면에서 다르게 보이면 사용자가 다른 지표로 읽는다. */
+      { label: '확정 잔액', data: actVals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)',
+        borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840',
+        fill: true, tension: 0.3, spanGaps: false },
+      { label: '궤적(예정 반영)', data: projVals, borderColor: '#314840', borderDash: [6, 4],
+        backgroundColor: 'rgba(49,72,64,0.05)', borderWidth: 1.5, fill: true, tension: 0.2,
+        pointRadius: c2 => (c2.dataIndex === lowIdx ? 5 : 0),
+        pointBackgroundColor: '#C24A38', pointBorderColor: '#C24A38',
+        pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
+      ...(floor > 0 ? [{ label: '안전선', data: floorVals, borderColor: '#9BA79F',
+        borderDash: [2, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 }] : []),
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'bottom',
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478' } },
+        tooltip: {
+          callbacks: {
+            label: c2 => (c2.raw === null || c2.raw === undefined) ? null : `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
+            afterBody: items => {
+              const i = items[0]?.dataIndex;
+              if (i === undefined) return '';
+              const d = dates[i];
+              const a = actDelta[d], p = planDelta[d];
+              const bits = [];
+              if (a) bits.push(`실제 ${a >= 0 ? '+' : ''}${fmt(a)}`);
+              if (p) bits.push(`예정 ${p >= 0 ? '+' : ''}${fmt(p)}`);
+              return bits.join(' · ');
+            }
+          },
+          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
+          borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
+             grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) },
+             grid: { color: 'rgba(0,0,0,0.06)' } }
+      }
+    }
+  });
+}
+
 function renderWeeklyReport() {
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
+  try { renderWeeklyCashChart(wStart); } catch (e) { console.warn('[wkrpt-cash]', e); }
 
   // ── 헤더 ──────────────────────────────────────────────
   // 주차 표시 기준: 해당 주의 목요일(wStart + 3일)이 속한 년/월/주차
