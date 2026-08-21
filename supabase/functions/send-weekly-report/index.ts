@@ -281,15 +281,20 @@ function buildWeeklyTrajBlockHTML(
   const eok  = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
   const md   = (d: string) => d.slice(5).replace('-', '/');
   const dday = Math.round((Date.parse(dates[lowIdx] + 'T00:00:00') - Date.parse(today + 'T00:00:00')) / 86400000);
+  /* ⚠ 구간이 전부 미래거나 전부 과거일 수 있다 — 그때 '오늘까지는 확정' 은 거짓이다 */
+  const basisNote = dates[0] > today
+    ? '전 구간 예정 반영 (선택 주차가 미래)'
+    : (dates[dates.length - 1] <= today ? '전 구간 확정' : `오늘(${today})까지는 확정, 이후는 예정 반영`);
 
-  const span = (hi - lo) || 1;
   let rows = '';
   for (let i = 0; i < line.length; i += 7) {
     const seg = line.slice(i, i + 7).filter((v): v is number => v !== null);
     if (!seg.length) continue;
     const segLo = Math.min(...seg);
     const nb = floor > 0 ? seg.filter(v => v < floor).length : 0;
-    const pct = Math.max(4, Math.round((segLo - lo) / span * 100));
+    /* 막대 폭 — **0 을 기준**으로 구간 최고값 대비 비율. 구간 최저를 0% 로 잡으면
+       9.10억이 4% 막대로 나와 거의 0 처럼 보인다(실측). 재무 숫자를 왜곡하면 안 된다. */
+    const pct = hi > 0 ? Math.max(2, Math.min(100, Math.round(Math.max(0, segLo) / hi * 100))) : 2;
     const barCol = (floor > 0 && segLo < floor) ? C.red : C.green;
     rows += `<tr>
       <td style="padding:5px 6px;font-size:11.5px;color:${C.t2};white-space:nowrap">${md(dates[i])}~${md(dates[Math.min(i + 6, dates.length - 1)])}</td>
@@ -308,7 +313,7 @@ function buildWeeklyTrajBlockHTML(
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <tr><td style="background:${C.card};padding:18px 18px 12px">
   <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📈 일별 현금 잔액 추이 · 궤적</div>
-  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · 오늘(${today})까지는 확정, 이후는 예정 반영</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · ${basisNote}</div>
   <div style="padding:11px 13px;background:${hit ? C.red2 : C.bg3};border-radius:6px;border-left:3px solid ${hit ? C.red : C.green}">
     <div style="font-size:13px;color:${C.text}">
       최저 <b style="color:${hit ? C.red : C.text}">${fmt(lowVal)}</b>
