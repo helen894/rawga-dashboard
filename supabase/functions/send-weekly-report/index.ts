@@ -294,7 +294,7 @@ function buildWeeklyTrajBlockHTML(
      ⚠ 색칠은 반드시 div 로 한다 — 중첩 table 은 width 가 없으면 폭이 0 으로 접혀
        차트가 통째로 사라진다(2026-08-21 실측).
      ⚠ 안전선은 별도 레이어를 못 만드니 열마다 1px 눈금을 찍어 점선처럼 보이게 한다. */
-  const LW = 3, DOT = 7;                            // 선 두께 · 변화점 점 크기
+  const LW = 2, DOT = 5;                            // 선 두께 · 변화점 점 크기
   const yTop = (v: number) => H - px(v);            // 위에서부터의 거리
   const COL_ACT  = C.blue, COL_PRJ = '#8AA093';
   const COL_ACTB = C.red,  COL_PRJB = '#E0A99E';
@@ -306,15 +306,19 @@ function buildWeeklyTrajBlockHTML(
   const Z  = 'font-size:0;line-height:0';
   const ZT = Z + ';mso-line-height-rule:exactly';
   const sp  = (h: number) => `<div style="height:${h}px;${Z}"></div>`;
-  const bar = (h: number, bg: string, round?: boolean) =>
-    `<div style="height:${h}px;background:${bg};${Z}${round ? `;width:${DOT}px;margin:0 auto;border-radius:${DOT}px` : ''}"></div>`;
+  /* w 를 주면 가운데 정렬된 좁은 조각이 된다(수직 연결선·점). 안 주면 셀 폭 전체를 채워
+     가로선이 옆 칸과 이어진다.
+     ⚠ 수직 연결선을 셀 폭 전체로 그렸다가 막대처럼 보여 선이 두껍다는 지적을 받았다
+       (2026-08-21). 연결선은 선 두께만큼만 좁게 그려야 선으로 읽힌다. */
+  const bar = (h: number, bg: string, w?: number, round?: boolean) =>
+    `<div style="height:${h}px;background:${bg};${Z}${w ? `;width:${w}px;margin:0 auto` : ''}${round ? `;border-radius:${DOT}px` : ''}"></div>`;
   /* td 가 고정 높이 + valign="top" 이라 아래쪽 여백 div 는 넣지 않는다(크기 절약) */
-  const stack = (marks: { top: number; h: number; bg: string; round?: boolean }[]) => {
+  const stack = (marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[]) => {
     let cur = 0; let out = '';
     for (const m of marks.filter(x => x.h > 0).sort((a, b) => a.top - b.top)) {
       const top = Math.round(m.top), h = Math.round(m.h);
       if (top > cur) out += sp(top - cur);
-      out += bar(h, m.bg, m.round);
+      out += bar(h, m.bg, m.w, m.round);
       cur = Math.max(cur, top + h);
     }
     return out;
@@ -329,17 +333,21 @@ function buildWeeklyTrajBlockHTML(
     const prev = i > 0 ? line[i - 1] : null;
     const changed = prev !== null && prev !== v;
 
-    const marks: { top: number; h: number; bg: string; round?: boolean }[] = [];
+    const marks: { top: number; h: number; bg: string; w?: number; round?: boolean }[] = [];
     /* 안전선 눈금 — 두 칸마다 1px 로 찍어 점선처럼 보이게 한다(선과 헷갈리지 않게) */
     if (floor > 0 && i % 2 === 0) marks.push({ top: yTop(floor), h: 1, bg: COL_FLOOR });
     if (changed) {
+      /* 수직 연결선 — 선 두께만큼만 좁게(가운데 정렬) */
       const a = yTop(prev), b = yTop(v);
-      marks.push({ top: Math.min(a, b), h: Math.abs(a - b) + LW, bg: col });
-      marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, round: true });
+      marks.push({ top: Math.min(a, b), h: Math.abs(a - b) + LW, bg: col, w: LW });
+      marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, w: DOT, round: true });
     } else {
-      marks.push({ top: yTop(v), h: LW, bg: col });
+      marks.push({ top: yTop(v), h: LW, bg: col });   // 가로선은 셀 폭 전체 → 옆 칸과 이어진다
     }
-    return `<td width="${colW}%" valign="top" height="${H}" style="${ZT}">${stack(marks)}</td>`;
+    /* 커서를 올리면 그날 잔액이 보인다 — 메일에서 :hover 는 못 믿지만 title 속성은
+       웹메일(브라우저)에서 그대로 동작한다. 열 전체를 대상으로 해 잡기 쉽게 한다. */
+    const tip = `${dates[i]} 잔액 ${fmt(v)}${isAct ? ' (확정)' : ' (궤적)'}${below ? ' · 안전선 미달' : ''}`;
+    return `<td width="${colW}%" valign="top" height="${H}" title="${tip}" style="${ZT}">${stack(marks)}</td>`;
   }).join('');
 
   const ticks = dates.map((d, i) => (i % 7 === 0)
@@ -367,10 +375,10 @@ function buildWeeklyTrajBlockHTML(
     <tr><td></td><td><table width="100%" cellpadding="0" cellspacing="0"><tr>${ticks}</tr></table></td></tr>
   </table>
   <div style="margin-top:8px;font-size:10.5px;color:${C.t3}">
-    <span style="display:inline-block;width:14px;height:3px;background:${COL_ACT};vertical-align:middle"></span> 확정 &nbsp;
-    <span style="display:inline-block;width:14px;height:3px;background:${COL_PRJ};vertical-align:middle"></span> 궤적 &nbsp;
-    ${floor > 0 ? `&nbsp;|&nbsp; <span style="display:inline-block;width:14px;height:3px;background:${COL_ACTB};vertical-align:middle"></span> 안전선 미달(확정) &nbsp;
-    <span style="display:inline-block;width:14px;height:3px;background:${COL_PRJB};vertical-align:middle"></span> 미달(궤적) &nbsp;
+    <span style="display:inline-block;width:14px;height:2px;background:${COL_ACT};vertical-align:middle"></span> 확정 &nbsp;
+    <span style="display:inline-block;width:14px;height:2px;background:${COL_PRJ};vertical-align:middle"></span> 궤적 &nbsp;
+    ${floor > 0 ? `&nbsp;|&nbsp; <span style="display:inline-block;width:14px;height:2px;background:${COL_ACTB};vertical-align:middle"></span> 안전선 미달(확정) &nbsp;
+    <span style="display:inline-block;width:14px;height:2px;background:${COL_PRJB};vertical-align:middle"></span> 미달(궤적) &nbsp;
     <span style="display:inline-block;width:14px;height:1px;background:${COL_FLOOR};vertical-align:middle"></span> 안전선` : ''}
     &nbsp;· 점 = 잔액이 바뀐 날
   </div>
