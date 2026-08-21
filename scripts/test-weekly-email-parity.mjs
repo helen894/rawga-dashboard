@@ -1,0 +1,95 @@
+#!/usr/bin/env node
+/**
+ * test-weekly-email-parity.mjs — 주간 메일의 '일별 현금 잔액 궤적' 이 미리보기와 실제 발송에서
+ * 같은 숫자를 내는지 대조한다.
+ *
+ * 왜: 이 프로젝트의 주간 메일 HTML 은 **두 벌로 관리된다** — 미리보기는 index.html 의
+ * buildWeeklyReportHTML, 실제 발송은 supabase/functions/send-weekly-report. 한쪽만 고치면
+ * "미리보기에서 본 것과 다른 메일이 나가는" 사고가 난다(과거에 실제로 겪은 함정).
+ * 궤적 계산이 양쪽에 사본으로 들어갔으니 그 둘이 갈라지는지 자동으로 잡는다.
+ *
+ * 어떻게: index.html 에서 computeWeeklyCashSeries 를 그대로 잘라내고, Edge 는 esbuild 로
+ * 타입만 벗겨 같은 함수를 뽑아, 같은 입력에 같은 출력이 나오는지 비교한다.
+ *
+ * 실행: node scripts/test-weekly-email-parity.mjs
+ * (esbuild 를 npx 로 내려받는다 — 오프라인이면 건너뛴다)
+ */
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const tsSrc = readFileSync(path.join(ROOT, 'supabase/functions/send-weekly-report/index.ts'), 'utf8');
+
+function grab(src, name){
+  const i = src.indexOf(`function ${name}(`);
+  if (i < 0) throw new Error('없음: ' + name);
+  let d = 0, started = false;
+  for (let j = src.indexOf('{', i); j < src.length; j++){
+    if (src[j] === '{') { d++; started = true; }
+    else if (src[j] === '}') { d--; if (started && d === 0) return src.slice(i, j+1); }
+  }
+  throw new Error('불균형: ' + name);
+}
+
+/* Edge 는 TS — esbuild 로 타입만 벗긴다. 파일 전체를 변환하면 Deno.serve 가 섞이므로
+   필요한 두 함수만 잘라 변환한다(addDays 는 양쪽 공통이라 index.html 것을 쓴다). */
+let edgeJs;
+try {
+  const dir = mkdtempSync(path.join(tmpdir(), 'wkparity-'));
+  const f = path.join(dir, 'edge.ts');
+  writeFileSync(f, grab(tsSrc, 'computeWeeklyCashSeries'), 'utf8');
+  // 파일 확장자로 ts 를 알아본다 — --loader 는 stdin 전용 플래그라 파일 입력엔 못 쓴다
+  edgeJs = execFileSync('npx', ['--yes', 'esbuild@0.24.0', '--format=esm', f],
+                        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' });
+} catch (e) {
+  console.log('⚠ esbuild 실행 실패 — 아래 사유를 확인하세요. 오프라인이면 수동 대조가 필요합니다.');
+  console.log('   ' + String((e && e.message) || e).slice(0, 300));
+  process.exit(2);
+}
+
+const addDaysSrc = grab(html, 'addDays');
+const appFn  = new Function(`${addDaysSrc}\n${grab(html, 'computeWeeklyCashSeries')}\nreturn computeWeeklyCashSeries;`)();
+const edgeFn = new Function(`${addDaysSrc}\n${edgeJs}\nreturn computeWeeklyCashSeries;`)();
+
+/* 시나리오 — 과거/현재/미래 주차 · 연체 · 구간 밖 예정을 모두 섞는다 */
+const ROWS = [
+  { date:'2026-05-20', status:'실제 입금', in: 250, out: 0 },
+  { date:'2026-06-02', status:'실제 입금', in: 500, out: 0 },
+  { date:'2026-06-02', status:'지출 예정', in: 0,   out: 700 },   // 연체
+  { date:'2026-06-05', status:'지출 예정', in: 0,   out: 200 },
+  { date:'2026-06-10', status:'지출 예정', in: 0,   out: 400 },
+  { date:'2026-06-30', status:'입금 예정', in: 900, out: 0 },
+  { date:'2026-08-01', status:'지출 예정', in: 0,   out: 111 },   // 구간 밖
+];
+const CASES = [
+  ['과거 주차', '2026-05-04'],
+  ['현재 주차', '2026-06-01'],
+  ['미래 주차', '2026-06-15'],
+  ['먼 미래',   '2026-07-13'],
+];
+const TODAY = '2026-06-03', INIT = 1000, FX = 0, H = 56;
+
+let pass = 0, fail = 0;
+console.log('');
+for (const [label, wStart] of CASES) {
+  const a = appFn(wStart, ROWS, INIT, FX, TODAY, H);
+  /* Edge 판은 fxAdj 인자가 없다 — initCash 에 이미 얹혀 오기 때문. 같은 기준으로 넘긴다. */
+  const b = edgeFn(wStart, ROWS, INIT + FX, TODAY, H);
+  for (const key of ['dates', 'actVals', 'projVals']) {
+    const ok = JSON.stringify(a[key]) === JSON.stringify(b[key]);
+    console.log(`  ${ok ? '✅' : '❌'} ${label} — ${key} 일치`);
+    if (!ok) {
+      const ai = a[key], bi = b[key];
+      const at = ai.findIndex((v, i) => JSON.stringify(v) !== JSON.stringify(bi[i]));
+      console.log(`       첫 불일치 index ${at}: 미리보기 ${JSON.stringify(ai[at])} vs Edge ${JSON.stringify(bi[at])}`);
+    }
+    ok ? pass++ : fail++;
+  }
+}
+console.log('');
+console.log(`${fail === 0 ? '✅ 두 사본이 같은 숫자를 냅니다' : '❌ 사본이 갈라졌습니다 — ' + fail + '건'} (${pass}/${pass+fail})`);
+process.exitCode = fail ? 1 : 0;

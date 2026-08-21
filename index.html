@@ -9198,6 +9198,79 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
    기존 renderWeeklyReport() 계산 로직과 동일, HTML string 반환
    ================================================================= */
 // summaryData: null | string | { summary: string, updated_at: string|null }
+/* ═══ 메일용 일별 현금 잔액 궤적 블록 ═══════════════════════════════════
+ * 화면(리포팅 주간)에 넣은 추이·궤적 차트를 메일에도 반영한다. **메일에서는 canvas 를
+ * 못 그리므로** 같은 숫자를 표와 막대(중첩 table 폭)로 표현한다 — 이미지나 SVG 는
+ * Gmail 등이 막거나 지운다.
+ *
+ * ⚠ 계산은 computeWeeklyCashSeries() 를 그대로 쓴다. 메일이 화면과 다른 숫자를 말하면
+ *   안 되기 때문이다. 이 함수는 '표현' 만 담당한다.
+ * ⚠ 이 블록은 Edge(send-weekly-report)에도 같은 내용이 한 벌 더 있다. 메일 HTML 이
+ *   미리보기(여기)와 실제 발송(Edge) 두 벌로 관리되는 구조라 **둘 다 고쳐야 한다.**
+ * initCash 는 이미 환산손익(FX_ADJ)이 얹힌 값이 넘어온다 — 호출부에서 더해 준다. */
+function buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, horizonDays) {
+  const today = todayKST();
+  const S = computeWeeklyCashSeries(wStart, cfArr, initCash, 0, today, horizonDays);
+  const { dates, projVals, actVals } = S;
+
+  /* 표시할 값: 각 날짜의 '그 시점 잔액' — 확정이면 확정값, 아니면 궤적값 */
+  const line = dates.map((d, i) => (actVals[i] !== null ? actVals[i] : projVals[i]));
+  const known = line.filter(v => v !== null);
+  if (!known.length) return '';
+
+  const lo = Math.min(...known), hi = Math.max(...known);
+  let lowIdx = -1, lowVal = Infinity;
+  line.forEach((v, i) => { if (v !== null && v < lowVal) { lowVal = v; lowIdx = i; } });
+  const belowDays = floor > 0 ? known.filter(v => v < floor).length : 0;
+  const hit  = floor > 0 && lowVal < floor;
+  const endV = line[line.length - 1];
+  const eok  = v => (Number(v || 0) / 1e8).toFixed(2);
+  const md   = d => d.slice(5).replace('-', '/');
+  const dday = Math.round((Date.parse(dates[lowIdx] + 'T00:00:00') - Date.parse(today + 'T00:00:00')) / 86400000);
+
+  /* 주별 요약 — 7일씩 묶어 최저·주말 잔액·하회일수 */
+  const span = hi - lo || 1;
+  const rows = [];
+  for (let i = 0; i < line.length; i += 7) {
+    const seg = line.slice(i, i + 7).filter(v => v !== null);
+    if (!seg.length) continue;
+    const segLo = Math.min(...seg), segEnd = seg[seg.length - 1];
+    const nb = floor > 0 ? seg.filter(v => v < floor).length : 0;
+    /* 막대 폭 — 구간 최저를 0%, 최고를 100% 로 잡은 상대 길이. 중첩 table 이라 메일에서 안전 */
+    const pct = Math.max(4, Math.round((segLo - lo) / span * 100));
+    const barCol = (floor > 0 && segLo < floor) ? C.red : C.green;
+    rows.push(html`<tr>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.t2};white-space:nowrap">${md(dates[i])}~${md(dates[Math.min(i + 6, dates.length - 1)])}</td>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.text};text-align:right;white-space:nowrap">${eok(segLo)}억</td>
+      <td style="padding:5px 6px;width:44%">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="background:${barCol};height:8px;border-radius:4px;width:${pct}%;font-size:0;line-height:0">&nbsp;</td>
+          <td style="font-size:0;line-height:0">&nbsp;</td>
+        </tr></table>
+      </td>
+      <td style="padding:5px 6px;font-size:11px;color:${nb ? C.red : C.t3};text-align:right;white-space:nowrap">${nb ? `하회 ${nb}일` : '—'}</td>
+    </tr>`);
+  }
+
+  return html`
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📈 일별 현금 잔액 추이 · 궤적</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · 오늘(${today})까지는 확정, 이후는 예정 반영</div>
+  <div style="padding:11px 13px;background:${hit ? C.red2 : C.bg3};border-radius:6px;border-left:3px solid ${hit ? C.red : C.green}">
+    <div style="font-size:13px;color:${C.text}">
+      최저 <b style="color:${hit ? C.red : C.text}">${fmt(lowVal)}</b>
+      <span style="font-size:11px;color:${C.t3}">&nbsp;${dates[lowIdx]}${Number.isFinite(dday) ? ` (D${dday >= 0 ? '+' : ''}${dday})` : ''}</span>
+    </div>
+    ${floor > 0 ? html`<div style="font-size:11.5px;color:${hit ? C.red : C.t2};margin-top:4px">
+      안전선 ${eok(floor)}억 · ${hit ? `${belowDays}일 하회 · 부족 ${eok(floor - lowVal)}억` : '전 구간 유지'}
+    </div>` : ''}
+    <div style="font-size:11.5px;color:${C.t2};margin-top:4px">${dates[dates.length - 1]} 예상 ${fmt(endV)}</div>
+  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px">${rows}</table>
+</td></tr>`;
+}
+
 function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
@@ -9430,6 +9503,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
     <span style="font-weight:700;color:${wNet>=0?C.green:C.red};margin-left:6px">${wNet>=0?'+':''}${fmt(wNet)}</span>
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div></td></tr>
+${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, dlFloor(), C, WKRPT_HORIZON_DAYS)}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 📝 주간 요약 (주간 KPI 아래) -->
 <tr><td style="background:${C.card};padding:18px 18px 12px">

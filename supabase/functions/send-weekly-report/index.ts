@@ -202,6 +202,127 @@ function fmt(n: number): string {
   return Math.round(Number(n) || 0).toLocaleString('ko-KR');
 }
 
+/* ═══ 일별 현금 잔액 추이·궤적 (메일용) ═══════════════════════════════════
+ * ⚠⚠ 이 두 함수는 index.html 의 computeWeeklyCashSeries / buildWeeklyTrajBlockHTML 과
+ *   **같은 내용의 사본**이다. 메일 HTML 이 미리보기(index.html)와 실제 발송(여기) 두 벌로
+ *   관리되는 구조라서다. 한쪽만 고치면 미리보기와 실제 메일이 다른 숫자를 말한다.
+ * ⚠ 메일에서는 canvas 를 못 그리므로 같은 숫자를 표와 막대(중첩 table 폭)로 표현한다.
+ *   이미지·SVG 는 Gmail 등이 막거나 지운다.
+ * ⚠ 확정/궤적의 경계는 **오늘**이지 선택 주차의 끝이 아니다. 연체 예정(기한 지난 예정)은
+ *   오늘 시점에 한꺼번에 얹는다 — 돈이 아직 안 나갔으므로 과거로 그리면 확정을 왜곡한다. */
+const WKRPT_HORIZON_DAYS = 56;   // 8주 — 화면(대시보드·리포팅)과 같은 지평
+
+function computeWeeklyCashSeries(
+  wStart: string, rows: Record<string, unknown>[], initCash: number, today: string, horizonDays: number,
+) {
+  const from = wStart;
+  const to   = addDays(wStart, horizonDays - 1);
+  const dates: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+
+  const actDelta: Record<string, number> = {}, planAll: Record<string, number> = {};
+  let overdueSum = 0;
+  let beforeFrom = initCash;      // from 직전까지의 확정 잔액 (initCash 에 환산손익 포함)
+  let cashToday  = initCash;      // 오늘까지의 확정 잔액
+
+  for (const r of (rows || [])) {
+    const d = String(r.date || '');
+    if (!d) continue;
+    const st = String(r.status || '');
+    if (st === '실제 입금' || st === '실제 지출') {
+      const v = st === '실제 입금' ? (Number(r.in) || 0) : -(Number(r.out) || 0);
+      if (d <  from)  beforeFrom += v;
+      if (d <= today) cashToday  += v;
+      if (d >= from && d <= to) actDelta[d] = (actDelta[d] || 0) + v;
+    } else if (st === '입금 예정' || st === '지출 예정') {
+      const v = st === '입금 예정' ? (Number(r.in) || 0) : -(Number(r.out) || 0);
+      if (d <= today) { overdueSum += v; continue; }   // 연체 → 오늘로
+      planAll[d] = (planAll[d] || 0) + v;              // to 로 자르지 않는다(미래 주차에 필요)
+    }
+  }
+
+  const actVals: (number | null)[] = [];
+  let run = beforeFrom, lastActual: number | null = null, lastActualIdx = -1;
+  dates.forEach((d, i) => {
+    if (d <= today) { run += (actDelta[d] || 0); actVals.push(run); lastActual = run; lastActualIdx = i; }
+    else actVals.push(null);
+  });
+
+  let prun = (lastActual === null ? cashToday : lastActual) + overdueSum;
+  if (from > today) {
+    for (const d of Object.keys(planAll).sort()) if (d < from) prun += planAll[d];
+  }
+  const hasProjection = to > today;
+  const projVals: (number | null)[] = [];
+  dates.forEach((d, i) => {
+    if (d <= today) { projVals.push((hasProjection && i === lastActualIdx) ? actVals[i] : null); return; }
+    prun += (planAll[d] || 0);
+    projVals.push(prun);
+  });
+
+  return { dates, actVals, projVals };
+}
+
+function buildWeeklyTrajBlockHTML(
+  wStart: string, cfArr: Record<string, unknown>[], initCash: number, floor: number,
+  C: Record<string, string>, horizonDays: number, today: string,
+): string {
+  const { dates, actVals, projVals } = computeWeeklyCashSeries(wStart, cfArr, initCash, today, horizonDays);
+  const line = dates.map((_d, i) => (actVals[i] !== null ? actVals[i] : projVals[i]));
+  const known = line.filter((v): v is number => v !== null);
+  if (!known.length) return '';
+
+  const lo = Math.min(...known), hi = Math.max(...known);
+  let lowIdx = -1, lowVal = Infinity;
+  line.forEach((v, i) => { if (v !== null && v < lowVal) { lowVal = v; lowIdx = i; } });
+  const belowDays = floor > 0 ? known.filter(v => v < floor).length : 0;
+  const hit  = floor > 0 && lowVal < floor;
+  const endV = line[line.length - 1] ?? 0;
+  const eok  = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
+  const md   = (d: string) => d.slice(5).replace('-', '/');
+  const dday = Math.round((Date.parse(dates[lowIdx] + 'T00:00:00') - Date.parse(today + 'T00:00:00')) / 86400000);
+
+  const span = (hi - lo) || 1;
+  let rows = '';
+  for (let i = 0; i < line.length; i += 7) {
+    const seg = line.slice(i, i + 7).filter((v): v is number => v !== null);
+    if (!seg.length) continue;
+    const segLo = Math.min(...seg);
+    const nb = floor > 0 ? seg.filter(v => v < floor).length : 0;
+    const pct = Math.max(4, Math.round((segLo - lo) / span * 100));
+    const barCol = (floor > 0 && segLo < floor) ? C.red : C.green;
+    rows += `<tr>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.t2};white-space:nowrap">${md(dates[i])}~${md(dates[Math.min(i + 6, dates.length - 1)])}</td>
+      <td style="padding:5px 6px;font-size:11.5px;color:${C.text};text-align:right;white-space:nowrap">${eok(segLo)}억</td>
+      <td style="padding:5px 6px;width:44%">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="background:${barCol};height:8px;border-radius:4px;width:${pct}%;font-size:0;line-height:0">&nbsp;</td>
+          <td style="font-size:0;line-height:0">&nbsp;</td>
+        </tr></table>
+      </td>
+      <td style="padding:5px 6px;font-size:11px;color:${nb ? C.red : C.t3};text-align:right;white-space:nowrap">${nb ? `하회 ${nb}일` : '—'}</td>
+    </tr>`;
+  }
+
+  return `
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📈 일별 현금 잔액 추이 · 궤적</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · 오늘(${today})까지는 확정, 이후는 예정 반영</div>
+  <div style="padding:11px 13px;background:${hit ? C.red2 : C.bg3};border-radius:6px;border-left:3px solid ${hit ? C.red : C.green}">
+    <div style="font-size:13px;color:${C.text}">
+      최저 <b style="color:${hit ? C.red : C.text}">${fmt(lowVal)}</b>
+      <span style="font-size:11px;color:${C.t3}">&nbsp;${dates[lowIdx]}${Number.isFinite(dday) ? ` (D${dday >= 0 ? '+' : ''}${dday})` : ''}</span>
+    </div>
+    ${floor > 0 ? `<div style="font-size:11.5px;color:${hit ? C.red : C.t2};margin-top:4px">
+      안전선 ${eok(floor)}억 · ${hit ? `${belowDays}일 하회 · 부족 ${eok(floor - lowVal)}억` : '전 구간 유지'}
+    </div>` : ''}
+    <div style="font-size:11.5px;color:${C.t2};margin-top:4px">${dates[dates.length - 1]} 예상 ${fmt(endV)}</div>
+  </div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px">${rows}</table>
+</td></tr>`;
+}
+
 /* ── HTML 이메일 빌더 ─────────────────────────────────────────────────── */
 // index.html buildWeeklyReportHTML()과 동일한 계산 로직
 // KPI: 전주 기말 / 주간 입금 / 주간 지출 / 금주 기말 (화면과 동일)
@@ -213,6 +334,7 @@ function buildWeeklyReportHTML(
   initCash      : number,
   dashboardUrl  : string = '',
   weeklySummary : { summary: string; updated_at: string | null } = { summary: '', updated_at: null },
+  floor         : number = 0,          // 안전선 — 궤적 블록의 '하회' 판정용
 ): { html: string; subject: string; weekKey: string; startDate: string; endDate: string } {
 
   const C = {
@@ -528,6 +650,7 @@ function buildWeeklyReportHTML(
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div>
 </td></tr>
+${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul())}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 
 <!-- 📝 주간 요약 (주간 KPI 아래) -->
@@ -719,12 +842,15 @@ serve(async (req: Request) => {
   }
 
   /* ⑦ 데이터 조회 (cf_data / ar_data / cat_data.settings) */
-  const [cfRes, arRes, initRes, snapRes, fxBaseRes] = await Promise.all([
+  const [cfRes, arRes, initRes, snapRes, fxBaseRes, dlRes] = await Promise.all([
     supa.from('cf_data').select('data').limit(1).single(),
     supa.from('ar_data').select('data').limit(1).single(),
     supa.from('cat_data').select('data').eq('key', 'settings').single(),
     supa.from('cat_data').select('data').eq('key', 'bank_snapshot').single(),
     supa.from('cat_data').select('data').eq('key', 'fx_adjust_base').single(),
+    /* 안전선 — 궤적 블록이 '몇 일 하회' 를 말하려면 필요하다. 대시보드·일간 리포트와
+       같은 설정을 쓴다(cat_data.daily_settings.floor). 없으면 15억(앱 기본값). */
+    supa.from('cat_data').select('data').eq('key', 'daily_settings').single(),
   ]);
 
   if (cfRes.error) {
@@ -772,6 +898,7 @@ serve(async (req: Request) => {
     fxAdj = Math.round(spot - book);
   }
   const initCash = initCashRaw + fxAdj;
+  const dlFloor = Number((dlRes.data?.data as Record<string, unknown>)?.floor) || 1500000000;
 
   /* ⑧ 주간 요약 — body 우선 → Supabase fallback
    *
@@ -852,7 +979,7 @@ serve(async (req: Request) => {
     updatedAt: weeklySummary.updated_at,
   });
   const { html, subject, weekKey, startDate, endDate } =
-    buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, DASHBOARD_URL, weeklySummary);
+    buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, DASHBOARD_URL, weeklySummary, dlFloor);
 
   /* ⑨ Dry-run: 전송 없음, email_log 기록 없음 — 메타데이터만 반환 */
   if (dryRun) {
