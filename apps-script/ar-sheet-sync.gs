@@ -38,10 +38,11 @@ var TAB_CONFIG = {
   //  지앤원: excludeFutureStart — 지출일자가 미래인 행은 아직 돈이 안 나갔으므로 채권이 아니다.
   //          표2의 26-08-20~26-11-20 지출 예정 4행(475,200,000)이 그 경우이고, 시트 자체 합계도
   //          이 4행을 빼고 907,748,592(과거 9행 합과 원 단위 일치)로 잡혀 있다.
-  //          keepNoEvidenceRows — 날짜가 하나도 없이 금액만 적힌 행도 실제 채권이다(2026-08-21 사용자 확인).
-  //          표1 하단 449·450행(81,659,977 + 74,236,343)이 그 경우다. 그 위 446행 155,896,319 은
-  //          이 둘의 소계이므로 아래 판정 ⑸(소계 감지)가 걸러 낸다.
-  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true, keepNoEvidenceRows: true },
+  //          ⚠ keepNoEvidenceRows 는 켜지 않는다(2026-08-21 최종 확인). 표1 하단 449·450행
+  //          (81,659,977 + 74,236,343)은 데이터 행이지만 지출일자가 없어 = 아직 송금 전이므로
+  //          채권으로 계상하지 않는다. 그 위 446행은 두 행의 소계라 판정 ⑸ 로도 걸린다.
+  //          원칙: **실제 송금이 나간 건만 채권**(지출일자 없음 = 제외 / 미래 = excludeFutureStart).
+  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true },
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
