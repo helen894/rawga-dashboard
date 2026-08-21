@@ -130,6 +130,22 @@ function rowHasKeyword_(rowVals, keywords) {
   return false;
 }
 
+/* 이 행 다음(빈 행은 건너뜀)이 헤더 행이면 true.
+   → 그 사이에 낀 행은 '다음 표의 총계 행'이다. 지앤원 표2 총계(예상 907,748,592 /
+   회수 336,632,378)가 표2 헤더 바로 위에 있어서 표1 데이터로 집계됐고, 기존 rule ⑶ 은
+   회수액이 0 일 때만 걸러 이 행을 막지 못했다(회수액이 있어서 '근거 있음'으로 통과). */
+function nextNonBlankIsHeader_(values, from, wantExp) {
+  for (var j = from; j < values.length; j++) {
+    var r = values[j], blank = true;
+    for (var q = 0; q < r.length; q++) {
+      if (String(r[q] == null ? '' : r[q]).trim() !== '') { blank = false; break; }
+    }
+    if (blank) continue;
+    return r.map(norm_).indexOf(wantExp) >= 0;
+  }
+  return false;
+}
+
 function isSummaryRow_(rowVals) {
   for (var i = 0; i < rowVals.length; i++) {
     var c = String(rowVals[i] == null ? '' : rowVals[i]).replace(/\s+/g, ''); // 공백 제거('합 계'→'합계')
@@ -281,7 +297,7 @@ function parseTab_(sh, cfg) {
     }
     /* cm: 이 행을 읽을 때 쓴 열 매핑을 그대로 들고 간다 — 표마다 열 위치가 다르므로
        2차 판정에서 colMap 을 다시 참조하면 마지막 표의 매핑으로 전부 읽어 버린다. */
-    cand.push({ row: row, cm: colMap, block: block, expected: expected, collected: collected,
+    cand.push({ row: row, cm: colMap, block: block, srcRow: i, expected: expected, collected: collected,
                 hasStart: hasStart, first: blockFirst });
     blockFirst = false;
   }
@@ -301,7 +317,7 @@ function parseTab_(sh, cfg) {
   var blockExp = {}, skippedTotalRows = 0;
   for (var t = 0; t < cand.length; t++) blockExp[cand[t].block] = (blockExp[cand[t].block] || 0) + cand[t].expected;
 
-  var records = [], lastStart = '', lastBlock = -1;
+  var records = [], lastStart = '', lastBlock = -1, totalRowsDropped = 0;
   for (var k = 0; k < cand.length; k++) {
     var c = cand[k], cm = c.cm;
     // 송금일 승계(병합셀 연속행)는 같은 표 안에서만 유효 — 표가 바뀌면 초기화한다
@@ -311,8 +327,13 @@ function parseTab_(sh, cfg) {
       var dueVal     = cm.due     !== undefined ? String(c.row[cm.due]     || '').trim() : '';
       var collectVal = cm.collect !== undefined ? String(c.row[cm.collect] || '').trim() : '';
       var noEvidence = !cfg.keepNoEvidenceRows && !dueVal && !collectVal && !(c.collected > 0); // 회수 근거 전무
-      var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2 || noEvidence;
-      if (isDropRow) { skippedTotalRows++; continue; }
+      /* ⑷ 날짜가 하나도 없고 바로 뒤에 헤더가 오는 행 = 다음 표의 총계 행 (2026-08-21 추가).
+         회수액이 있어도 걸러야 한다 — 지앤원 표2 총계가 이 모양이라 예상 907,748,592 ·
+         회수 336,632,378 이 통째로 이중계상됐다. 날짜 3종이 전부 없는 것이 총계 행의 특징이고,
+         병합셀 연속행은 보통 회수예정일이나 실제회수일이 있어 여기 걸리지 않는다. */
+      var isNextTotal = !dueVal && !collectVal && nextNonBlankIsHeader_(values, c.srcRow + 1, wantExp);
+      var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2 || noEvidence || isNextTotal;
+      if (isDropRow) { skippedTotalRows++; if (isNextTotal) totalRowsDropped++; continue; }
     }
     var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[cm.start]) : (hasStartCol ? lastStart : '');
     if (c.hasStart && hasStartCol) lastStart = startStr;
@@ -348,6 +369,7 @@ function parseTab_(sh, cfg) {
     anomalies: anomalies,
     note: 'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
           ', 매핑: ' + foundCols.join(',') + ')' +
+          (totalRowsDropped ? ' 🧮총계 행 ' + totalRowsDropped + '개 제외' : '') +
           (futureRows ? ' ⏭미래 지출 ' + futureRows + '행 제외(아직 채권 아님)' : '') +
           (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '') +
           (anomalies.length ? ' ⛔비정상 금액 ' + anomalies.length + '행' : '')
