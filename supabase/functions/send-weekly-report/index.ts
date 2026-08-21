@@ -871,6 +871,18 @@ function buildWeeklyReportHTML(
   <div style="font-size:13px;color:rgba(255,255,255,.65)">${wStart} (월) ~ ${wEnd} (일)</div>
 </td></tr>
 
+<!-- 📝 주간 요약 — **헤더 바로 아래**(2026-08-21 이동).
+     사람이 직접 쓴 판단이 이 메일에서 가장 중요한 내용이라 숫자보다 먼저 읽히게 한다. -->
+<tr><td style="background:${C.card};padding:18px 18px 12px">
+  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
+  <div style="font-size:13px;color:${C.t2};line-height:1.7">${
+    weeklySummary.summary
+      ? escapeHtml(weeklySummary.summary).replace(/\r?\n/g, '<br>')
+      : '등록된 주간 요약이 없습니다.'
+  }</div>
+  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${formatUpdatedAtSeoul(weeklySummary.updated_at)}</div>
+</td></tr>
+<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 📊 월간 대시보드 요약 -->
 <tr><td style="background:${C.card};padding:18px 18px 8px">
   <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📊 월간 대시보드 요약</div>
@@ -907,18 +919,6 @@ function buildWeeklyReportHTML(
 </td></tr>
 ${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul())}
 ${buildNextWeekPlanHTML(todaySeoul(), addDays(todaySeoul(), 10), cfArr, initCash, floor, C, todaySeoul())}
-<tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
-
-<!-- 📝 주간 요약 (주간 KPI 아래) -->
-<tr><td style="background:${C.card};padding:18px 18px 12px">
-  <div style="font-size:13px;font-weight:600;color:${C.text};margin-bottom:8px">📝 주간 요약</div>
-  <div style="font-size:13px;color:${C.t2};line-height:1.7">${
-    weeklySummary.summary
-      ? escapeHtml(weeklySummary.summary).replace(/\r?\n/g, '<br>')
-      : '등록된 주간 요약이 없습니다.'
-  }</div>
-  <div style="font-size:11px;color:${C.t3};margin-top:8px">마지막 수정일: ${formatUpdatedAtSeoul(weeklySummary.updated_at)}</div>
-</td></tr>
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 
 <!-- 💰 주간 입금 내역 -->
