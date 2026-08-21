@@ -121,7 +121,9 @@ for (const [label, wStart] of CASES) {
        열 폭이 0 으로 접힌 것인데, 그때 검증이 **높이와 색만 재고 폭을 안 봐서** 통과했다.
        같은 부류가 다시 나면 여기서 잡는다 — 브라우저 없이 마크업만 보고 판정한다. */
   const raw = appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H);
-  const colTds = raw.match(/<td width="[\d.]+%" valign="bottom" height="\d+"/g) || [];
+  /* valign 은 그림 방식에 따라 top/bottom 이 바뀐다(열 차트 → 선 차트). 거기 매달리지 말고
+     '폭과 높이를 둘 다 명시한 열 셀' 인지만 본다 — 폭 누락이 잡고 싶은 결함이다. */
+  const colTds = raw.match(/<td width="[\d.]+%" valign="\w+" height="\d+"/g) || [];
   const segs   = raw.match(/<div style="height:(\d+)px;background:#[0-9A-Fa-f]{6}/g) || [];
   const zeroH  = segs.filter(m => /height:0px/.test(m)).length;
   /* 열 셀(height 속성이 붙은 td) 안에 table 이 있으면 폭 없는 셀에 의존하는 것 —

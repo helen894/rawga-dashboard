@@ -284,37 +284,62 @@ function buildWeeklyTrajBlockHTML(
   const px = (v: number) => Math.max(0, Math.round((Math.max(0, v) / (hi || 1)) * H));
   const floorPx = floor > 0 ? px(floor) : 0;
 
-  /* ── 일별 열 차트 ────────────────────────────────────────────────────
+  /* ── 일별 계단 선 차트 ──────────────────────────────────────────────
      메일에서는 canvas 를 못 쓰고 inline SVG 는 Gmail 이 지운다. PNG 는 Edge(Deno)에
      canvas·FFI 가 없어 만들 수 없고, 외부 렌더 서비스는 회사 잔액이 URL 로 나가므로
-     쓸 수 없다. → 표 셀로 세우는 열 차트가 유일하게 모든 클라이언트에서 되는 방법이다.
-     안전선은 별도 선을 못 그으니 **모든 열을 안전선 높이에서 색이 갈리게** 만든다.
-     색은 두 축을 동시에 나타낸다: 진하기 = 확정/궤적, 붉은색 = 안전선 미달.
-     ⚠ 미달도 확정·궤적을 농도로 나눈다 — 안 나누면 미달 구간이 길 때 확정이 어디서
-       끝나는지 알 수 없다(실측: 과거 주차에서 궤적 11일이 확정과 구분되지 않았다).
-     ⚠ 빈 셀에는 font-size:0;line-height:0 을 준다 — Outlook 이 줄높이를 넣어 높이가 틀어진다. */
+     쓸 수 없다. → 표 셀 + div 로 직접 그린다.
+     처음엔 열(막대) 차트였는데 가독성이 떨어져 선 차트로 바꿨다(2026-08-21). 잔액은 거래가
+     있는 날만 바뀌는 **계단 함수**라, 대각선을 못 그리는 표 기반 방식과 오히려 잘 맞는다.
+     평평한 구간은 가로선, 바뀌는 날은 수직 연결선 + 점으로 그린다.
+     ⚠ 색칠은 반드시 div 로 한다 — 중첩 table 은 width 가 없으면 폭이 0 으로 접혀
+       차트가 통째로 사라진다(2026-08-21 실측).
+     ⚠ 안전선은 별도 레이어를 못 만드니 열마다 1px 눈금을 찍어 점선처럼 보이게 한다. */
+  const LW = 3, DOT = 7;                            // 선 두께 · 변화점 점 크기
+  const yTop = (v: number) => H - px(v);            // 위에서부터의 거리
   const COL_ACT  = C.blue, COL_PRJ = '#8AA093';
   const COL_ACTB = C.red,  COL_PRJB = '#E0A99E';
-  const COL_BAND = '#D3DFD6';
-  /* 한 칸은 div 를 위→아래로 쌓아 만든다.
-     ⚠⚠ 중첩 <table> 로 만들었다가 **메일에서 차트가 통째로 안 보였다**(2026-08-21 실측).
-       안쪽 table 에 width 가 없고 셀 내용이 font-size:0 인 &nbsp; 뿐이라 폭이 0 으로
-       접혔다. div 는 블록 요소라 부모 셀 폭을 그대로 받아 이 문제가 없다.
-     ⚠ 바깥 td 에 width 를 명시한다 — 내용 폭이 0 인 셀들은 자동 분배로도 0 이 될 수 있다.
-     ⚠ mso-line-height-rule:exactly 는 Outlook 이 줄높이를 밀어넣는 걸 막는다. */
+  const COL_FLOOR = '#E8BDB4';
+
   const colW = (100 / dates.length).toFixed(3);
-  const ZERO = 'font-size:0;line-height:0;mso-line-height-rule:exactly';
-  const seg = (h: number, bg: string) => h > 0 ? `<div style="height:${h}px;background:${bg};${ZERO}"></div>` : '';
+  /* ⚠ 이 문자열이 열마다 여러 번 반복돼 메일 크기를 좌우한다. div 는 내용이 없으니
+     font-size/line-height 만으로 충분하고, Outlook 용 mso 규칙은 td 에만 준다. */
+  const Z  = 'font-size:0;line-height:0';
+  const ZT = Z + ';mso-line-height-rule:exactly';
+  const sp  = (h: number) => `<div style="height:${h}px;${Z}"></div>`;
+  const bar = (h: number, bg: string, round?: boolean) =>
+    `<div style="height:${h}px;background:${bg};${Z}${round ? `;width:${DOT}px;margin:0 auto;border-radius:${DOT}px` : ''}"></div>`;
+  /* td 가 고정 높이 + valign="top" 이라 아래쪽 여백 div 는 넣지 않는다(크기 절약) */
+  const stack = (marks: { top: number; h: number; bg: string; round?: boolean }[]) => {
+    let cur = 0; let out = '';
+    for (const m of marks.filter(x => x.h > 0).sort((a, b) => a.top - b.top)) {
+      const top = Math.round(m.top), h = Math.round(m.h);
+      if (top > cur) out += sp(top - cur);
+      out += bar(h, m.bg, m.round);
+      cur = Math.max(cur, top + h);
+    }
+    return out;
+  };
+
   const cols = dates.map((_d, i) => {
     const v = line[i];
-    if (v === null) return `<td width="${colW}%" style="${ZERO}">&nbsp;</td>`;
+    if (v === null) return `<td width="${colW}%" style="${ZT}">&nbsp;</td>`;
     const isAct = actVals[i] !== null;
-    const h = px(v);
     const below = floor > 0 && v < floor;
-    const body = below
-      ? seg(h, isAct ? COL_ACTB : COL_PRJB)
-      : seg(Math.max(0, h - floorPx), isAct ? COL_ACT : COL_PRJ) + seg(floorPx, COL_BAND);
-    return `<td width="${colW}%" valign="bottom" height="${H}" style="${ZERO}">${body}</td>`;
+    const col = below ? (isAct ? COL_ACTB : COL_PRJB) : (isAct ? COL_ACT : COL_PRJ);
+    const prev = i > 0 ? line[i - 1] : null;
+    const changed = prev !== null && prev !== v;
+
+    const marks: { top: number; h: number; bg: string; round?: boolean }[] = [];
+    /* 안전선 눈금 — 두 칸마다 1px 로 찍어 점선처럼 보이게 한다(선과 헷갈리지 않게) */
+    if (floor > 0 && i % 2 === 0) marks.push({ top: yTop(floor), h: 1, bg: COL_FLOOR });
+    if (changed) {
+      const a = yTop(prev), b = yTop(v);
+      marks.push({ top: Math.min(a, b), h: Math.abs(a - b) + LW, bg: col });
+      marks.push({ top: yTop(v) - Math.round((DOT - LW) / 2), h: DOT, bg: col, round: true });
+    } else {
+      marks.push({ top: yTop(v), h: LW, bg: col });
+    }
+    return `<td width="${colW}%" valign="top" height="${H}" style="${ZT}">${stack(marks)}</td>`;
   }).join('');
 
   const ticks = dates.map((d, i) => (i % 7 === 0)
@@ -342,10 +367,12 @@ function buildWeeklyTrajBlockHTML(
     <tr><td></td><td><table width="100%" cellpadding="0" cellspacing="0"><tr>${ticks}</tr></table></td></tr>
   </table>
   <div style="margin-top:8px;font-size:10.5px;color:${C.t3}">
-    <span style="display:inline-block;width:9px;height:9px;background:${COL_ACT};vertical-align:middle"></span> 확정 &nbsp;
-    <span style="display:inline-block;width:9px;height:9px;background:${COL_PRJ};vertical-align:middle"></span> 궤적 &nbsp;
-    ${floor > 0 ? `&nbsp;|&nbsp; <span style="display:inline-block;width:9px;height:9px;background:${COL_ACTB};vertical-align:middle"></span> 안전선 미달(확정) &nbsp;
-    <span style="display:inline-block;width:9px;height:9px;background:${COL_PRJB};vertical-align:middle"></span> 미달(궤적)` : ''}
+    <span style="display:inline-block;width:14px;height:3px;background:${COL_ACT};vertical-align:middle"></span> 확정 &nbsp;
+    <span style="display:inline-block;width:14px;height:3px;background:${COL_PRJ};vertical-align:middle"></span> 궤적 &nbsp;
+    ${floor > 0 ? `&nbsp;|&nbsp; <span style="display:inline-block;width:14px;height:3px;background:${COL_ACTB};vertical-align:middle"></span> 안전선 미달(확정) &nbsp;
+    <span style="display:inline-block;width:14px;height:3px;background:${COL_PRJB};vertical-align:middle"></span> 미달(궤적) &nbsp;
+    <span style="display:inline-block;width:14px;height:1px;background:${COL_FLOOR};vertical-align:middle"></span> 안전선` : ''}
+    &nbsp;· 점 = 잔액이 바뀐 날
   </div>
 </td></tr>`;
 }
