@@ -272,59 +272,75 @@ function buildWeeklyTrajBlockHTML(
   const known = line.filter((v): v is number => v !== null);
   if (!known.length) return '';
 
-  const lo = Math.min(...known), hi = Math.max(...known);
-  let lowIdx = -1, lowVal = Infinity;
-  line.forEach((v, i) => { if (v !== null && v < lowVal) { lowVal = v; lowIdx = i; } });
-  const belowDays = floor > 0 ? known.filter(v => v < floor).length : 0;
-  const hit  = floor > 0 && lowVal < floor;
-  const endV = line[line.length - 1] ?? 0;
-  const eok  = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
-  const md   = (d: string) => d.slice(5).replace('-', '/');
-  const dday = Math.round((Date.parse(dates[lowIdx] + 'T00:00:00') - Date.parse(today + 'T00:00:00')) / 86400000);
+  const hi  = Math.max(...known, floor > 0 ? floor : 0);   // 안전선이 최고치보다 높을 수 있다
+  const eok = (v: number) => (Number(v || 0) / 1e8).toFixed(2);
+  const md  = (d: string) => d.slice(5).replace('-', '/');
   /* ⚠ 구간이 전부 미래거나 전부 과거일 수 있다 — 그때 '오늘까지는 확정' 은 거짓이다 */
   const basisNote = dates[0] > today
     ? '전 구간 예정 반영 (선택 주차가 미래)'
     : (dates[dates.length - 1] <= today ? '전 구간 확정' : `오늘(${today})까지는 확정, 이후는 예정 반영`);
 
-  let rows = '';
-  for (let i = 0; i < line.length; i += 7) {
-    const seg = line.slice(i, i + 7).filter((v): v is number => v !== null);
-    if (!seg.length) continue;
-    const segLo = Math.min(...seg);
-    const nb = floor > 0 ? seg.filter(v => v < floor).length : 0;
-    /* 막대 폭 — **0 을 기준**으로 구간 최고값 대비 비율. 구간 최저를 0% 로 잡으면
-       9.10억이 4% 막대로 나와 거의 0 처럼 보인다(실측). 재무 숫자를 왜곡하면 안 된다. */
-    const pct = hi > 0 ? Math.max(2, Math.min(100, Math.round(Math.max(0, segLo) / hi * 100))) : 2;
-    const barCol = (floor > 0 && segLo < floor) ? C.red : C.green;
-    rows += `<tr>
-      <td style="padding:5px 6px;font-size:11.5px;color:${C.t2};white-space:nowrap">${md(dates[i])}~${md(dates[Math.min(i + 6, dates.length - 1)])}</td>
-      <td style="padding:5px 6px;font-size:11.5px;color:${C.text};text-align:right;white-space:nowrap">${eok(segLo)}억</td>
-      <td style="padding:5px 6px;width:44%">
-        <table width="100%" cellpadding="0" cellspacing="0"><tr>
-          <td style="background:${barCol};height:8px;border-radius:4px;width:${pct}%;font-size:0;line-height:0">&nbsp;</td>
-          <td style="font-size:0;line-height:0">&nbsp;</td>
-        </tr></table>
-      </td>
-      <td style="padding:5px 6px;font-size:11px;color:${nb ? C.red : C.t3};text-align:right;white-space:nowrap">${nb ? `하회 ${nb}일` : '—'}</td>
-    </tr>`;
-  }
+  const H = 150;
+  const px = (v: number) => Math.max(0, Math.round((Math.max(0, v) / (hi || 1)) * H));
+  const floorPx = floor > 0 ? px(floor) : 0;
+
+  /* ── 일별 열 차트 ────────────────────────────────────────────────────
+     메일에서는 canvas 를 못 쓰고 inline SVG 는 Gmail 이 지운다. PNG 는 Edge(Deno)에
+     canvas·FFI 가 없어 만들 수 없고, 외부 렌더 서비스는 회사 잔액이 URL 로 나가므로
+     쓸 수 없다. → 표 셀로 세우는 열 차트가 유일하게 모든 클라이언트에서 되는 방법이다.
+     안전선은 별도 선을 못 그으니 **모든 열을 안전선 높이에서 색이 갈리게** 만든다.
+     색은 두 축을 동시에 나타낸다: 진하기 = 확정/궤적, 붉은색 = 안전선 미달.
+     ⚠ 미달도 확정·궤적을 농도로 나눈다 — 안 나누면 미달 구간이 길 때 확정이 어디서
+       끝나는지 알 수 없다(실측: 과거 주차에서 궤적 11일이 확정과 구분되지 않았다).
+     ⚠ 빈 셀에는 font-size:0;line-height:0 을 준다 — Outlook 이 줄높이를 넣어 높이가 틀어진다. */
+  const COL_ACT  = C.blue, COL_PRJ = '#8AA093';
+  const COL_ACTB = C.red,  COL_PRJB = '#E0A99E';
+  const COL_BAND = '#D3DFD6';
+  const cell = (h: number, bg: string) =>
+    `<tr><td height="${h}"${bg ? ` bgcolor="${bg}"` : ''} style="font-size:0;line-height:0">&nbsp;</td></tr>`;
+  const cols = dates.map((_d, i) => {
+    const v = line[i];
+    if (v === null) return '<td style="font-size:0;line-height:0">&nbsp;</td>';
+    const isAct = actVals[i] !== null;
+    const h = px(v);
+    const below = floor > 0 && v < floor;
+    /* 바깥 셀에 valign="bottom" + 고정 높이를 주면 위쪽 여백 셀이 필요 없다(메일 크기 절약) */
+    const body = below
+      ? cell(h, isAct ? COL_ACTB : COL_PRJB)
+      : cell(Math.max(0, h - floorPx), isAct ? COL_ACT : COL_PRJ) + cell(floorPx, COL_BAND);
+    return `<td valign="bottom" height="${H}" style="font-size:0;line-height:0"><table cellpadding="0" cellspacing="0">${body}</table></td>`;
+  }).join('');
+
+  const ticks = dates.map((d, i) => (i % 7 === 0)
+    ? `<td colspan="7" style="font-size:9.5px;color:${C.t3};padding-top:4px;white-space:nowrap">${md(d)}</td>`
+    : '').join('');
 
   return `
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
-<tr><td style="background:${C.card};padding:18px 18px 12px">
+<tr><td style="background:${C.card};padding:18px 18px 14px">
   <div style="font-size:13px;font-weight:700;color:${C.text};margin-bottom:3px">📈 일별 현금 잔액 추이 · 궤적</div>
-  <div style="font-size:11px;color:${C.t3};margin-bottom:10px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · ${basisNote}</div>
-  <div style="padding:11px 13px;background:${hit ? C.red2 : C.bg3};border-radius:6px;border-left:3px solid ${hit ? C.red : C.green}">
-    <div style="font-size:13px;color:${C.text}">
-      최저 <b style="color:${hit ? C.red : C.text}">${fmt(lowVal)}</b>
-      <span style="font-size:11px;color:${C.t3}">&nbsp;${dates[lowIdx]}${Number.isFinite(dday) ? ` (D${dday >= 0 ? '+' : ''}${dday})` : ''}</span>
-    </div>
-    ${floor > 0 ? `<div style="font-size:11.5px;color:${hit ? C.red : C.t2};margin-top:4px">
-      안전선 ${eok(floor)}억 · ${hit ? `${belowDays}일 하회 · 부족 ${eok(floor - lowVal)}억` : '전 구간 유지'}
-    </div>` : ''}
-    <div style="font-size:11.5px;color:${C.t2};margin-top:4px">${dates[dates.length - 1]} 예상 ${fmt(endV)}</div>
+  <div style="font-size:11px;color:${C.t3};margin-bottom:12px">${dates[0]} ~ ${dates[dates.length - 1]} (${Math.round(horizonDays / 7)}주) · ${basisNote}</div>
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <tr>
+      <!-- y축 라벨 -->
+      <td width="46" valign="top" style="font-size:9.5px;color:${C.t3};line-height:1">
+        <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">
+          <tr><td height="${Math.max(0, H - floorPx)}" valign="top" style="font-size:9.5px;color:${C.t3}">${eok(hi)}억</td></tr>
+          ${floor > 0 ? `<tr><td height="${floorPx}" valign="top" style="font-size:9.5px;color:${C.red}">${eok(floor)}억</td></tr>` : ''}
+        </table>
+      </td>
+      <td valign="bottom" style="border-left:1px solid ${C.border};border-bottom:1px solid ${C.border}">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>${cols}</tr></table>
+      </td>
+    </tr>
+    <tr><td></td><td><table width="100%" cellpadding="0" cellspacing="0"><tr>${ticks}</tr></table></td></tr>
+  </table>
+  <div style="margin-top:8px;font-size:10.5px;color:${C.t3}">
+    <span style="display:inline-block;width:9px;height:9px;background:${COL_ACT};vertical-align:middle"></span> 확정 &nbsp;
+    <span style="display:inline-block;width:9px;height:9px;background:${COL_PRJ};vertical-align:middle"></span> 궤적 &nbsp;
+    ${floor > 0 ? `&nbsp;|&nbsp; <span style="display:inline-block;width:9px;height:9px;background:${COL_ACTB};vertical-align:middle"></span> 안전선 미달(확정) &nbsp;
+    <span style="display:inline-block;width:9px;height:9px;background:${COL_PRJB};vertical-align:middle"></span> 미달(궤적)` : ''}
   </div>
-  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px">${rows}</table>
 </td></tr>`;
 }
 

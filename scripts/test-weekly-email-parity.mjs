@@ -41,7 +41,7 @@ let edgeJs;
 try {
   const dir = mkdtempSync(path.join(tmpdir(), 'wkparity-'));
   const f = path.join(dir, 'edge.ts');
-  writeFileSync(f, grab(tsSrc, 'computeWeeklyCashSeries'), 'utf8');
+  writeFileSync(f, grab(tsSrc, 'computeWeeklyCashSeries') + '\n' + grab(tsSrc, 'buildWeeklyTrajBlockHTML'), 'utf8');
   // 파일 확장자로 ts 를 알아본다 — --loader 는 stdin 전용 플래그라 파일 입력엔 못 쓴다
   edgeJs = execFileSync('npx', ['--yes', 'esbuild@0.24.0', '--format=esm', f],
                         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' });
@@ -54,6 +54,28 @@ try {
 const addDaysSrc = grab(html, 'addDays');
 const appFn  = new Function(`${addDaysSrc}\n${grab(html, 'computeWeeklyCashSeries')}\nreturn computeWeeklyCashSeries;`)();
 const edgeFn = new Function(`${addDaysSrc}\n${edgeJs}\nreturn computeWeeklyCashSeries;`)();
+
+/* HTML 블록까지 대조한다 — 숫자가 같아도 그리는 코드가 갈라지면 메일 모양이 달라진다.
+   미리보기판은 html`` 태그드 템플릿(raw 객체 반환)이라 __html 을 꺼내 문자열로 맞춘다. */
+const FMT = new Function(`${grab(html, 'fmt')}\nreturn fmt;`)();
+const APP_DEPS = ['escapeHtml', 'raw', '_htmlFragment', 'html', 'fmt'].map(n => grab(html, n)).join('\n');
+const appBlock = new Function('TODAY', `
+  const todayKST = () => TODAY;
+  ${APP_DEPS}
+  ${addDaysSrc}
+  ${grab(html, 'computeWeeklyCashSeries')}
+  ${grab(html, 'buildWeeklyTrajBlockHTML')}
+  return (ws, rows, init, floor, C, hz) => {
+    const r = buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz);
+    return (r && r.__html) ? r.__html : String(r);
+  };`);
+const edgeBlock = new Function('fmt', `
+  ${addDaysSrc}
+  ${edgeJs}
+  return (ws, rows, init, floor, C, hz, today) =>
+    String(buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz, today));`);
+const C_MAIL = { green:'#2A7F57', red:'#C24A38', red2:'#F7E4DE', amber:'#9E6A15', blue:'#314840',
+  text:'#1B2B30', t2:'#55655D', t3:'#94A296', bg:'#F2F5F1', bg3:'#E9EFE7', card:'#ffffff', border:'#DDE6DA' };
 
 /* 시나리오 — 과거/현재/미래 주차 · 연체 · 구간 밖 예정을 모두 섞는다 */
 const ROWS = [
@@ -79,6 +101,20 @@ for (const [label, wStart] of CASES) {
   const a = appFn(wStart, ROWS, INIT, FX, TODAY, H);
   /* Edge 판은 fxAdj 인자가 없다 — initCash 에 이미 얹혀 오기 때문. 같은 기준으로 넘긴다. */
   const b = edgeFn(wStart, ROWS, INIT + FX, TODAY, H);
+  /* HTML 블록 비교 — 공백만 다른 건 무시(들여쓰기 관습이 두 파일에서 다르다) */
+  const norm = (x) => String(x).replace(/\s+/g, ' ').trim();
+  const ah = norm(appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H));
+  const bh = norm(edgeBlock(FMT)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, TODAY));
+  const hOk = ah === bh;
+  console.log(`  ${hOk ? '✅' : '❌'} ${label} — HTML 블록 일치 (${ah.length} bytes)`);
+  if (!hOk) {
+    let k = 0; while (k < Math.min(ah.length, bh.length) && ah[k] === bh[k]) k++;
+    console.log(`       ${k} 번째 문자부터 다름`);
+    console.log(`       미리보기: …${ah.slice(Math.max(0, k - 40), k + 60)}`);
+    console.log(`       Edge    : …${bh.slice(Math.max(0, k - 40), k + 60)}`);
+  }
+  hOk ? pass++ : fail++;
+
   for (const key of ['dates', 'actVals', 'projVals']) {
     const ok = JSON.stringify(a[key]) === JSON.stringify(b[key]);
     console.log(`  ${ok ? '✅' : '❌'} ${label} — ${key} 일치`);
