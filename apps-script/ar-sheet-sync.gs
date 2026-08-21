@@ -38,7 +38,10 @@ var TAB_CONFIG = {
   //  지앤원: excludeFutureStart — 지출일자가 미래인 행은 아직 돈이 안 나갔으므로 채권이 아니다.
   //          표2의 26-08-20~26-11-20 지출 예정 4행(475,200,000)이 그 경우이고, 시트 자체 합계도
   //          이 4행을 빼고 907,748,592(과거 9행 합과 원 단위 일치)로 잡혀 있다.
-  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true },
+  //          keepNoEvidenceRows — 날짜가 하나도 없이 금액만 적힌 행도 실제 채권이다(2026-08-21 사용자 확인).
+  //          표1 하단 449·450행(81,659,977 + 74,236,343)이 그 경우다. 그 위 446행 155,896,319 은
+  //          이 둘의 소계이므로 아래 판정 ⑸(소계 감지)가 걸러 낸다.
+  '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true, keepNoEvidenceRows: true },
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
@@ -297,8 +300,15 @@ function parseTab_(sh, cfg) {
     }
     /* cm: 이 행을 읽을 때 쓴 열 매핑을 그대로 들고 간다 — 표마다 열 위치가 다르므로
        2차 판정에서 colMap 을 다시 참조하면 마지막 표의 매핑으로 전부 읽어 버린다. */
+    /* 날짜 3종(송금일·회수예정일·실제회수일)과 '바로 뒤가 헤더인가' 를 1차에서 확정해 둔다 —
+       2차 판정과 아래 소계 감지가 같은 값을 봐야 하고, 표마다 열 위치가 달라 나중에 다시
+       읽으면 마지막 표의 매핑으로 읽히기 때문. */
+    var dueV  = colMap.due     !== undefined ? String(row[colMap.due]     || '').trim() : '';
+    var colV  = colMap.collect !== undefined ? String(row[colMap.collect] || '').trim() : '';
+    var dateless = !hasStart && !dueV && !colV;
     cand.push({ row: row, cm: colMap, block: block, srcRow: i, expected: expected, collected: collected,
-                hasStart: hasStart, first: blockFirst });
+                hasStart: hasStart, first: blockFirst, dueV: dueV, colV: colV, dateless: dateless,
+                nextHdr: dateless ? nextNonBlankIsHeader_(values, i + 1, wantExp) : false });
     blockFirst = false;
   }
 
@@ -317,6 +327,26 @@ function parseTab_(sh, cfg) {
   var blockExp = {}, skippedTotalRows = 0;
   for (var t = 0; t < cand.length; t++) blockExp[cand[t].block] = (blockExp[cand[t].block] || 0) + cand[t].expected;
 
+  /* ── 판정 ⑸ 소계 행 감지 (2026-08-21) ──────────────────────────────────
+     날짜가 하나도 없는 행들 중 '나머지의 합' 과 일치하는 가장 큰 행은 소계다.
+     지앤원 표1 하단이 그 모양: 446행 155,896,319 = 449행 81,659,977 + 450행 74,236,343.
+     합이 실제로 맞을 때만 발동하므로 진짜 채권을 잘못 지울 위험이 없다. 3행 이상일 때만
+     보는 이유는, 2행뿐이면 값이 같은 두 행이 서로를 소계로 지목해 둘 다 사라지기 때문. */
+  var dl = {};
+  for (var d = 0; d < cand.length; d++) {
+    var cd = cand[d];
+    if (!cd.dateless || cd.nextHdr) continue;      // 총계 행(⑷)은 대상에서 뺀다
+    (dl[cd.block] = dl[cd.block] || []).push(cd);
+  }
+  var subtotalDropped = 0;
+  Object.keys(dl).forEach(function (bk) {
+    var g = dl[bk];
+    if (g.length < 3) return;
+    var tot = 0, mx = g[0];
+    for (var q = 0; q < g.length; q++) { tot += g[q].expected; if (g[q].expected > mx.expected) mx = g[q]; }
+    if (Math.abs(mx.expected - (tot - mx.expected)) <= 2) { mx.isSubtotal = true; subtotalDropped++; }
+  });
+
   var records = [], lastStart = '', lastBlock = -1, totalRowsDropped = 0;
   for (var k = 0; k < cand.length; k++) {
     var c = cand[k], cm = c.cm;
@@ -324,15 +354,15 @@ function parseTab_(sh, cfg) {
     if (c.block !== lastBlock) { lastStart = ''; lastBlock = c.block; }
     var hasStartCol = cm.start !== undefined;
     if (!c.hasStart) {
-      var dueVal     = cm.due     !== undefined ? String(c.row[cm.due]     || '').trim() : '';
-      var collectVal = cm.collect !== undefined ? String(c.row[cm.collect] || '').trim() : '';
+      var dueVal = c.dueV, collectVal = c.colV;
       var noEvidence = !cfg.keepNoEvidenceRows && !dueVal && !collectVal && !(c.collected > 0); // 회수 근거 전무
       /* ⑷ 날짜가 하나도 없고 바로 뒤에 헤더가 오는 행 = 다음 표의 총계 행 (2026-08-21 추가).
          회수액이 있어도 걸러야 한다 — 지앤원 표2 총계가 이 모양이라 예상 907,748,592 ·
          회수 336,632,378 이 통째로 이중계상됐다. 날짜 3종이 전부 없는 것이 총계 행의 특징이고,
          병합셀 연속행은 보통 회수예정일이나 실제회수일이 있어 여기 걸리지 않는다. */
-      var isNextTotal = !dueVal && !collectVal && nextNonBlankIsHeader_(values, c.srcRow + 1, wantExp);
-      var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2 || noEvidence || isNextTotal;
+      var isNextTotal = c.dateless && c.nextHdr;
+      var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2
+                       || noEvidence || isNextTotal || c.isSubtotal;
       if (isDropRow) { skippedTotalRows++; if (isNextTotal) totalRowsDropped++; continue; }
     }
     var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[cm.start]) : (hasStartCol ? lastStart : '');
@@ -370,6 +400,7 @@ function parseTab_(sh, cfg) {
     note: 'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
           ', 매핑: ' + foundCols.join(',') + ')' +
           (totalRowsDropped ? ' 🧮총계 행 ' + totalRowsDropped + '개 제외' : '') +
+          (subtotalDropped ? ' ➗소계 행 ' + subtotalDropped + '개 제외' : '') +
           (futureRows ? ' ⏭미래 지출 ' + futureRows + '행 제외(아직 채권 아님)' : '') +
           (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '') +
           (anomalies.length ? ' ⛔비정상 금액 ' + anomalies.length + '행' : '')
