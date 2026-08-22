@@ -1225,6 +1225,21 @@
     </div>
   </div>
 
+  <!-- ======== 총자산 구성 (1년) ========
+       현금 + 매출채권 + 세종F2 + 라오스를 일별로 쌓아 "돈이 어디에 있나" 를 본다.
+       추이·궤적 차트는 현금만 보는 것이고 이건 자산 전체의 구성이다 — 목적이 다르므로 따로 둔다. -->
+  <div class="chart-box" id="wkrpt-mix-box" style="margin-bottom:20px">
+    <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <span>🧱 총자산 구성 · 일별 (1년)</span>
+      <small id="wkrpt-mix-range" style="color:var(--text3);font-weight:400"></small>
+      <span id="wkrpt-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
+    </div>
+    <div class="chart-wrap" style="height:260px">
+      <canvas id="wkrptMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스를 일별로 쌓은 총자산 구성 영역 차트">총자산 구성</canvas>
+    </div>
+    <div id="wkrpt-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+  </div>
+
   <!-- ======== 주간 요약 (KPI 카드 아래) ======== -->
   <div class="chart-box weekly-summary-box" id="wkrpt-bottom-summary" style="margin-bottom:20px">
     <div class="weekly-summary-head">
@@ -4888,7 +4903,7 @@ function showKPILoading() {
   subIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '연결 중...'; });
 }
 
-let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst, wkrptCashChartInst;
+let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst, wkrptCashChartInst, wkrptMixChartInst;
 
 function renderCharts() {
   // Chart.js는 display:none 캔버스에 렌더링 시 크기를 0×0으로 인식해 빈 차트가 됨
@@ -8821,10 +8836,176 @@ function renderWeeklyCashChart(wStart) {
   });
 }
 
+/* ═══ 매출채권 일별 잔액 — 회수일 추정 포함 ══════════════════════════════
+ * 채권 잔액(d) = Σ발생(start ≤ d) − Σ회수(회수일 ≤ d)
+ *
+ * ⚠⚠ 문제: 회수액은 있는데 **회수일이 비어 있는 행이 32건 46.4억**(전체 회수의 25%)이다.
+ *   그냥 빼지 않으면 과거 구간 내내 채권이 46억 부풀고, 오늘 값도 합계와 안 맞는다.
+ *   그래서 회수일을 **차트 계산에서만** 추정한다 — 시트에는 쓰지 않는다(추정치와 실제 값이
+ *   섞이면 나중에 구분이 안 된다. 2026-08-21 사용자와 합의).
+ *
+ * 추정 3단 (근거가 강한 순서 · 2026-08-21 실측 커버리지):
+ *   ① 그 거래처의 **실제 입금(cf_data)** 을 발생일 이후로 FIFO 배분 → 그 입금일   77.2%
+ *   ② 남으면 **예정일 + 9일** (예정일이 과거일 때만)                              1.8%
+ *      +9일은 천대표(부산영업)의 회수일이 기록된 8건에서 실측한 지연 중앙값이다.
+ *   ③ 그래도 남으면 **발생일 + 30일**                                          20.9%
+ *      대부분 디앤비푸드 25년 9·10월분 — cf_data 가 2025-10-24 부터라 입금 기록이 없다.
+ * ⚠ 추정일이 오늘보다 뒤로 가면 오늘로 당긴다 — 이미 걷힌 돈이 미래 회수로 잡히면 안 된다.
+ *   로가온은 예정일이 2027-04-30 인데 이미 회수가 끝나서, ②를 쓰면 내년으로 간다(①이 처리).
+ * 검증: 이 규칙으로 만든 오늘 값이 ar_data 미회수 합계와 **정확히 일치**한다(실측 차 0).
+ * 반환: { delta, byRule } — delta[날짜] = 그날의 채권 증감 */
+const AR_LAG_DAYS = 9;                       // 예정일 → 실제 회수 지연(천대표 실측 중앙값)
+const AR_FALLBACK_DAYS = 30;                 // 근거가 없을 때 발생일 이후
+
+function arDailyDelta(arRows, cfRows, today) {
+  const isD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+  const norm = p => String(p || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '');
+  const delta = {}, byRule = { actual: 0, fifo: 0, due: 0, fallback: 0 };
+  const bump = (d, v) => { if (d) delta[d] = (delta[d] || 0) + v; };
+
+  const deps = (cfRows || []).filter(r => r.status === '실제 입금' && (r.in || 0) > 0)
+    .map(r => ({ date: r.date, left: r.in || 0, t: norm((r.mid_cat || '') + (r.desc || '')) }))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const pool = {};
+  const poolFor = p => (pool[p] = pool[p] || deps.filter(d => d.t.includes(norm(p))));
+
+  const rows = (arRows || []).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  for (const x of rows) {
+    const exp = Number(x.expected) || 0, col = Number(x.collected) || 0;
+    if (isD(x.start) && exp) bump(x.start, exp);
+    if (col <= 0) continue;
+    if (isD(x.collect_date)) { bump(x.collect_date, -col); byRule.actual += col; continue; }
+    let left = col;
+    for (const d of poolFor(x.partner)) {                       // ① 실제 입금 FIFO
+      if (left <= 0) break;
+      if (d.left <= 0) continue;
+      if (isD(x.start) && d.date < x.start) continue;            // 발생 전 입금은 이 채권 게 아니다
+      const take = Math.min(left, d.left);
+      d.left -= take; left -= take;
+      bump(d.date, -take); byRule.fifo += take;
+    }
+    if (left > 0) {
+      let d, rule;
+      if (isD(x.due_date) && x.due_date <= today) { d = addDays(x.due_date, AR_LAG_DAYS); rule = 'due'; }
+      else { d = isD(x.start) ? addDays(x.start, AR_FALLBACK_DAYS) : today; rule = 'fallback'; }
+      if (d > today) d = today;                                  // 이미 걷힌 돈을 미래로 보내지 않는다
+      bump(d, -left); byRule[rule] += left;
+    }
+  }
+  return { delta, byRule };
+}
+
+/* ═══ 총자산 구성 · 일별 (1년) ══════════════════════════════════════════
+ * 현금 + 매출채권 + 세종F2 + 라오스를 쌓는다. 넷 다 양수라 스택이 성립한다.
+ * ⚠ 세종F2·라오스는 대시보드 KPI 와 같은 정의 — 대분류별 **지출 누적**(=투자액)이다.
+ *   실제 지출과 지출 예정을 모두 넣는다(KPI 가 그렇게 계산한다).
+ * ⚠ cf_data 최초 거래일이 2025-10-24 라 그 이전 구간의 현금은 기초잔액이 그대로 깔린다.
+ *   차트 아래에 그 사실을 적어 둔다 — 안 적으면 "작년엔 현금이 일정했다" 로 오독된다.
+ * ⚠ 추이·궤적 차트와 목적이 다르다(저건 현금만·미래 포함, 이건 자산 전체·과거). 합치지 말 것 —
+ *   현금이 총자산의 3~9% 라 한 축에 쌓으면 현금 변동이 안 보인다(2026-08-21 실측). */
+const MIX_DAYS = 365;
+
+function renderAssetMixChart() {
+  const cv = document.getElementById('wkrptMixChart');
+  if (!cv || !cv.offsetParent) return;          // 탭이 닫혀 있으면 캔버스가 0px
+  const today = todayKST();
+  const from = addDays(today, -(MIX_DAYS - 1));
+  const dates = [];
+  for (let d = from; d <= today; d = addDays(d, 1)) dates.push(d);
+
+  computeFxAdj();
+  /* 현금 — 추이 차트와 같은 기준(INIT_CASH + FX_ADJ + 실제 입출금) */
+  const cashDelta = {};
+  let cashBase = INIT_CASH + FX_ADJ;
+  for (const r of (cfData || [])) {
+    if (!r.date) continue;
+    const v = r.status === '실제 입금' ? (r.in || 0) : (r.status === '실제 지출' ? -(r.out || 0) : 0);
+    if (!v) continue;
+    if (r.date < from) cashBase += v;
+    else if (r.date <= today) cashDelta[r.date] = (cashDelta[r.date] || 0) + v;
+  }
+  /* 세종F2·라오스 — 지출 누적(투자액) */
+  const invDelta = { '세종시': {}, '라오스': {} };
+  const invBase = { '세종시': 0, '라오스': 0 };
+  for (const r of (cfData || [])) {
+    const c = r.big_cat;
+    if (c !== '세종시' && c !== '라오스') continue;
+    if (r.status !== '실제 지출' && r.status !== '지출 예정') continue;
+    const v = r.out || 0;
+    if (!v || !r.date) continue;
+    if (r.date < from) invBase[c] += v;
+    else if (r.date <= today) invDelta[c][r.date] = (invDelta[c][r.date] || 0) + v;
+  }
+  /* 매출채권 */
+  const arRes = arDailyDelta(arData, cfData, today);
+  const arDelta = arRes.delta, byRule = arRes.byRule;
+  let arBase = 0;
+  for (const d of Object.keys(arDelta)) if (d < from) arBase += arDelta[d];
+
+  const cash = [], ar = [], sej = [], lao = [];
+  let c1 = cashBase, a1 = arBase, s1 = invBase['세종시'], l1 = invBase['라오스'];
+  for (const d of dates) {
+    c1 += (cashDelta[d] || 0);
+    a1 += (arDelta[d] || 0);
+    s1 += (invDelta['세종시'][d] || 0);
+    l1 += (invDelta['라오스'][d] || 0);
+    cash.push(Math.max(0, Math.round(c1)));
+    ar.push(Math.max(0, Math.round(a1)));
+    sej.push(Math.round(s1));
+    lao.push(Math.round(l1));
+  }
+  const tail = arr => arr[arr.length - 1] || 0;
+  const total = tail(cash) + tail(ar) + tail(sej) + tail(lao);
+  const eok = v => (Number(v || 0) / 1e8).toFixed(1);
+
+  document.getElementById('wkrpt-mix-range').textContent = `${from} ~ ${today}`;
+  document.getElementById('wkrpt-mix-note').textContent =
+    `총 ${eok(total)}억 · 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
+  const estSum = byRule.fifo + byRule.due + byRule.fallback;
+  const firstCf = (cfData || []).map(r => r.date).filter(Boolean).sort()[0] || '-';
+  const warnEl = document.getElementById('wkrpt-mix-warn');
+  if (warnEl) warnEl.innerHTML = html`※ 채권 회수일이 비어 있는 ${fmt(estSum)}원은 회수 시점을 추정해 반영했습니다 —
+      실제 입금 대조 ${fmt(byRule.fifo)} · 예정일+${AR_LAG_DAYS}일 ${fmt(byRule.due)} · 발생일+${AR_FALLBACK_DAYS}일 ${fmt(byRule.fallback)}.
+      시트에는 쓰지 않고 이 차트에서만 씁니다. 현금은 ${firstCf} 이전 구간은 기초잔액입니다.`;
+
+  if (wkrptMixChartInst) wkrptMixChartInst.destroy();
+  const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '33',
+    borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
+  wkrptMixChartInst = new Chart(cv.getContext('2d'), {
+    type: 'line',
+    data: { labels: dates.map(d => d.slice(2).replace(/-/g, '/')), datasets: [
+      set('현금', cash, '#2a78d6'),
+      set('매출채권', ar, '#eb6834', [6, 4]),
+      set('세종F2', sej, '#1baf7a', [2, 3]),
+      set('라오스', lao, '#eda100', [10, 3]),
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478' } },
+        tooltip: {
+          callbacks: {
+            label: c2 => `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
+            footer: items => `합계 ₩${fmt(items.reduce((t, x) => t + Number(x.raw), 0))}`,
+          },
+          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
+          footerColor: '#1a1d2e', borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
+        },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { display: false } },
+        y: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+      },
+    },
+  });
+}
+
 function renderWeeklyReport() {
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
   try { renderWeeklyCashChart(wStart); } catch (e) { console.warn('[wkrpt-cash]', e); }
+  try { renderAssetMixChart(); } catch (e) { console.warn('[wkrpt-mix]', e); }
 
   // ── 헤더 ──────────────────────────────────────────────
   // 주차 표시 기준: 해당 주의 목요일(wStart + 3일)이 속한 년/월/주차
