@@ -20,6 +20,7 @@
  *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly?, meta? } }
  *     meta: true → settings·bank_snapshot / meta: ["키",…] → 그 cat_data 키들(읽기 전용)
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at? }], midToBig?:{중분류:대분류} }
+ *   • 분할 { secret, split:[{ clobe_id | _id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *
  * 왜 patch 가 따로 있나: push 는 clobe_id 중복을 skip 하므로 재실행으로는 이미 적재된 행의
@@ -233,6 +234,7 @@ Deno.serve(async (req) => {
   const inspect = (body?.inspect && typeof body.inspect === "object" && !Array.isArray(body.inspect))
     ? body.inspect as Record<string, unknown> : null;
   const patchList = Array.isArray(body?.patch) ? body.patch : [];
+  const splitList = Array.isArray(body?.split) ? body.split : [];
   const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
     ? body.midToBig as Record<string, string> : null;
 
@@ -328,6 +330,102 @@ Deno.serve(async (req) => {
     }
   }
 
+  /* ── 분할 모드 ── 한 행을 두 행으로 쪼갠다. **금액 보존을 서버가 강제한다.**
+   *   { secret, split:[{ clobe_id|_id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
+   *
+   * 왜 필요한가 (2026-08-22): 7/9 환전에서 외화측 출금 754,950,000 과 원화측 입금 745,945,000 의
+   *   차이 9,005,000 × 2건 = 18,010,000 은 은행에 실제로 낸 환전 스프레드(1.19%)다. 그런데 한 행
+   *   안에 섞여 있어 '자금이동' 으로 묻혀 비용으로 안 잡혔다. 드러내려면 행을 쪼개야 한다.
+   *
+   * ⚠ 왜 '금액 수정' 이 아니라 '분할' 인가 — 금액을 자유롭게 고치게 열어 두면 현금 총액이 조용히
+   *   틀어질 수 있다. 분할은 keep + spawn == 원금액 을 서버가 검증하므로 총액이 구조적으로
+   *   보존된다. 금액을 진짜로 정정해야 하는 일이 생기면 그건 별도 수단으로 다룰 것.
+   * ⚠ spawn 행에는 clobe_id 를 넣지 않는다. 원본이 clobe_id 를 그대로 들고 있고, push 는 clobe_id
+   *   로 찾은 행의 **금액을 갱신하지 않으므로**(적요·거래시각만) 재적재로 분할이 되돌아가지 않는다.
+   * ⚠ fx_usd 는 떼낸 행에도 그대로 물려준다 — 그 돈은 실제로 외화계좌에서 나갔다. 태그를 떼면
+   *   환산손익 장부가 틀어져 FX_ADJ 가 오히려 악화된다(2026-08-22 검산: -1.26억 → -1.44억).
+   * ⚠ 분할은 FX_ADJ 를 바꾸지 않는다. 분류만 바로잡는 작업이다. */
+  if (splitList.length) {
+    try {
+      const dry = body?.dry === true;
+      let catNote: { added: string[]; kept: string[] } | null = null;
+      if (midToBig && !dry) catNote = await mergeMidToBig(midToBig);
+
+      /* 계획 수립 — 순수 함수. dry 와 실행이 같은 규칙을 쓰도록 한 곳에 둔다. */
+      const planSplit = (cur: any[]) => {
+        const plan: any[] = [], rejected: string[] = [];
+        for (const sp of splitList) {
+          const clobeId = str(sp?.clobe_id), rid = str(sp?._id);
+          const tag = clobeId || rid || "(선택자 없음)";
+          if (!clobeId && !rid) { rejected.push(tag); continue; }
+          const idx = clobeId
+            ? cur.findIndex((r) => str(r.clobe_id) === clobeId)
+            : cur.findIndex((r) => str(r._id) === rid);
+          if (idx < 0) { rejected.push(`${tag} (행 없음)`); continue; }
+          const r = cur[idx];
+          const dir = Number(r.out || 0) > 0 ? "out" : (Number(r.in || 0) > 0 ? "in" : "");
+          if (!dir) { rejected.push(`${tag} (금액이 0)`); continue; }
+          const orig = Math.round(Number(r[dir]) || 0);
+          const amt = Math.round(Number(sp?.spawn?.amount) || 0);
+          if (!(amt > 0 && amt < orig)) { rejected.push(`${tag} (분할액 ${amt} 가 0 < x < ${orig} 밖)`); continue; }
+          const keep = orig - amt;
+          if (keep + amt !== orig) { rejected.push(`${tag} (금액 보존 실패)`); continue; }
+          const bigC = str(sp?.spawn?.big_cat), midC = str(sp?.spawn?.mid_cat);
+          if (!bigC || !midC) { rejected.push(`${tag} (spawn 의 big_cat/mid_cat 누락)`); continue; }
+          plan.push({
+            idx, _id: str(r._id), clobe_id: str(r.clobe_id), date: str(r.date), desc: str(r.desc),
+            dir, orig, keep, spawn: amt, big_cat: bigC, mid_cat: midC,
+            spawn_desc: str(sp?.spawn?.desc) || str(r.desc),
+            fx_usd: r.fx_usd ? true : false,
+            from: { big_cat: str(r.big_cat), mid_cat: str(r.mid_cat) },
+          });
+        }
+        return { plan, rejected };
+      };
+
+      if (dry) {
+        const getRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
+          { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+        );
+        if (!getRes.ok) throw new Error(`cf_data 읽기 실패: ${getRes.status}`);
+        const arr = await getRes.json();
+        const cur: any[] = Array.isArray(arr?.[0]?.data) ? arr[0].data
+          : (typeof arr?.[0]?.data === "string" ? JSON.parse(arr[0].data) : []);
+        const { plan, rejected } = planSplit(cur);
+        return json({ ok: true, mode: "split(dry)", planned: plan.length, plan,
+          ...(rejected.length ? { rejected } : {}), total: cur.length });
+      }
+
+      const out = await mutateCfData((cur) => {
+        const { plan, rejected } = planSplit(cur);
+        /* 뒤에서부터 삽입 — 앞에서부터 넣으면 뒤쪽 idx 가 밀려 엉뚱한 행을 건드린다. */
+        for (const q of [...plan].sort((a, b) => b.idx - a.idx)) {
+          const r = cur[q.idx];
+          r[q.dir] = q.keep;
+          r.amount = q.dir === "out" ? -q.keep : q.keep;
+          const rec: any = {
+            _id: genId(), date: q.date, desc: q.spawn_desc,
+            in: q.dir === "in" ? q.spawn : 0, out: q.dir === "out" ? q.spawn : 0,
+            amount: q.dir === "out" ? -q.spawn : q.spawn,
+            type: str(r.type), status: str(r.status),
+            mid_cat: q.mid_cat, big_cat: q.big_cat,
+            split_from: q._id,           // 어느 행에서 떼냈는지 — 되돌릴 때 쓴다
+          };
+          if (str(r.tx_at)) rec.tx_at = str(r.tx_at);
+          if (q.fx_usd) rec.fx_usd = true;
+          cur.splice(q.idx + 1, 0, rec);
+        }
+        return { plan, rejected };
+      });
+      return json({ ok: true, mode: "split", updated: out.result.plan.length, plan: out.result.plan,
+        ...(out.result.rejected.length ? { rejected: out.result.rejected } : {}),
+        ...(catNote ? { midToBig: catNote } : {}), total: out.total });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
+
   /* ── 수정 모드 ── 이미 적재된 행의 중분류/대분류만 고친다(금액·적요·날짜는 건드리지 않는다). */
   if (patchList.length || midToBig) {
     try {
@@ -376,7 +474,7 @@ Deno.serve(async (req) => {
   }
 
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action (push / inspect / patch)" }, 400);
+    return json({ ok: false, error: "unknown action (push / inspect / patch / split)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
