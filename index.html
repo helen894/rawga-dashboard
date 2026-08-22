@@ -785,7 +785,6 @@
       <div class="chart-wrap" style="height:260px">
         <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스 잔액을 각각 일별로 그린 영역 차트. 쌓지 않고 겹쳐 그린다">자산별 추이</canvas>
       </div>
-      <div id="asset-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
     </div>
   </div>
 
@@ -8954,8 +8953,7 @@ function renderAssetMixChart() {
     else if (r.date <= today) invDelta[c][r.date] = (invDelta[c][r.date] || 0) + v;
   }
   /* 매출채권 */
-  const arRes = arDailyDelta(arData, cfData, today);
-  const arDelta = arRes.delta, byRule = arRes.byRule;
+  const arDelta = arDailyDelta(arData, cfData, today).delta;   // byRule 은 안내문을 지운 뒤로 쓰지 않는다
   let arBase = 0;
   for (const d of Object.keys(arDelta)) if (d < from) arBase += arDelta[d];
 
@@ -8967,8 +8965,11 @@ function renderAssetMixChart() {
     s1 += (invDelta['세종시'][d] || 0);
     l1 += (invDelta['라오스'][d] || 0);
     /* 스택일 때는 Math.max(0,…) 로 눌렀다 — 음수가 섞이면 스택이 깨지기 때문이다.
-       독립 선에서는 그럴 이유가 없고, 누르면 사실을 가린다. 그대로 그린다.
-       현금은 3월·5월 투자 유치 직전 며칠 마이너스로 계산된다(재구성값, 아래 주석 참고). */
+       쌓지 않는 지금은 그럴 이유가 없고, 누르면 사실을 가린다. 그대로 그린다.
+       ⚠ 현금은 2026-03-10~17(최저 -1.09억)·05-15~20(-0.66억) 마이너스로 계산된다.
+       두 번의 투자 유치(3/18 60억·5/21 95억) 직전 바닥이다. 입출금을 되짚은 재구성값이라
+       통장이 실제로 마이너스였다는 뜻은 아니다 — 차트에 이 안내를 띄웠다가 2026-08-22
+       사용자 요청으로 지웠으니, 누가 물으면 여기를 보여줄 것. */
     cash.push(Math.round(c1));
     ar.push(Math.round(a1));
     sej.push(Math.round(s1));
@@ -8976,21 +8977,10 @@ function renderAssetMixChart() {
   }
   const tail = arr => arr[arr.length - 1] || 0;
   const eok = v => (Number(v || 0) / 1e8).toFixed(1);
-  const negN = cash.filter(v => v < 0).length;
-  const negMin = negN ? Math.min(...cash) : 0;
 
   document.getElementById('asset-mix-range').textContent = `${from} ~ ${today}`;
   document.getElementById('asset-mix-note').textContent =
     `단위 억원 — 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
-  const estSum = byRule.fifo + byRule.due + byRule.fallback;
-  const firstCf = (cfData || []).map(r => r.date).filter(Boolean).sort()[0] || '-';
-  const warnEl = document.getElementById('asset-mix-warn');
-  if (warnEl) warnEl.innerHTML = html`※ 채권 회수일이 비어 있는 ${fmt(estSum)}원은 회수 시점을 추정해 반영했습니다 —
-      실제 입금 대조 ${fmt(byRule.fifo)} · 예정일+${AR_LAG_DAYS}일 ${fmt(byRule.due)} · 발생일+${AR_FALLBACK_DAYS}일 ${fmt(byRule.fallback)}.
-      시트에는 쓰지 않고 이 차트에서만 씁니다. 현금은 ${firstCf} 이전 구간은 기초잔액입니다.`;
-  if (warnEl && negN > 0) warnEl.innerHTML += html`<br>※ 현금이 ${negN}일간 마이너스로 계산됩니다(최저 ${fmt(negMin)}원).
-      투자 유치 직전 바닥 구간이며 입출금 내역을 되짚어 만든 재구성값입니다 — 통장이 실제로 마이너스였다는 뜻은 아닙니다.`;
-
   if (assetMixChartInst) assetMixChartInst.destroy();
   /* 영역 차트지만 **쌓지 않는다**(2026-08-22 사용자 요청). 각 계열이 0 부터 자기 값까지
      따로 칠해지므로 넷이 겹친다 — 그래서 알파를 아주 낮게(0x24 ≈ 14%) 준다. 선이 주고
