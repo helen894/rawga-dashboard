@@ -8988,9 +8988,11 @@ function renderAssetMixChart() {
       plugins: {
         legend: { display: true, position: 'bottom', labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478' } },
         tooltip: {
+          /* 합계는 일부러 안 보여준다 — 이 차트의 목적은 "현금이 어디로 옮겨갔나" 라서
+             네 층을 더한 값은 의미가 없다(가진 돈 2층 + 쓴 돈 2층을 더하는 셈이고
+             대출도 안 빠진다). 2026-08-22 사용자 요청으로 제거. */
           callbacks: {
             label: c2 => `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
-            footer: items => `합계 ₩${fmt(items.reduce((t, x) => t + Number(x.raw), 0))}`,
           },
           backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
           footerColor: '#1a1d2e', borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
