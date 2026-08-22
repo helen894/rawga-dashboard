@@ -255,6 +255,11 @@ Deno.serve(async (req) => {
             ? (inspect.meta as unknown[]).map((v) => str(v)).filter((k) => /^[a-zA-Z0-9_]+$/.test(k)).slice(0, 20)
             : []);
       const wantMeta = metaKeys.length > 0;
+      /* ar: true → ar_data 를 읽기 전용으로 함께 돌려준다.
+         ar_data 는 RLS 상 **로그인 세션에서만** 읽힌다(대시보드는 되지만 스크립트는 못 읽음).
+         그래서 매출채권 관련 계산을 화면 밖에서 검증할 방법이 없었다 — 일별 채권 잔액
+         시계열을 만들면서 필요해져 여기 붙인다. 쓰기는 하지 않는다. */
+      const wantAr = inspect.ar === true;
 
       const getRes = await fetch(
         `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
@@ -280,6 +285,26 @@ Deno.serve(async (req) => {
         status: str(r.status), recur_id: str(r.recur_id), tx_at: str(r.tx_at),
       }));
 
+      let arRows: unknown[] | undefined;
+      if (wantAr) {
+        const arRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/ar_data?select=data&limit=1`,
+          { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+        );
+        if (arRes.ok) {
+          const a = await arRes.json();
+          const raw = a?.[0]?.data;
+          const list = Array.isArray(raw) ? raw : (typeof raw === "string" ? JSON.parse(raw) : []);
+          /* 계산에 필요한 필드만 — 거래처명·비고 같은 건 여기서 쓸 일이 없다 */
+          arRows = (Array.isArray(list) ? list : []).map((r: any) => ({
+            partner: str(r.partner), start: str(r.start), due_date: str(r.due_date),
+            collect_date: str(r.collect_date),
+            expected: Number(r.expected) || 0, collected: Number(r.collected) || 0,
+            remaining: (r.remaining === undefined || r.remaining === null || r.remaining === "")
+              ? null : Number(r.remaining),
+          }));
+        }
+      }
       let meta: Record<string, unknown> | undefined;
       if (wantMeta) {
         const metaRes = await fetch(
@@ -293,7 +318,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length, ...(meta ? { meta } : {}) });
+      return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length,
+        ...(meta ? { meta } : {}), ...(arRows ? { ar: arRows, arTotal: arRows.length } : {}) });
     } catch (e) {
       return json({ ok: false, error: (e as Error).message }, 500);
     }

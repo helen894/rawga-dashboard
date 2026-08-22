@@ -33,7 +33,9 @@ var TAB_CONFIG = {
   'JHT':            { expected: '예상입금액',         collected: '실제 입금액',  remaining: '',       start: '송금일',   due: '예상 입금일', collect: '입금일' },
   '팬텀':           { expected: '총 회수예정액',       collected: '최종 회수액',  remaining: '',       start: '송금날짜', due: '예상회수일', collect: '회수일' },
   '천대표':         { expected: '총 회수예정액',       collected: '실제 회수액',  remaining: '미회수액', start: '송금날짜', due: '예상회수일', collect: '회수일' },
-  '천대표(부산영업)': { expected: '예상회수액',         collected: '최종 회수액(1)', remaining: '',      start: '송금일',   due: '예상회수일', collect: '최종회수일(1)' },
+  /* 2026-08-21: 시트 헤더가 '최종 회수액(1)/최종회수일(1)' → 'P열 최종회수액/O열 최종회수일' 로
+     바뀌었다. 예전 이름도 후보로 남겨 둔다(옛 사본 시트에서도 돌아가게). */
+  '천대표(부산영업)': { expected: '예상회수액',         collected: ['최종회수액', '최종 회수액(1)'], remaining: '',      start: '송금일',   due: '예상회수일', collect: ['최종회수일', '최종회수일(1)'] },
   '동이식품':       { expected: '매출액',             collected: '현재 회수액',  remaining: '미회수금액', start: '송금일',   due: '예상회수일', collect: '실제회수일' },
   //  지앤원: excludeFutureStart — 지출일자가 미래인 행은 아직 돈이 안 나갔으므로 채권이 아니다.
   //          표2의 26-08-20~26-11-20 지출 예정 4행(475,200,000)이 그 경우이고, 시트 자체 합계도
@@ -59,12 +61,29 @@ var MAX_SANE_AMOUNT = 1e12;
 
 /* 헤더 행(정규화된 문자열 배열)에서 필드별 열 위치를 찾는다.
    같은 탭에 표가 여러 개면 표마다 다시 호출해 열 위치를 새로 잡는다(parseTab_ 참고). */
+/* 필드마다 헤더 이름 후보를 여러 개 받는다(문자열 하나도 그대로 동작).
+   ⚠⚠ 헤더 이름이 바뀌면 그 열을 못 찾고 **조용히 0** 이 된다 — 2026-08-21 에 천대표(부산영업)
+     탭의 '최종 회수액(1)' 이 '최종회수액' 으로 바뀌면서 회수액 55건이 전부 0 이 되고 미회수가
+     10.5억 부풀었다(입금은 실제로 들어와 있었다). 이름이 또 바뀌어도 예전 이름으로 계속
+     잡히도록 후보 목록을 쓰고, 못 찾으면 아래 parseTab_ 이 경고를 남긴다. */
 function mapCols_(rowNorm, cfg) {
   var cm = {};
   FIELDS.forEach(function (f) {
-    if (cfg[f]) { var ci = rowNorm.indexOf(norm_(cfg[f])); if (ci >= 0) cm[f] = ci; }
+    var want = cfg[f];
+    if (!want) return;
+    var list = (Object.prototype.toString.call(want) === '[object Array]') ? want : [want];
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i]) continue;
+      var ci = rowNorm.indexOf(norm_(list[i]));
+      if (ci >= 0) { cm[f] = ci; break; }
+    }
   });
   return cm;
+}
+/* cfg 필드의 첫 후보 이름(경고 문구·헤더 행 탐색에 쓴다) */
+function cfgNames_(want) {
+  if (!want) return [];
+  return (Object.prototype.toString.call(want) === '[object Array]') ? want : [want];
 }
 
 function onOpen() {
@@ -229,15 +248,22 @@ function parseTab_(sh, cfg) {
   var values = sh.getDataRange().getValues();
   if (!values.length) return { records: [], note: '빈 시트' };
 
-  // 헤더 행 찾기: expected 헤더가 들어있는 행 (상단 20행 내)
-  var wantExp = norm_(cfg.expected);
+  // 헤더 행 찾기: expected 헤더 후보 중 하나가 들어있는 행 (상단 20행 내)
+  var expNames = cfgNames_(cfg.expected).map(norm_);
   var headerRow = -1, colMap = {};
   for (var r = 0; r < Math.min(values.length, 20); r++) {
     var rowNorm = values[r].map(norm_);
-    if (rowNorm.indexOf(wantExp) >= 0) { headerRow = r; colMap = mapCols_(rowNorm, cfg); break; }
+    var found = false;
+    for (var e = 0; e < expNames.length; e++) if (rowNorm.indexOf(expNames[e]) >= 0) { found = true; break; }
+    if (found) { headerRow = r; colMap = mapCols_(rowNorm, cfg); break; }
   }
-  if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfg.expected + ') 못 찾음', anomalies: [] };
+  if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfgNames_(cfg.expected).join('/') + ') 못 찾음', anomalies: [] };
   if (colMap.expected === undefined) return { records: [], note: '⚠ 예상회수액 열 못 찾음', anomalies: [] };
+  /* ⚠ 설정엔 있는데 헤더에서 못 찾은 열을 경고로 남긴다 — 이게 없어서 회수액이 조용히 0 이 됐다 */
+  var missCols = [];
+  ['collected', 'remaining', 'start', 'due', 'collect'].forEach(function (f) {
+    if (cfg[f] && colMap[f] === undefined) missCols.push(f + '(' + cfgNames_(cfg[f]).join('/') + ')');
+  });
 
   // ── 1차 스캔: 후보 행 수집 (송금일 빈 행도 일단 보류로 담음) ─────────────
   //   종전에는 '송금일 빈 행 = 합계/공백'으로 보고 전부 버렸으나, 병합셀 연속행
@@ -398,7 +424,8 @@ function parseTab_(sh, cfg) {
     records: records,
     fifo: fifo,
     anomalies: anomalies,
-    note: 'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
+    note: (missCols.length ? '⚠ 열 못 찾음: ' + missCols.join(', ') + ' — 그 값은 0 으로 들어갑니다! ' : '') +
+          'OK (헤더 ' + (headerRow + 1) + '행' + (tableCount > 1 ? ' · 표 ' + tableCount + '개(열 재매핑)' : '') +
           ', 매핑: ' + foundCols.join(',') + ')' +
           (totalRowsDropped ? ' 🧮총계 행 ' + totalRowsDropped + '개 제외' : '') +
           (subtotalDropped ? ' ➗소계 행 ' + subtotalDropped + '개 제외' : '') +
