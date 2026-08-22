@@ -28,7 +28,9 @@ var EXCLUDE_TABS = ['인오가닉사업 전체현황', 'AR_preview'];
 //  - remaining 이 ''(빈값)이면 (예상-회수)로 자동 계산
 //  - start/due/collect 는 화면에서 추정한 값 — 미리보기로 확인 후 필요시 수정
 var TAB_CONFIG = {
-  'CNA':            { expected: '세금계산서 발행가액', collected: '실제 입금액',  remaining: '',       start: '송금날짜', due: '입금예정일', collect: '실제 입금날짜', zeroExpectedNearValues: [763760], keepNoEvidenceRows: true },
+  /* 2026-08-22: CNA 의 due 헤더가 '입금예정일' → '입금예정일 (D+45)' 로 바뀌어 41건 전부
+     회수예정일이 빈 값이 됐다(경고로 발견). 예전 이름도 후보로 남긴다. */
+  'CNA':            { expected: '세금계산서 발행가액', collected: '실제 입금액',  remaining: '',       start: '송금날짜', due: ['입금예정일 (D+45)', '입금예정일'], collect: '실제 입금날짜', zeroExpectedNearValues: [763760], keepNoEvidenceRows: true },
   '핀다':           { expected: '부가세 포함금액',     collected: '최종 회수액',  remaining: '미회수액', start: '송금날짜', due: '예상회수일', collect: '회수일' },
   'JHT':            { expected: '예상입금액',         collected: '실제 입금액',  remaining: '',       start: '송금일',   due: '예상 입금일', collect: '입금일' },
   '팬텀':           { expected: '총 회수예정액',       collected: '최종 회수액',  remaining: '',       start: '송금날짜', due: '예상회수일', collect: '회수일' },
