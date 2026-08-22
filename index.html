@@ -778,12 +778,12 @@
   <div class="chart-row" style="grid-template-columns:1fr">
     <div class="chart-box" id="asset-mix-box">
       <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <span>🧱 총자산 구성 · 일별</span>
+        <span>📊 현금 · 매출채권 · 사업투입 추이</span>
         <small id="asset-mix-range" style="color:var(--text3);font-weight:400"></small>
         <span id="asset-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
       </div>
       <div class="chart-wrap" style="height:260px">
-        <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스를 일별로 쌓은 총자산 구성 영역 차트">총자산 구성</canvas>
+        <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스 잔액을 각각 일별로 그린 선 차트">자산별 추이</canvas>
       </div>
       <div id="asset-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
     </div>
@@ -8898,15 +8898,29 @@ function arDailyDelta(arRows, cfRows, today) {
   return { delta, byRule };
 }
 
-/* ═══ 총자산 구성 · 일별 (1년) ══════════════════════════════════════════
- * 현금 + 매출채권 + 세종F2 + 라오스를 쌓는다. 넷 다 양수라 스택이 성립한다.
+/* ═══ 현금 · 매출채권 · 사업투입 추이 · 일별 ═════════════════════════════
+ * 네 계열을 **각각 독립한 선**으로 그린다. 쌓지 않는다.
+ *
+ * ⚠⚠ 원래는 스택 영역 차트였다(2026-08-21). 2026-08-22 에 걷어냈다 — 이유:
+ *   목적은 "현금이 줄 때 채권·세종·라오스로 옮겨가는 흐름" 을 보는 것이었는데,
+ *   실측해 보니 스택 총계가 그 목적에 정면으로 어긋났다.
+ *     · 2026년 순유출 289.5억 중 이 층들이 설명하는 건 134.2억(46.4%) 뿐이다.
+ *       매입 119.1억(41.1%)·판관비 24.9억·연구개발 7.3억 등 155.2억은 어느 층에도 없다.
+ *     · 총계가 62억→250억 으로 4배가 된 건 층 사이 이동이 아니라 밖에서 들어온 새 돈이다
+ *       (투자유치 155.0억 + 차입 44.8억 = 199.8억, 3/18 60억·5/21 95억 자본금 조달).
+ *       여기에 채권 신규 발생 214.3억(매출 인식, 현금 감소 아님)이 더 얹힌다.
+ *     · 세종·라오스 층은 지출 누적이라 단조 증가만 한다 — 되돌아오는 흐름은 표현 불가.
+ *   즉 "합계" 나 스택 높이에는 읽을 수 있는 의미가 없다. 그래서 툴팁 합계도 지웠고
+ *   헤더의 '총 N억' 도 지웠다. **다시 쌓지 말 것.**
+ *   현금이 어디로 갔는지 보려면 잔액(level)이 아니라 유출 누계(flow)를 용도별로 쌓아야 한다.
+ *
  * ⚠ 세종F2·라오스는 대시보드 KPI 와 같은 정의 — 대분류별 **지출 누적**(=투자액)이다.
  *   실제 지출과 지출 예정을 모두 넣는다(KPI 가 그렇게 계산한다).
  * ⚠ 구간은 **올해 1월 1일 ~ 오늘**이다. 처음엔 '최근 365일' 이었는데 cf_data 최초 거래일이
  *   2025-10-24 라 왼쪽 2개월이 기초잔액만 깔린 빈 구간이 됐다(2026-08-22 사용자 지적).
- *   연초 기준으로 바꾸면 모든 층이 실제 데이터로 채워진다. 연말이 되면 자연히 1년이 된다.
- * ⚠ 추이·궤적 차트와 목적이 다르다(저건 현금만·미래 포함, 이건 자산 전체·과거). 합치지 말 것 —
- *   현금이 총자산의 3~9% 라 한 축에 쌓으면 현금 변동이 안 보인다(2026-08-21 실측). */
+ *   연초 기준으로 바꾸면 모든 계열이 실제 데이터로 채워진다. 연말이 되면 자연히 1년이 된다.
+ * ⚠ 축이 250억대라 라오스(12억)·현금(1억 이하 구간)은 거의 붙어 보인다. 스택을 걷은 대가다 —
+ *   정확한 값은 툴팁으로 본다. */
 
 function renderAssetMixChart() {
   const cv = document.getElementById('assetMixChart');
@@ -8952,28 +8966,36 @@ function renderAssetMixChart() {
     a1 += (arDelta[d] || 0);
     s1 += (invDelta['세종시'][d] || 0);
     l1 += (invDelta['라오스'][d] || 0);
-    cash.push(Math.max(0, Math.round(c1)));
-    ar.push(Math.max(0, Math.round(a1)));
+    /* 스택일 때는 Math.max(0,…) 로 눌렀다 — 음수가 섞이면 스택이 깨지기 때문이다.
+       독립 선에서는 그럴 이유가 없고, 누르면 사실을 가린다. 그대로 그린다.
+       현금은 3월·5월 투자 유치 직전 며칠 마이너스로 계산된다(재구성값, 아래 주석 참고). */
+    cash.push(Math.round(c1));
+    ar.push(Math.round(a1));
     sej.push(Math.round(s1));
     lao.push(Math.round(l1));
   }
   const tail = arr => arr[arr.length - 1] || 0;
-  const total = tail(cash) + tail(ar) + tail(sej) + tail(lao);
   const eok = v => (Number(v || 0) / 1e8).toFixed(1);
+  const negN = cash.filter(v => v < 0).length;
+  const negMin = negN ? Math.min(...cash) : 0;
 
   document.getElementById('asset-mix-range').textContent = `${from} ~ ${today}`;
   document.getElementById('asset-mix-note').textContent =
-    `총 ${eok(total)}억 · 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
+    `단위 억원 — 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
   const estSum = byRule.fifo + byRule.due + byRule.fallback;
   const firstCf = (cfData || []).map(r => r.date).filter(Boolean).sort()[0] || '-';
   const warnEl = document.getElementById('asset-mix-warn');
   if (warnEl) warnEl.innerHTML = html`※ 채권 회수일이 비어 있는 ${fmt(estSum)}원은 회수 시점을 추정해 반영했습니다 —
       실제 입금 대조 ${fmt(byRule.fifo)} · 예정일+${AR_LAG_DAYS}일 ${fmt(byRule.due)} · 발생일+${AR_FALLBACK_DAYS}일 ${fmt(byRule.fallback)}.
       시트에는 쓰지 않고 이 차트에서만 씁니다. 현금은 ${firstCf} 이전 구간은 기초잔액입니다.`;
+  if (warnEl && negN > 0) warnEl.innerHTML += html`<br>※ 현금이 ${negN}일간 마이너스로 계산됩니다(최저 ${fmt(negMin)}원).
+      투자 유치 직전 바닥 구간이며 입출금 내역을 되짚어 만든 재구성값입니다 — 통장이 실제로 마이너스였다는 뜻은 아닙니다.`;
 
   if (assetMixChartInst) assetMixChartInst.destroy();
+  /* fill:false — 쌓지 않으므로 영역을 칠하면 네 개가 서로를 덮는다. backgroundColor 는
+     범례 색 상자에만 쓰인다. */
   const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '33',
-    borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
+    borderWidth: 1.8, pointRadius: 0, fill: false, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
   assetMixChartInst = new Chart(cv.getContext('2d'), {
     type: 'line',
     data: { labels: dates.map(d => d.slice(2).replace(/-/g, '/')), datasets: [
@@ -8999,8 +9021,8 @@ function renderAssetMixChart() {
         },
       },
       scales: {
-        x: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { display: false } },
-        y: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { display: false } },
+        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
       },
     },
   });
