@@ -157,14 +157,21 @@ function rowHasKeyword_(rowVals, keywords) {
    → 그 사이에 낀 행은 '다음 표의 총계 행'이다. 지앤원 표2 총계(예상 907,748,592 /
    회수 336,632,378)가 표2 헤더 바로 위에 있어서 표1 데이터로 집계됐고, 기존 rule ⑶ 은
    회수액이 0 일 때만 걸러 이 행을 막지 못했다(회수액이 있어서 '근거 있음'으로 통과). */
-function nextNonBlankIsHeader_(values, from, wantExp) {
+// 정규화된 행에 expected 헤더 후보 중 하나라도 있으면 헤더 행이다.
+// (cfgNames_ 로 헤더 이름이 복수 후보가 된 뒤 필요해졌다 — 단일 문자열 비교는 더 이상 안 통한다.)
+function rowIsHeader_(rowNorm, expNames) {
+  for (var e = 0; e < expNames.length; e++) if (rowNorm.indexOf(expNames[e]) >= 0) return true;
+  return false;
+}
+
+function nextNonBlankIsHeader_(values, from, expNames) {
   for (var j = from; j < values.length; j++) {
     var r = values[j], blank = true;
     for (var q = 0; q < r.length; q++) {
       if (String(r[q] == null ? '' : r[q]).trim() !== '') { blank = false; break; }
     }
     if (blank) continue;
-    return r.map(norm_).indexOf(wantExp) >= 0;
+    return rowIsHeader_(r.map(norm_), expNames);
   }
   return false;
 }
@@ -281,7 +288,7 @@ function parseTab_(sh, cfg) {
        금액으로 읽고, num_ 가 날짜를 15~16자리 숫자로 바꿔 합계가 19,163조로 찍혔다
        (예상 871,999,773 → 19,163,380,872,011,470. 날짜 13개 합으로 오차 0 재현 확인).
        → 헤더 행을 다시 만나면 그 아래 행부터는 새 열 위치로 읽는다. */
-    if (row.map(norm_).indexOf(wantExp) >= 0) {
+    if (rowIsHeader_(row.map(norm_), expNames)) {
       colMap = mapCols_(row.map(norm_), cfg);
       tableCount++; block++; blockFirst = true;
       continue;                                  // 헤더 자체는 데이터가 아니다
@@ -335,7 +342,7 @@ function parseTab_(sh, cfg) {
     var dateless = !hasStart && !dueV && !colV;
     cand.push({ row: row, cm: colMap, block: block, srcRow: i, expected: expected, collected: collected,
                 hasStart: hasStart, first: blockFirst, dueV: dueV, colV: colV, dateless: dateless,
-                nextHdr: dateless ? nextNonBlankIsHeader_(values, i + 1, wantExp) : false });
+                nextHdr: dateless ? nextNonBlankIsHeader_(values, i + 1, expNames) : false });
     blockFirst = false;
   }
 
