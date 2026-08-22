@@ -771,6 +771,23 @@
       <div class="chart-wrap" style="height:240px"><canvas id="cashChart" role="img" aria-label="일별 현금잔액 추이 차트">현금잔액 추이</canvas></div>
     </div>
   </div>
+  <!-- ======== 총자산 구성 (올해 1월 1일 ~ 오늘) ========
+       현금 + 매출채권 + 세종F2 + 라오스를 일별로 쌓아 "돈이 어디에 있나" 를 본다.
+       위 추이·궤적은 현금만 보는 것이고 이건 자산 전체의 구성이다 — 목적이 다르므로 따로 둔다.
+       2026-08-22 에 리포팅 주간에서 여기로 옮겼다(자산 구성은 주간 보고보다 대시보드에 맞다). -->
+  <div class="chart-row" style="grid-template-columns:1fr">
+    <div class="chart-box" id="asset-mix-box">
+      <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <span>🧱 총자산 구성 · 일별</span>
+        <small id="asset-mix-range" style="color:var(--text3);font-weight:400"></small>
+        <span id="asset-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
+      </div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스를 일별로 쌓은 총자산 구성 영역 차트">총자산 구성</canvas>
+      </div>
+      <div id="asset-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
+    </div>
+  </div>
 
   <div class="chart-row" style="grid-template-columns:1fr 1fr">
     <div class="chart-box">
@@ -1223,21 +1240,6 @@
     <div class="chart-wrap" style="height:240px">
       <canvas id="wkrptCashChart" role="img" aria-label="선택 주차부터의 일별 현금 잔액 추이와 예정 반영 궤적">일별 현금 잔액</canvas>
     </div>
-  </div>
-
-  <!-- ======== 총자산 구성 (1년) ========
-       현금 + 매출채권 + 세종F2 + 라오스를 일별로 쌓아 "돈이 어디에 있나" 를 본다.
-       추이·궤적 차트는 현금만 보는 것이고 이건 자산 전체의 구성이다 — 목적이 다르므로 따로 둔다. -->
-  <div class="chart-box" id="wkrpt-mix-box" style="margin-bottom:20px">
-    <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-      <span>🧱 총자산 구성 · 일별 (1년)</span>
-      <small id="wkrpt-mix-range" style="color:var(--text3);font-weight:400"></small>
-      <span id="wkrpt-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
-    </div>
-    <div class="chart-wrap" style="height:260px">
-      <canvas id="wkrptMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스를 일별로 쌓은 총자산 구성 영역 차트">총자산 구성</canvas>
-    </div>
-    <div id="wkrpt-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
   </div>
 
   <!-- ======== 주간 요약 (KPI 카드 아래) ======== -->
@@ -4903,7 +4905,7 @@ function showKPILoading() {
   subIds.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '연결 중...'; });
 }
 
-let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst, wkrptCashChartInst, wkrptMixChartInst;
+let cashChartInst, donutChartInst, donutWeeklyChartInst, weeklyChartInst, arBarInst, arDonutInst, monthlyRevChartInst, wkrptCashChartInst, assetMixChartInst;
 
 function renderCharts() {
   // Chart.js는 display:none 캔버스에 렌더링 시 크기를 0×0으로 인식해 빈 차트가 됨
@@ -4913,6 +4915,7 @@ function renderCharts() {
 
   updateDashboardDateLabels();
   renderCashChart();
+  renderAssetMixChart();          // 추이·궤적 바로 아래 — 총자산 구성
   renderDonutChart();
   renderDonutWeeklyChart();
   renderWeeklyChart();
@@ -8899,17 +8902,17 @@ function arDailyDelta(arRows, cfRows, today) {
  * 현금 + 매출채권 + 세종F2 + 라오스를 쌓는다. 넷 다 양수라 스택이 성립한다.
  * ⚠ 세종F2·라오스는 대시보드 KPI 와 같은 정의 — 대분류별 **지출 누적**(=투자액)이다.
  *   실제 지출과 지출 예정을 모두 넣는다(KPI 가 그렇게 계산한다).
- * ⚠ cf_data 최초 거래일이 2025-10-24 라 그 이전 구간의 현금은 기초잔액이 그대로 깔린다.
- *   차트 아래에 그 사실을 적어 둔다 — 안 적으면 "작년엔 현금이 일정했다" 로 오독된다.
+ * ⚠ 구간은 **올해 1월 1일 ~ 오늘**이다. 처음엔 '최근 365일' 이었는데 cf_data 최초 거래일이
+ *   2025-10-24 라 왼쪽 2개월이 기초잔액만 깔린 빈 구간이 됐다(2026-08-22 사용자 지적).
+ *   연초 기준으로 바꾸면 모든 층이 실제 데이터로 채워진다. 연말이 되면 자연히 1년이 된다.
  * ⚠ 추이·궤적 차트와 목적이 다르다(저건 현금만·미래 포함, 이건 자산 전체·과거). 합치지 말 것 —
  *   현금이 총자산의 3~9% 라 한 축에 쌓으면 현금 변동이 안 보인다(2026-08-21 실측). */
-const MIX_DAYS = 365;
 
 function renderAssetMixChart() {
-  const cv = document.getElementById('wkrptMixChart');
+  const cv = document.getElementById('assetMixChart');
   if (!cv || !cv.offsetParent) return;          // 탭이 닫혀 있으면 캔버스가 0px
   const today = todayKST();
-  const from = addDays(today, -(MIX_DAYS - 1));
+  const from = `${today.slice(0, 4)}-01-01`;      // 올해 1월 1일 (연초 기준)
   const dates = [];
   for (let d = from; d <= today; d = addDays(d, 1)) dates.push(d);
 
@@ -8958,20 +8961,20 @@ function renderAssetMixChart() {
   const total = tail(cash) + tail(ar) + tail(sej) + tail(lao);
   const eok = v => (Number(v || 0) / 1e8).toFixed(1);
 
-  document.getElementById('wkrpt-mix-range').textContent = `${from} ~ ${today}`;
-  document.getElementById('wkrpt-mix-note').textContent =
+  document.getElementById('asset-mix-range').textContent = `${from} ~ ${today}`;
+  document.getElementById('asset-mix-note').textContent =
     `총 ${eok(total)}억 · 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
   const estSum = byRule.fifo + byRule.due + byRule.fallback;
   const firstCf = (cfData || []).map(r => r.date).filter(Boolean).sort()[0] || '-';
-  const warnEl = document.getElementById('wkrpt-mix-warn');
+  const warnEl = document.getElementById('asset-mix-warn');
   if (warnEl) warnEl.innerHTML = html`※ 채권 회수일이 비어 있는 ${fmt(estSum)}원은 회수 시점을 추정해 반영했습니다 —
       실제 입금 대조 ${fmt(byRule.fifo)} · 예정일+${AR_LAG_DAYS}일 ${fmt(byRule.due)} · 발생일+${AR_FALLBACK_DAYS}일 ${fmt(byRule.fallback)}.
       시트에는 쓰지 않고 이 차트에서만 씁니다. 현금은 ${firstCf} 이전 구간은 기초잔액입니다.`;
 
-  if (wkrptMixChartInst) wkrptMixChartInst.destroy();
+  if (assetMixChartInst) assetMixChartInst.destroy();
   const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '33',
     borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
-  wkrptMixChartInst = new Chart(cv.getContext('2d'), {
+  assetMixChartInst = new Chart(cv.getContext('2d'), {
     type: 'line',
     data: { labels: dates.map(d => d.slice(2).replace(/-/g, '/')), datasets: [
       set('현금', cash, '#2a78d6'),
@@ -9005,7 +9008,6 @@ function renderWeeklyReport() {
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
   try { renderWeeklyCashChart(wStart); } catch (e) { console.warn('[wkrpt-cash]', e); }
-  try { renderAssetMixChart(); } catch (e) { console.warn('[wkrpt-mix]', e); }
 
   // ── 헤더 ──────────────────────────────────────────────
   // 주차 표시 기준: 해당 주의 목요일(wStart + 3일)이 속한 년/월/주차
