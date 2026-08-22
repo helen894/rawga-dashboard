@@ -783,7 +783,7 @@
         <span id="asset-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
       </div>
       <div class="chart-wrap" style="height:260px">
-        <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스 잔액을 각각 일별로 그린 선 차트">자산별 추이</canvas>
+        <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스 잔액을 각각 일별로 그린 영역 차트. 쌓지 않고 겹쳐 그린다">자산별 추이</canvas>
       </div>
       <div id="asset-mix-warn" style="font-size:11px;color:var(--text3);margin-top:8px"></div>
     </div>
@@ -8899,7 +8899,7 @@ function arDailyDelta(arRows, cfRows, today) {
 }
 
 /* ═══ 현금 · 매출채권 · 사업투입 추이 · 일별 ═════════════════════════════
- * 네 계열을 **각각 독립한 선**으로 그린다. 쌓지 않는다.
+ * 네 계열을 **각각 독립한 영역**으로 그린다. 쌓지 않는다 — 겹쳐 그린다.
  *
  * ⚠⚠ 원래는 스택 영역 차트였다(2026-08-21). 2026-08-22 에 걷어냈다 — 이유:
  *   목적은 "현금이 줄 때 채권·세종·라오스로 옮겨가는 흐름" 을 보는 것이었는데,
@@ -8919,8 +8919,8 @@ function arDailyDelta(arRows, cfRows, today) {
  * ⚠ 구간은 **올해 1월 1일 ~ 오늘**이다. 처음엔 '최근 365일' 이었는데 cf_data 최초 거래일이
  *   2025-10-24 라 왼쪽 2개월이 기초잔액만 깔린 빈 구간이 됐다(2026-08-22 사용자 지적).
  *   연초 기준으로 바꾸면 모든 계열이 실제 데이터로 채워진다. 연말이 되면 자연히 1년이 된다.
- * ⚠ 축이 250억대라 라오스(12억)·현금(1억 이하 구간)은 거의 붙어 보인다. 스택을 걷은 대가다 —
- *   정확한 값은 툴팁으로 본다. */
+ * ⚠ 축 최고는 채권 159.6억이다(스택일 때는 350억까지 갔다). 라오스(12억)는 화면 아래
+ *   7.5% 지점에 붙는다 — 정확한 값은 툴팁으로 본다. */
 
 function renderAssetMixChart() {
   const cv = document.getElementById('assetMixChart');
@@ -8992,15 +8992,18 @@ function renderAssetMixChart() {
       투자 유치 직전 바닥 구간이며 입출금 내역을 되짚어 만든 재구성값입니다 — 통장이 실제로 마이너스였다는 뜻은 아닙니다.`;
 
   if (assetMixChartInst) assetMixChartInst.destroy();
-  /* fill:false — 쌓지 않으므로 영역을 칠하면 네 개가 서로를 덮는다. backgroundColor 는
-     범례 색 상자에만 쓰인다. */
-  const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '33',
-    borderWidth: 1.8, pointRadius: 0, fill: false, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
+  /* 영역 차트지만 **쌓지 않는다**(2026-08-22 사용자 요청). 각 계열이 0 부터 자기 값까지
+     따로 칠해지므로 넷이 겹친다 — 그래서 알파를 아주 낮게(0x24 ≈ 14%) 준다. 선이 주고
+     칠은 크기 감만 보조한다. 알파를 올리면 바닥 구간에서 넷이 겹쳐 갈색으로 뭉갠다. */
+  const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '24',
+    borderWidth: 1.8, pointRadius: 0, fill: true, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
   assetMixChartInst = new Chart(cv.getContext('2d'), {
     type: 'line',
+    /* ⚠ 순서 = 그리는 순서 = z-순서. 큰 계열을 앞에 둬야 작은 계열이 위로 올라와 안 가려진다.
+       실측 최고값: 채권 159.6억 > 현금 94.3 > 세종 70.4 > 라오스 12.0 (2026 연초~8/22). */
     data: { labels: dates.map(d => d.slice(2).replace(/-/g, '/')), datasets: [
-      set('현금', cash, '#2a78d6'),
       set('매출채권', ar, '#eb6834', [6, 4]),
+      set('현금', cash, '#2a78d6'),
       set('세종F2', sej, '#1baf7a', [2, 3]),
       set('라오스', lao, '#eda100', [10, 3]),
     ] },
@@ -9021,7 +9024,8 @@ function renderAssetMixChart() {
         },
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { display: false } },
+        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
+             grid: { display: true, color: 'rgba(0,0,0,0.06)' } },     // 세로 격자선(2026-08-22 요청)
         y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
       },
     },
