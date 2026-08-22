@@ -283,6 +283,9 @@ Deno.serve(async (req) => {
         in: Number(r.in || 0), out: Number(r.out || 0), type: str(r.type),
         mid_cat: str(r.mid_cat), big_cat: str(r.big_cat),
         status: str(r.status), recur_id: str(r.recur_id), tx_at: str(r.tx_at),
+        /* fx_usd — 외화 환산손익(FX_ADJ) 장부가에 들어가는 행 표시. 이게 없으면 환산손익을
+           화면 밖에서 검증할 수 없다(2026-08-22, 태깅 누락 조사 때 필요해져 추가). */
+        fx_usd: r.fx_usd ? true : false,
       }));
 
       let arRows: unknown[] | undefined;
