@@ -12,7 +12,19 @@ const APPLY = process.argv.includes('--apply');
 const PK='sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
 const SECRET=fs.readFileSync('C:/Users/RAWGA/AppData/Local/rawga/bank-sync.secret','utf8').trim();
 const EP='https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/cf-clobe-ingest';
-const call=async(b)=>{const r=await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json',apikey:PK,Authorization:`Bearer ${PK}`},body:JSON.stringify({secret:SECRET,...b})});return JSON.parse(await r.text());};
+/* ⚠ 재시도 필수. Edge 가 간헐적으로 HTML 오류 페이지를 돌려주는데, 그대로 JSON.parse
+   하면 `Unexpected token '<'` 로 죽는다. 이 스크립트들은 구간을 수십 번 조회하므로
+   한 번만 걸려도 전체가 날아간다. */
+const call=async(b)=>{
+  for(let i=1;i<=4;i++){
+    try{
+      const r=await fetch(EP,{method:'POST',headers:{'Content-Type':'application/json',apikey:PK,Authorization:`Bearer ${PK}`},body:JSON.stringify({secret:SECRET,...b})});
+      const t=await r.text();
+      if(!t.trimStart().startsWith('{')) throw new Error(`HTTP ${r.status} — 비JSON 응답`);
+      return JSON.parse(t);
+    }catch(e){ if(i===4) throw e; await new Promise(s=>setTimeout(s,800*i)); }
+  }
+};
 const won=(n)=>Math.round(n).toLocaleString('ko-KR');
 
 const PLAN = [
