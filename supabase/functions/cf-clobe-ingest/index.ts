@@ -19,7 +19,7 @@
  *   • 적재 { secret, action:"push", rows:[...] }                       — 종전과 동일
  *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly?, meta? } }
  *     meta: true → settings·bank_snapshot / meta: ["키",…] → 그 cat_data 키들(읽기 전용)
- *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at? }], midToBig?:{중분류:대분류} }
+ *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at?, set_clobe_id? }], midToBig?:{중분류:대분류} }
  *   • 분할 { secret, split:[{ clobe_id | _id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *
@@ -426,7 +426,18 @@ Deno.serve(async (req) => {
     }
   }
 
-  /* ── 수정 모드 ── 이미 적재된 행의 중분류/대분류만 고친다(금액·적요·날짜는 건드리지 않는다). */
+  /* ── 수정 모드 ── 이미 적재된 행의 분류·거래시각·clobe_id 만 고친다.
+   *   **금액·적요·날짜·상태는 절대 건드리지 않는다.**
+   *
+   * set_clobe_id (2026-08-22 추가) — 2026-03~06 의 1,044건은 clobe_id 가 전무해서 은행 원본과
+   *   대조할 키가 없다. 그 구간을 클로브로 **재적재하면 667건(408.5억)이 이중계상**된다(실측:
+   *   중복 판정이 적요로 떨어지는데 기존 적요는 은행 원본 문자열이고 적재는 거래처명을 넣는다).
+   *   그래서 재적재 대신 기존 행에 clobe_id 를 붙인다.
+   *   ⚠ 선택자로 쓰는 clobe_id 와 헷갈리지 않게 필드명을 따로 뒀다. 백필 대상은 clobe_id 가
+   *     없는 행이므로 선택자는 _id 를 쓴다.
+   *   ⚠ tx_at 과 같이 **비어 있을 때만** 채운다(멱등). 이미 있는 clobe_id 를 덮어쓰지 않는다.
+   *   ⚠ 같은 clobe_id 가 두 행에 붙으면 push 의 중복 판정이 깨져 이후 적재가 조용히 어긋난다.
+   *     그래서 다른 행이 이미 그 id 를 쓰고 있으면 **거부**한다. */
   if (patchList.length || midToBig) {
     try {
       let catNote: { added: string[]; kept: string[] } | null = null;
@@ -446,7 +457,7 @@ Deno.serve(async (req) => {
             if (idx < 0) { nf.push(clobeId || rid); continue; }
 
             const r = cur[idx];
-            const before = { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat), tx_at: str(r.tx_at) };
+            const before = { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat), tx_at: str(r.tx_at), clobe_id: str(r.clobe_id) };
             let touched = false;
             if (p?.mid_cat !== undefined) { r.mid_cat = str(p.mid_cat); touched = true; }
             if (p?.big_cat !== undefined) { r.big_cat = str(p.big_cat); touched = true; }
@@ -454,6 +465,15 @@ Deno.serve(async (req) => {
              * 이미 값이 있으면 조용히 건드리지 않는다. 잘못 들어간 시각을 고치는 건 별개 작업이고,
              * 대량 백필이 기존 값을 덮어쓰는 사고를 막는 게 우선이다. */
             if (p?.tx_at !== undefined && str(p.tx_at) && !str(r.tx_at)) { r.tx_at = str(p.tx_at); touched = true; }
+            /* clobe_id 백필 — 비어 있을 때만. 다른 행이 쓰는 id 면 거부(중복 판정 보호) */
+            if (p?.set_clobe_id !== undefined && str(p.set_clobe_id)) {
+              const cid = str(p.set_clobe_id);
+              if (str(r.clobe_id)) {
+                if (str(r.clobe_id) !== cid) { nf.push(`${clobeId || rid} (clobe_id 이미 ${str(r.clobe_id)})`); continue; }
+              } else if (cur.some((o) => o !== r && str(o.clobe_id) === cid)) {
+                nf.push(`${clobeId || rid} (clobe_id ${cid} 를 이미 다른 행이 사용)`); continue;
+              } else { r.clobe_id = cid; touched = true; }
+            }
             if (!touched) { nf.push(`${clobeId || rid} (바꿀 필드 없음)`); continue; }
             ch.push({ clobe_id: str(r.clobe_id), _id: str(r._id), date: str(r.date), desc: str(r.desc),
                       before, after: { mid_cat: str(r.mid_cat), big_cat: str(r.big_cat), tx_at: str(r.tx_at) } });
