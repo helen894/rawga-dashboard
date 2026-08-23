@@ -74,10 +74,33 @@ const post = async (body) => {
   }
 };
 
-/* ── 클로브 읽기 ─────────────────────────────────────────────────── */
-const pages = FILES.flatMap((f) => { const j = JSON.parse(readFileSync(f, 'utf8')); return Array.isArray(j) ? j : [j]; });
+/* ── 클로브 읽기 ───────────────────────────────────────────────────
+   JSON(get_labeled_transactions 응답) 또는 TSV 를 받는다.
+   TSV 를 지원하는 이유: 3~6월 989건을 손으로 옮겨 적어야 하는데 JSON 키 반복이 바이트의
+   절반을 먹는다. 열 순서는 clobe-tsv-split 과 같게 맞췄다 —
+     transactionId \t accountId \t YYYY-MM-DDTHH:MM:SS \t in \t out \t 적요 \t 거래처명
+   ⚠ 백필은 금액 합계 검증에 걸리지 않는다(clobe_id 를 붙일 뿐 금액을 안 바꾼다).
+     그래서 전사 실수가 조용히 지나갈 수 있다 — 끝나고 cf-ingest-verify 로 반드시 대조할 것. */
+const parseTsv = (txt) => txt.split(/\r?\n/).filter((l) => l.trim()).map((l, i) => {
+  const p = l.split('\t');
+  if (p.length < 5) { console.error(`TSV ${i + 1}행: 열 부족 — ${l.slice(0, 60)}`); process.exitCode = 1; return null; }
+  const [id, acct, ts, inA, outA, desc = '', be = ''] = p;
+  return { transactionId: String(id).trim(), accountId: Number(acct), transactionAt: String(ts).trim(),
+           inAmount: Number(inA), outAmount: Number(outA),
+           transactionDescription: desc.trim(), businessEntityName: be.trim() };
+}).filter(Boolean);
+const raw = [];
+for (const f of FILES) {
+  const txt = readFileSync(f, 'utf8');
+  if (f.toLowerCase().endsWith('.tsv') || !txt.trimStart().startsWith('{') && !txt.trimStart().startsWith('[')) {
+    raw.push(...parseTsv(txt));
+  } else {
+    const j = JSON.parse(txt);
+    for (const pg of (Array.isArray(j) ? j : [j])) raw.push(...(Array.isArray(pg?.content) ? pg.content : []));
+  }
+}
 const uniq = new Map();
-for (const t of pages.flatMap((p) => (Array.isArray(p?.content) ? p.content : []))) uniq.set(String(t.transactionId), t);
+for (const t of raw) uniq.set(String(t.transactionId), t);
 let fxSkip = 0;
 const cl = [];
 for (const t of uniq.values()) {
