@@ -2982,6 +2982,10 @@ let FX_ADJ = 0;
    (INIT_CASH 4.77억 vs 클로브 2025-10-23 실잔액 22.4억).
    그래서 현금 시계열을 2026-01-01 부터로 끊고 INIT_CASH 를 **그날의 실제 개시 잔액**으로 뒀다. */
 let CF_START = '';
+/* cat_data.settings 행의 원본. cf_start 처럼 UI 에 입력칸이 없는 키를 저장 시 보존하기 위해
+ * 통째로 들고 있는다. null = 서버에서 아직 못 읽음 → 이 상태로 덮어쓰면 미지의 키가 날아가므로
+ * 저장하지 않는다. (2026-08-24: 이 보호가 없어 cf_start 가 지워지고 잔액이 3.29억 어긋났다) */
+let SETTINGS_RAW = null;
 /* 환산조정 배분 램프 — fxAdjAt() 가 쓴다. [{d, w}] 날짜 오름차순, w 는 0~1 누적 가중치.
    비어 있으면 fxAdjAt() 이 상수 FX_ADJ 를 돌려준다(종전 동작). */
 let _fxRamp = [];
@@ -4143,10 +4147,13 @@ async function loadDataFromSupabase() {
           recurData = row.data;
           localStorage.setItem('recur_data', JSON.stringify(recurData));
         }
-        if (row.key === 'settings' && row.data?.init_cash !== undefined) {
-          INIT_CASH = row.data.init_cash;
-          localStorage.setItem('init_cash', String(INIT_CASH));
-          CF_START = String(row.data.cf_start || '').slice(0, 10);
+        if (row.key === 'settings') {
+          SETTINGS_RAW = { ...(row.data || {}) };   // 저장 시 병합용 — 미지의 키 보존
+          if (row.data?.init_cash !== undefined) {
+            INIT_CASH = row.data.init_cash;
+            localStorage.setItem('init_cash', String(INIT_CASH));
+          }
+          CF_START = String(row.data?.cf_start || '').slice(0, 10);
         }
         if (row.key === 'weekly_email_settings' && row.data) {
           emailSettings = { ...emailSettings, ...row.data };
@@ -4400,9 +4407,11 @@ async function saveCatDataToSupabase() {
       { key: 'mid_to_big',       data: catMidToBig },
       { key: 'desc_to_mid',      data: catDescToMid },
       { key: 'desc_type_to_mid', data: catDescTypeToMid },
-      { key: 'settings',         data: { init_cash: INIT_CASH } },
       { key: 'recur_data',       data: recurData },
     ];
+    /* settings 는 통째 덮어쓰기 금지 — cf_start 등 UI 입력칸 없는 키가 날아간다.
+     * 서버 원본을 못 읽은 상태(null)면 병합할 대상이 없으니 아예 저장하지 않는다. */
+    if (SETTINGS_RAW) upserts.splice(3, 0, { key: 'settings', data: { ...SETTINGS_RAW, init_cash: INIT_CASH } });
     /* key 별 낙관적 잠금 — 여기 담긴 학습 매핑(desc_to_mid 등)이 분류 작업의 산출물이라
      * 다른 탭이 덮어쓰면 손실이 크다. 행이 key 별로 독립적이라 saveArMeta·법인카드 복원 등
      * 다른 key 를 쓰는 호출부와는 간섭하지 않는다.
@@ -4525,10 +4534,13 @@ function subscribeRealtime() {
                 renderRecurTable();
               }
             }
-            if (row.key === 'settings' && row.data?.init_cash !== undefined) {
-              INIT_CASH = row.data.init_cash;
-              localStorage.setItem('init_cash', String(INIT_CASH));
-              CF_START = String(row.data.cf_start || '').slice(0, 10);
+            if (row.key === 'settings') {
+              SETTINGS_RAW = { ...(row.data || {}) };   // 저장 시 병합용 — 미지의 키 보존
+              if (row.data?.init_cash !== undefined) {
+                INIT_CASH = row.data.init_cash;
+                localStorage.setItem('init_cash', String(INIT_CASH));
+              }
+              CF_START = String(row.data?.cf_start || '').slice(0, 10);
               updateInitCashDisplay();
             }
             if (row.key === 'corp_card_tx_data') {
@@ -14717,10 +14729,14 @@ document.getElementById('init-cash-save-btn').addEventListener('click', () => {
   INIT_CASH = val;
   localStorage.setItem('init_cash', String(val));
   // Supabase에도 저장 (모든 기기 동기화)
-  if (_supa) {
-    _supa.from('cat_data').upsert({ key: 'settings', data: { init_cash: val } }, { onConflict: 'key' })
+  if (_supa && SETTINGS_RAW) {
+    // 통째 덮어쓰기 금지 — cf_start 등 미지의 키를 보존한 채 init_cash 만 바꾼다
+    SETTINGS_RAW = { ...SETTINGS_RAW, init_cash: val };
+    _supa.from('cat_data').upsert({ key: 'settings', data: SETTINGS_RAW }, { onConflict: 'key' })
       .then(() => showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다.`, 'green'))
       .catch(() => showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다. (로컬 저장)`, 'green'));
+  } else if (_supa) {
+    showToast('⚠ 서버 설정을 아직 못 읽어 로컬에만 저장했습니다. 새로고침 후 다시 저장하세요.', 'amber');
   } else {
     showToast(`✅ 기초잔액이 ${fmt(val)}원으로 변경됐습니다.`, 'green');
   }
