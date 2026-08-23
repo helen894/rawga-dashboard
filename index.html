@@ -5946,10 +5946,22 @@ function renderCFTable() {
   let sumIn = 0, sumOut = 0;
   for (const r of cfFiltered) { sumIn += (r.in || 0); sumOut += (r.out || 0); }
   const sumNet = sumIn - sumOut;
+  // 리포팅(월간 리포트·생키)은 '실제만 + 계좌간이체 제외' 기준이라 이 합계와 어긋난다.
+  // 두 화면을 대조할 수 있게 제외분을 분해해 둘째 줄에 보여준다.
+  // isInterAccount_ 은 이 함수보다 아래에서 const 로 선언되므로 인라인 판정을 쓴다(TDZ 회피).
+  const _inter = r => (r.mid_cat || '').trim() === '계좌간이체';
+  const planRows  = cfFiltered.filter(r => r.status !== '실제 입금' && r.status !== '실제 지출');
+  const interRows = cfFiltered.filter(r => _inter(r) && (r.status === '실제 입금' || r.status === '실제 지출'));
+  const rptIn  = cfFiltered.filter(r => r.status === '실제 입금' && !_inter(r)).reduce((s, r) => s + (r.in  || 0), 0);
+  const rptOut = cfFiltered.filter(r => r.status === '실제 지출' && !_inter(r)).reduce((s, r) => s + (r.out || 0), 0);
+  const interNet = interRows.reduce((s, r) => s + (r.status === '실제 입금' ? (r.in || 0) : -(r.out || 0)), 0);
   document.getElementById('cf-count').innerHTML = html`총 ${total}건`
     + html` <span style="color:var(--text3)">·</span> 입금 <span style="color:var(--green)">+${fmt(sumIn)}</span>`
     + html` <span style="color:var(--text3)">·</span> 출금 <span style="color:var(--red)">-${fmt(sumOut)}</span>`
-    + html` <span style="color:var(--text3)">·</span> 순액 <span style="color:${sumNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(sumNet)}</span>`;
+    + html` <span style="color:var(--text3)">·</span> 순액 <span style="color:${sumNet >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(sumNet)}</span>`
+    + ((planRows.length || interRows.length)
+        ? html`<br><span style="font-size:11px;color:var(--text3)">↳ 리포팅 월간 리포트 기준(실제만 · 계좌간이체 제외) 입금 <b style="color:var(--green)">+${fmt(rptIn)}</b> · 출금 <b style="color:var(--red)">-${fmt(rptOut)}</b>${planRows.length ? html` <span style="color:var(--text3)">|</span> 예정 ${planRows.length}건 제외` : ''}${interRows.length ? html` <span style="color:var(--text3)">|</span> 계좌간이체 ${interRows.length}건 제외(순액 ${fmt(interNet)})` : ''}</span>`
+        : '');
   document.getElementById('cf-page-info').textContent = `${cfPage} / ${pages}`;
 
   // 정렬 표시(▲▼) 업데이트
