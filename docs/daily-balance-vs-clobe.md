@@ -88,8 +88,20 @@
 |---|---|
 | `renderCashChart` | 일별 잔액 추이 (기준일−90일 ~ 기준일) |
 | `renderAssetMixChart` | 총자산 구성 (연초 ~ 오늘) — 영향이 가장 컸다 |
-| 월간 KPI/생키 | `pmEndCash`·`mEndCash` — 보고기준일을 과거 달로 바꿀 때 |
-| 주간 리포트 | `pwEndCash`·`wkEndCash` — 과거 주 조회 시 |
+| `calcKPIs` | **현금 잔액 KPI 카드** — `cash` 는 `ref`(보고기준일)까지 누적한다 |
+| `renderRegularReport` | 정기보고 현금·런웨이 — 같은 이유 |
+| 월간 KPI/생키 | `pmEndCash`·`mEndCash` |
+| 주간 리포트 | `pwEndCash`·`wkEndCash` |
+| `computeWeeklyCashSeries` | `fxAdjBefore` 인자 추가 — 주차 시작 시점과 오늘의 조정이 갈린다 |
+
+### ⚠ 첫 구현에서 놓쳐서 화면이 어긋났던 것
+`calcKPIs` 와 `renderRegularReport` 의 `cash` 를 "오늘 기준"으로 착각해 손대지 않았다.
+실제로는 **`refDate` 까지 누적**한다. 그래서 보고기준일을 과거로 옮기면 **추이 차트는 고친 값,
+KPI 카드는 옛 값**이 나와 1.26억 갈렸다 — 대표님이 바로 발견했다.
+교훈: `INIT_CASH + FX_ADJ` 를 쓰는 지점은 누적 상한이 `today` 인지 `ref` 인지 **반드시 확인**할 것.
+`ref` 면 `fxAdjTail(ref)` 보정이 필요하다.
+
+검증: 보고기준일 1~8월 8개 지점에서 KPI 경로와 차트 경로가 **전부 0원 차이**로 일치한다.
 
 **⚠ 안전장치** — `through` 가 없거나 through 이후 환전 행이 없으면 램프를 만들지 않고
 **종전처럼 상수로** 동작한다. 분류 체계가 바뀌어 환전 행을 못 찾을 때 과거 잔액을 조용히

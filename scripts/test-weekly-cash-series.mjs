@@ -111,3 +111,20 @@ check('마지막 날 궤적 = 1000', S.projVals[13], 1000);
 console.log('');
 console.log(`${fail === 0 ? '✅ 전부 통과' : '❌ 실패 ' + fail + '건'} (${pass}/${pass+fail})`);
 process.exitCode = fail ? 1 : 0;
+
+/* ── fxAdjBefore (2026-08-23 추가) ─────────────────────────────────────
+   beforeFrom(주차 시작 시점)과 cashToday(오늘)의 환산조정이 다를 수 있다.
+   생략하면 종전대로 fxAdj 를 쓴다 — 위 28건이 그 경로를 이미 검증한다. */
+{
+  const rows = [
+    { date:'2026-03-01', status:'실제 입금', in:1000, out:0 },
+    { date:'2026-03-05', status:'실제 지출', in:0, out:300 },
+  ];
+  const A = fn('2026-03-02', rows, 10000, 500, '2026-08-23', 7);            // 생략 → 500 공용
+  const B = fn('2026-03-02', rows, 10000, 500, '2026-08-23', 7, 0);         // 주차시작 0
+  const d = A.actVals[0] - B.actVals[0];
+  console.log('\n[9] fxAdjBefore — 주차 시작 기준 환산조정을 따로 받는다');
+  console.log(d === 500 ? `  ✅ 첫날 값이 500 만큼 갈린다` : `  ✗ 기대 500, 실제 ${d}`);
+  const C = fn('2026-03-02', rows, 10000, 500, '2026-08-23', 7, null);      // null → fxAdj 사용
+  console.log(C.actVals[0] === A.actVals[0] ? '  ✅ null 이면 종전 동작' : '  ✗ null 처리 어긋남');
+}

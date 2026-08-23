@@ -4737,7 +4737,10 @@ function calcKPIs() {
   const mStart = monthStart(ref), mEnd = monthEnd(ref);
   const pmStart = prevMonthStart(ref), pmEnd = prevMonthEnd(ref);
 
-  computeFxAdj();          // 외화 환산손익 — 현재 시점 현금에만 반영 (정의는 renderBankRecon 위 주석 참고)
+  /* ⚠ cash 는 **보고기준일(ref)** 까지 누적한다 — '오늘'이 아니다. 기준일을 과거로 옮기면
+     그 날짜 기준 환산조정을 써야 한다. 안 그러면 같은 화면의 추이 차트(fxAdjAt 적용)와
+     KPI 카드가 갈린다 — 2026-08-23 실제로 그렇게 어긋났다. 루프 뒤에서 fxAdjTail 로 뺀다. */
+  computeFxAdj();
   let cash = INIT_CASH + FX_ADJ;
   let wIn = 0, wOut = 0;
   let mOut = 0, pmOut = 0;
@@ -4764,6 +4767,7 @@ function calcKPIs() {
     if (r.status === '입금 예정' && r.date <= nwEnd) plannedInToNextWeekEnd  += rIn;
     if (r.status === '지출 예정' && r.date <= nwEnd) plannedOutToNextWeekEnd += rOut;
   }
+  cash -= fxAdjTail(ref);      // 기준일 기준 환산조정 (오늘이면 0 — 종전과 동일)
 
   const wNet = wIn - wOut;
   // nextCash: cash(refDate 실제 누적) + 예정 누적(date <= nwEnd, 과거 미처리 포함)
@@ -8732,7 +8736,11 @@ const WKRPT_HORIZON_DAYS = 56;   // 8주 — 대시보드 궤적과 같은 지�
    반환: { dates, actVals, projVals, actDelta, planDelta, overdueSum, overdueN, planN,
            lastActualIdx, startProj } — actVals/projVals 는 dates 와 같은 길이이고
    해당 구간이 아닌 칸은 null 이다(Chart.js 가 선을 끊는다). */
-function computeWeeklyCashSeries(wStart, rows, initCash, fxAdj, today, horizonDays) {
+/* fxAdjBefore — 주차 시작 직전 시점의 환산조정. 생략하면 fxAdj 를 쓴다(종전 동작).
+   왜 인자가 둘인가: beforeFrom 은 **주차 시작 시점**, cashToday 는 **오늘** 기준이라
+   환산조정이 날짜별로 달라진 뒤(2026-08-23 fxAdjAt 도입)로는 값이 갈린다. 과거 주차를
+   넘겨보면 하나로는 못 맞는다 — 종전엔 둘 다 같은 상수를 써서 과거 주차가 1.26억 낮게 나왔다. */
+function computeWeeklyCashSeries(wStart, rows, initCash, fxAdj, today, horizonDays, fxAdjBefore) {
   const from = wStart;
   const to   = addDays(wStart, horizonDays - 1);
   const dates = [];
@@ -8740,8 +8748,9 @@ function computeWeeklyCashSeries(wStart, rows, initCash, fxAdj, today, horizonDa
 
   const actDelta = {}, planAll = {};
   let overdueSum = 0, overdueN = 0, planN = 0;
-  let beforeFrom = initCash + fxAdj;      // from 직전까지의 확정 잔액
-  let cashToday  = initCash + fxAdj;      // 오늘까지의 확정 잔액
+  const fxB = (fxAdjBefore === undefined || fxAdjBefore === null) ? fxAdj : fxAdjBefore;
+  let beforeFrom = initCash + fxB;        // from 직전까지의 확정 잔액 (주차 시작 시점 기준)
+  let cashToday  = initCash + fxAdj;      // 오늘까지의 확정 잔액 (오늘 기준)
 
   for (const r of (rows || [])) {
     const d = r.date;
@@ -8809,7 +8818,7 @@ function renderWeeklyCashChart(wStart) {
 
   const today = todayKST();
   computeFxAdj();
-  const S = computeWeeklyCashSeries(wStart, cfData, INIT_CASH, FX_ADJ, today, WKRPT_HORIZON_DAYS);
+  const S = computeWeeklyCashSeries(wStart, cfData, INIT_CASH, FX_ADJ, today, WKRPT_HORIZON_DAYS, fxAdjAt(addDays(wStart, -1)));
   const { dates, from, to, actVals, projVals, actDelta, planDelta } = S;
 
   const floor = dlFloor();
@@ -10373,7 +10382,8 @@ function renderRegularReport(){
   var mS=monthStart(ref), pmS=prevMonthStart(ref), pmE=prevMonthEnd(ref);
   var day=parseInt(ref.slice(8,10),10);
 
-  computeFxAdj();          // 외화 환산손익 — 현금 KPI·대조 카드와 같은 기준
+  /* ⚠ 여기도 cash 는 ref(보고기준일) 까지 누적한다. 아래 루프 뒤에서 fxAdjTail 로 보정한다. */
+  computeFxAdj();
   var cash=INIT_CASH + FX_ADJ, inMTD=0, outMTD=0, inPrev=0;
   var inDaily={}, outDaily={};
   for(var k=0;k<cfData.length;k++){ var r=cfData[k];
@@ -10384,6 +10394,7 @@ function renderRegularReport(){
     if(r.status==='실제 지출' && r.date>=mS && r.date<=ref){ outMTD+=rout; outDaily[r.date]=(outDaily[r.date]||0)+rout; }
     if(r.status==='실제 입금' && r.date>=pmS && r.date<=pmE && parseInt(r.date.slice(8,10),10)<=day) inPrev+=rin;
   }
+  cash -= fxAdjTail(ref);      // 기준일 기준 환산조정 (오늘이면 0 — 종전과 동일)
   function dailyCum(map){ var keys=Object.keys(map).sort(), acc=0, arr=[]; for(var i=0;i<keys.length;i++){ acc+=map[keys[i]]; arr.push(acc); } if(arr.length===0) arr=[0,0]; else if(arr.length===1) arr=[0,arr[0]]; return arr; }
   var inSpark=dailyCum(inDaily), outSpark=dailyCum(outDaily);
 
