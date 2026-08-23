@@ -167,18 +167,28 @@ if (missing.length) {
   if (missing.length > SHOW) console.log(`  … 외 ${missing.length - SHOW}건`);
 }
 
-/* ── 적용 ────────────────────────────────────────────────────────── */
-if (!APPLY) { console.log(`\n[보고만] --apply 를 주면 ${plan.length}건에 clobe_id·tx_at 을 씁니다.`); }   /* process.exit 금지 — Windows fetch 소켓 때문에 종료코드 127 사고 */
-if (!plan.length) { console.log('\n붙일 것이 없습니다.'); }   /* process.exit 금지 — Windows fetch 소켓 때문에 종료코드 127 사고 */
-const CHUNK = 200; let done = 0, rejected = 0;
-for (let i = 0; i < plan.length; i += CHUNK) {
-  const slice = plan.slice(i, i + CHUNK).map(({ r, x }) => ({ _id: r._id, set_clobe_id: x.id, tx_at: x.at }));
-  const res = await post({ patch: slice });
-  if (!res.ok) { console.error('patch 실패:', res.error); process.exitCode = 1; break; }
-  done += Number(res.updated) || 0;
-  if (res.notFound?.length) {
-    rejected += res.notFound.length;
-    console.error(`  ⚠ 거부 ${res.notFound.length}건: ${res.notFound.slice(0, 5).join(' / ')}`);
+/* ── 적용 ────────────────────────────────────────────────────────────
+   ⚠⚠ if / else if / else 로 **반드시 묶는다.** 2026-08-22 에 여기서 사고가 났다:
+   Windows 의 종료코드 127 문제를 피하려고 process.exit(0) 을 지웠더니 조기 종료가 없어져
+   **--apply 없이도 쓰기가 실행됐다**(3/4~3/6 40건이 dry-run 인데 반영됨). 결과는 계획과
+   같아 피해는 없었지만, "보고만" 이 쓰는 것 자체가 위험하다.
+   process.exit 은 쓰지 않는다(fetch keep-alive 소켓 때문에 종료코드 127) — 분기로 막는다. */
+if (!APPLY) {
+  console.log(`\n[보고만] --apply 를 주면 ${plan.length}건에 clobe_id·tx_at 을 씁니다.`);
+} else if (!plan.length) {
+  console.log('\n붙일 것이 없습니다.');
+} else {
+  const CHUNK = 200;
+  let done = 0, rejected = 0;
+  for (let i = 0; i < plan.length; i += CHUNK) {
+    const slice = plan.slice(i, i + CHUNK).map(({ r, x }) => ({ _id: r._id, set_clobe_id: x.id, tx_at: x.at }));
+    const res = await post({ patch: slice });
+    if (!res.ok) { console.error('patch 실패:', res.error); process.exitCode = 1; break; }
+    done += Number(res.updated) || 0;
+    if (res.notFound?.length) {
+      rejected += res.notFound.length;
+      console.error(`  ⚠ 거부 ${res.notFound.length}건: ${res.notFound.slice(0, 5).join(' / ')}`);
+    }
   }
+  console.log(`\n적용 완료 — ${done}건 백필${rejected ? ` · 거부 ${rejected}건` : ''}`);
 }
-console.log(`\n적용 완료 — ${done}건 백필${rejected ? ` · 거부 ${rejected}건` : ''}`);
