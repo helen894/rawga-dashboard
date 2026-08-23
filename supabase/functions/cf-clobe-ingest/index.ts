@@ -258,7 +258,12 @@ Deno.serve(async (req) => {
    * ⚠ 숫자만 받는다. 값 종류를 늘리면 검증이 헐거워진다.
    * 낙관적 잠금: 읽은 version 일 때만 쓴다(mergeMidToBig 와 같은 규칙). */
   if (setMeta) {
-    const ALLOWED = new Set(["settings.init_cash", "fx_adjust_base.pre_krw"]);
+    /* 화이트리스트. 새 경로가 필요하면 여기 명시적으로 추가한다 — 범용 쓰기로 만들지 않는다.
+       · fx_adjust_base.unbooked_loss — FX_ADJ 중 '실현됐으나 손익 미기표' 인 금액.
+         대시보드 잔액 대조 카드가 이 값을 읽어 환산손익 줄에 근거로 표시한다. 현금 계산에는
+         전혀 쓰지 않는다(표시 전용). 0 을 넣으면 표시가 사라진다.
+         산출 근거·재현: docs/fx-loss-booking-analysis.md · scripts/verify-fx-loss-booking.mjs */
+    const ALLOWED = new Set(["settings.init_cash", "fx_adjust_base.pre_krw", "fx_adjust_base.unbooked_loss"]);
     const dry = body?.dry === true;
     try {
       const plan: Array<{ key: string; field: string; path: string; next: number }> = [];

@@ -3055,6 +3055,21 @@ function buildFxRamp_() {
   _fxRamp = [...byDate.entries()].map(([d, w]) => ({ d, w }));
 }
 
+/* FX_ADJ 안에 섞여 있는 '실현됐으나 손익 미기표' 금액. **표시 전용 — 현금 계산에 쓰지 않는다.**
+ * 왜 이 값을 따로 보여주는가: FX_ADJ 는 '장부 vs 실제 외화 평가액' 차이를 메우는 플러그라
+ * 그 안에 성격이 다른 금액이 섞인다. 2026-08-23 조사에서 그중 121,576,679 원이
+ * **7월 외화 거래에서 이미 실현된 환차손인데 손익에 안 잡힌 금액**임을 특정했다
+ * (7/9 미기표 29,800,000 + 7/13 91,776,679). 그대로 두면 1.22억이 불투명한 조정액으로
+ * 숨는다. cf_data 는 현금 원장이므로 여기 지출로 넣을 수는 없다 — 환전 양쪽 다리가 이미
+ * 실현환율로 들어와 있어 현금은 정확하고, 지출을 더하면 나가지 않은 돈을 빼게 된다.
+ * 근거·측정: docs/fx-loss-booking-analysis.md · scripts/verify-fx-loss-booking.mjs
+ * ⚠ 하드코딩하지 않는다 — `cat_data.fx_adjust_base.unbooked_loss` 에서 읽는다. 새 외화 거래가
+ *   생기면 그 값을 다시 산출해 setMeta 로 갱신해야 한다(0 을 넣으면 표시가 사라진다). */
+function unbookedFxLoss() {
+  const v = Number(fxAdjustBase && fxAdjustBase.unbooked_loss);
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
+}
+
 /* 날짜 기준 환산조정액. 램프가 없으면 상수 FX_ADJ(종전 동작). */
 function fxAdjAt(date) {
   if (!_fxRamp.length) return FX_ADJ;
@@ -3353,6 +3368,7 @@ function renderBankRecon() {
         <span style="text-align:right">
           <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${FX_ADJ < 0 ? 'var(--red)' : 'var(--green)'}">${FX_ADJ > 0 ? '+' : ''}${fmt(FX_ADJ)}</span>
           <span style="display:block;font-size:10.5px;color:var(--text3);margin-top:2px">장부 ${fmt(Number(bankSnapshot.fxKrw || 0) - FX_ADJ)} → 평가 ${fmt(bankSnapshot.fxKrw || 0)}${s.fxRate ? ` @${Number(s.fxRate).toLocaleString()}` : ''}</span>
+          ${unbookedFxLoss() ? html`<span style="display:block;font-size:10.5px;color:var(--red);margin-top:3px">↳ 이 중 ${fmt(unbookedFxLoss())} 은 <b>실현됐으나 손익 미기표</b> — 발생기준 장부 기표 대상</span>` : ''}
         </span>
       </div>` : ''),
     (fxTxt ? html`<div style="font-size:11px;color:var(--text2);margin-top:9px">외화 보유 ${fxTxt}${loanBal ? ` · 대출잔액 ${fmt(loanBal)}(현금 아님, 대조 제외)` : ''}</div>` : ''),
