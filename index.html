@@ -2975,6 +2975,10 @@ let fxAdjustBase = (() => {
   return null;
 })();
 let FX_ADJ = 0;
+/* 환산조정 배분 램프 — fxAdjAt() 가 쓴다. [{d, w}] 날짜 오름차순, w 는 0~1 누적 가중치.
+   비어 있으면 fxAdjAt() 이 상수 FX_ADJ 를 돌려준다(종전 동작). */
+let _fxRamp = [];
+let _fxRampCut = '';
 
 /* 대출잔액의 단일 출처 = `loan_data`(대출 탭).
  * ⚠ `bank_snapshot.loan` 을 쓰면 안 된다. 그 값은 클로브 `summary.loanBalanceSum` 인데
@@ -2992,6 +2996,7 @@ function loanBookTotal() {
 }
 
 function computeFxAdj() {
+  _fxRamp = []; _fxRampCut = '';
   if (!bankSnapshot) { FX_ADJ = 0; return 0; }
   const spot = Number(bankSnapshot.fxKrw) || 0;
   let book = Number(fxAdjustBase && fxAdjustBase.pre_krw) || 0;
@@ -2999,8 +3004,65 @@ function computeFxAdj() {
     if (r && r.fx_usd) book += (Number(r.in) || 0) - (Number(r.out) || 0);
   }
   FX_ADJ = Math.round(spot - book);
+  buildFxRamp_();
   return FX_ADJ;
 }
+
+/* ── 환산조정을 날짜별로 배분하는 램프 (2026-08-23 추가) ──────────────────
+ * 왜 필요했나: FX_ADJ 는 '장부(pre_krw + fx_usd 행 누계) vs 실제 외화 평가액' 차이를 메우는
+ *   플러그다. 종전엔 이걸 **날짜 없는 상수**로 전 구간에 얹었다. 클로브 실제 일별잔액
+ *   236일과 대조하니 1~6월 추이선이 통째로 약 1.26억 낮게 그려지고 있었다(평균오차 1.02억).
+ *
+ * 배분 근거 2가지
+ *   1) `fx_adjust_base.through`(=2026-06-30) 까지는 pre_krw 가 장부를 평가액에 맞춰 둔 구간이다
+ *      (그 note 의 '대조 검증 오차 −69,216원'). 그 이전엔 플러그가 정의상 0 이다.
+ *   2) through 이후의 플러그는 **환전 시점에 실현된다.** USD 입금이나 USD 직접지급은 장부와
+ *      평가를 어긋내지 않는다 — 환율이 다른 환전이 어긋낸다. 그래서 through 이후 fx_usd 행 중
+ *      **환전 성격**(계좌간이체·외환차손)만 가중치로 쓴다.
+ *
+ * 실측 (scripts/verify-daily-balance-vs-clobe.mjs · 클로브 236일 대조)
+ *   상수          평균오차 101,758,097 · 최대 128,522,707
+ *   전체금액 램프   평균오차   2,054,931 · 최대  65,715,449
+ *   환전건 램프    평균오차   1,262,728 · 최대  48,335,854   ← 채택(81배 개선)
+ *   최대오차는 7/7~7/8 이틀치다 — 실제 환전이 cf_data 기재일(7/9)보다 앞서 시작됐다.
+ *   오늘 시점은 정확히 0 이므로 KPI·잔액 대조 카드는 종전과 동일하다.
+ *
+ * ⚠ 안전장치 2개. 둘 중 하나라도 걸리면 **종전처럼 상수로** 동작한다 —
+ *   분류 체계가 바뀌어 환전 행을 못 찾는 상황에서 과거 잔액을 조용히 왜곡하지 않기 위한 것.
+ *     · fx_adjust_base.through 가 없으면 램프를 만들지 않는다
+ *     · through 이후 환전 행의 가중치 합이 0 이면 램프를 만들지 않는다
+ * ⚠ 환전을 다른 중분류로 분류하게 되면 FX_CONV_MIDS 에 넣어야 한다. 빠뜨리면 램프가
+ *   그만큼 늦게 차올라 그 사이 과거 잔액이 낮게 나온다. */
+const FX_CONV_MIDS = ['계좌간이체', '외환차손'];
+function buildFxRamp_() {
+  const cut = String((fxAdjustBase && fxAdjustBase.through) || '').slice(0, 10);
+  if (!cut) return;
+  const conv = (cfData || [])
+    .filter(r => r && r.fx_usd && String(r.date) > cut && FX_CONV_MIDS.includes(r.mid_cat || ''))
+    .map(r => ({ d: String(r.date).slice(0, 10), a: Math.abs((Number(r.in) || 0) - (Number(r.out) || 0)) }))
+    .filter(x => x.a > 0)
+    .sort((p, q) => p.d.localeCompare(q.d));
+  const tot = conv.reduce((s, x) => s + x.a, 0);
+  if (!tot) return;
+  let acc = 0;
+  const byDate = new Map();
+  for (const x of conv) { acc += x.a; byDate.set(x.d, acc / tot); }
+  _fxRampCut = cut;
+  _fxRamp = [...byDate.entries()].map(([d, w]) => ({ d, w }));
+}
+
+/* 날짜 기준 환산조정액. 램프가 없으면 상수 FX_ADJ(종전 동작). */
+function fxAdjAt(date) {
+  if (!_fxRamp.length) return FX_ADJ;
+  const d = String(date || '').slice(0, 10);
+  if (!d || d <= _fxRampCut) return 0;
+  let w = 0;
+  for (const x of _fxRamp) { if (x.d <= d) w = x.w; else break; }
+  return Math.round(FX_ADJ * w);
+}
+/* 그 날짜에 아직 안 붙는 부분. 누적 루프는 종전처럼 INIT_CASH + FX_ADJ 로 시작하고,
+   날짜별 값을 낼 때 이걸 빼면 된다 — 루프 구조를 안 건드리는 게 목적이다. */
+function fxAdjTail(date) { return FX_ADJ - fxAdjAt(date); }
 
 /* ===== 데이터 신선도 (P0-2) =====
  * 소스마다 갱신 주기가 달라 임계도 다르게 잡는다.
@@ -5152,10 +5214,10 @@ function renderCashChart() {
   const allDates = [];
   for (let d = minDate; d <= maxDate; d = addDays(d, 1)) allDates.push(d);
 
-  /* 외화 환산손익을 기준선에 얹는다. 아래 세 기준선(running·last·preRunning)에 같은 상수를
-   * 더하므로 선의 모양은 변하지 않고 끝점만 현금 KPI·대조 카드와 맞는다.
-   * ⚠ 절충: 과거 시점 잔액도 '오늘 기준' 누적 환산손익을 안고 있게 된다. 기간별로 배분하는
-   *   게 정확하지만 그럴 근거 데이터가 없다. 대신 차트·KPI·리포트가 서로 어긋나지 않는다. */
+  /* 외화 환산손익 — 2026-08-23 부터 **날짜별로 배분**한다(fxAdjAt 참고).
+   * 종전엔 오늘자 상수를 전 구간에 얹었다. 이 차트는 기준일−90일부터 그리므로 7월 외화
+   * 통과 구간을 걸치는데, 상수로 얹으면 그 이전 구간이 통째로 약 1.26억 낮게 그려졌다
+   * (클로브 실제 일별잔액 236일 대조로 확인). 끝점(오늘)은 종전과 같아 KPI·대조 카드와 맞는다. */
   computeFxAdj();
   // 기준일 이전 전체 데이터로 잔액 계산 (정확한 시작 잔액 위해)
   let running = INIT_CASH + FX_ADJ;
@@ -5164,6 +5226,8 @@ function renderCashChart() {
     const _mid = r.mid_cat || '';
     if (r.status === '실제 입금') running += r.in;
     if (r.status === '실제 지출') running -= r.out;
+    /* ⚠ 조정 **전** 값을 담는다. 날짜별 조정은 아래 emit 시점에 fxAdjTail 로 뺀다 —
+       거래가 없는 날도 그 날짜의 조정이 붙어야 하기 때문이다(램프가 날짜마다 다름). */
     if (r.date <= maxDate) dailyMap[r.date] = running;
   }
 
@@ -5184,7 +5248,7 @@ function renderCashChart() {
   for (const d of allDates) {
     if (dailyMap[d] !== undefined) last = dailyMap[d];
     labels.push(d.slice(5));
-    vals.push(last);
+    vals.push(last - fxAdjTail(d));      // 날짜별 환산조정
   }
 
   /* ── 여기서부터 궤적(예정 구간) ────────────────────────────────────
@@ -8436,6 +8500,10 @@ function renderMonthlyReport() {
     if (r.status === '실제 입금' && r.date <= mEnd) mEndCash += (r.in || 0);
     if (r.status === '실제 지출' && r.date <= mEnd) mEndCash -= (r.out || 0);
   }
+  /* 날짜별 환산조정 — 보고기준일을 과거 달로 바꿨을 때 어긋나지 않게 한다.
+     오늘이 속한 달이면 fxAdjTail 이 0 이라 종전과 같은 값이다. */
+  pmEndCash -= fxAdjTail(pmEnd);
+  mEndCash  -= fxAdjTail(mEnd);
 
   // 월별 자금흐름 생키 — 위에서 계산한 값을 그대로 사용(검산식 구조적 일치)
   renderCashflowSankey(pmEndCash, mEndCash, actualInRows, actualOutRows, mStart, mEnd, mTransferNet);
@@ -8932,6 +9000,8 @@ function renderAssetMixChart() {
   computeFxAdj();
   /* 현금 — 추이 차트와 같은 기준(INIT_CASH + FX_ADJ + 실제 입출금) */
   const cashDelta = {};
+  /* ⚠ 조정 전 기준선. 날짜별 환산조정은 아래 누적 루프에서 fxAdjTail 로 뺀다 —
+     이 차트는 연초부터 그리므로 상수로 얹으면 1~6월이 통째로 약 1.26억 낮게 나왔다. */
   let cashBase = INIT_CASH + FX_ADJ;
   for (const r of (cfData || [])) {
     if (!r.date) continue;
@@ -8962,15 +9032,18 @@ function renderAssetMixChart() {
   for (const d of dates) {
     c1 += (cashDelta[d] || 0);
     a1 += (arDelta[d] || 0);
+    const c1adj = c1 - fxAdjTail(d);     // 날짜별 환산조정 (현금 계열에만)
     s1 += (invDelta['세종시'][d] || 0);
     l1 += (invDelta['라오스'][d] || 0);
     /* 스택일 때는 Math.max(0,…) 로 눌렀다 — 음수가 섞이면 스택이 깨지기 때문이다.
        쌓지 않는 지금은 그럴 이유가 없고, 누르면 사실을 가린다. 그대로 그린다.
-       ⚠ 현금은 2026-03-10~17(최저 -1.09억)·05-15~20(-0.66억) 마이너스로 계산된다.
-       두 번의 투자 유치(3/18 60억·5/21 95억) 직전 바닥이다. 입출금을 되짚은 재구성값이라
-       통장이 실제로 마이너스였다는 뜻은 아니다 — 차트에 이 안내를 띄웠다가 2026-08-22
-       사용자 요청으로 지웠으니, 누가 물으면 여기를 보여줄 것. */
-    cash.push(Math.round(c1));
+       ⚠ 종전엔 현금이 연초~5/20 사이 **40일이나 마이너스**로 계산됐다(3/10 −0.89억 등).
+       원인은 실제 바닥이 아니라 **오늘자 환산조정 −1.26억을 과거에 얹은 것**이었다 —
+       2026-08-23 fxAdjAt 도입으로 음수일이 **40일 → 0일**이 됐다(3/10 +0.36억 · 5/20 +0.59억).
+       클로브 실제 일별잔액과의 평균 오차도 1.02억 → 126만원으로 줄었다.
+       (차트에 마이너스 안내를 띄웠다가 2026-08-22 사용자 요청으로 지운 이력이 있다 —
+        그 안내가 가리켰던 현상 자체가 버그였다) */
+    cash.push(Math.round(c1adj));
     ar.push(Math.round(a1));
     sej.push(Math.round(s1));
     lao.push(Math.round(l1));
@@ -9078,6 +9151,8 @@ function renderWeeklyReport() {
     if (r.status === '실제 입금' && r.date <= wEnd)  wkEndCash += (r.in  || 0);
     if (r.status === '실제 지출' && r.date <= wEnd)  wkEndCash -= (r.out || 0);
   }
+  pwEndCash -= fxAdjTail(pwEnd);       // 날짜별 환산조정 (과거 주 조회 시)
+  wkEndCash -= fxAdjTail(wEnd);
 
   // KPI 카드
   const pwEndEl = document.getElementById('wkrpt-pw-end');

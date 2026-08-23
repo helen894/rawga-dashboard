@@ -43,20 +43,37 @@ for(const y of [2025,2026,2027]) for(let mo=1;mo<=12;mo++){
 }
 let FXSUM=0; for(const r of rows) if(r.fx_usd) FXSUM+=(r.in||0)-(r.out||0);
 const FXADJ=Math.round(BS.fxKrw-(PRE+FXSUM));
+/* 대시보드의 fxAdjAt(date) 와 같은 램프를 여기서도 만든다 — 화면 기준으로 대조하기 위해.
+   index.html 의 buildFxRamp_ 와 규칙이 같아야 한다(through 이후 · 환전 성격만 · |금액| 비중).
+   --const 를 주면 종전 상수 방식으로 대조해 개선폭을 볼 수 있다. */
+const CONST_MODE=argv.includes('--const');
+const FX_CONV_MIDS=['계좌간이체','외환차손'];
+const CUT=String(m.meta.fx_adjust_base.through||'').slice(0,10);
+const conv=rows.filter(r=>r.fx_usd && String(r.date)>CUT && FX_CONV_MIDS.includes(r.mid_cat||''))
+  .map(r=>({d:String(r.date).slice(0,10),a:Math.abs((r.in||0)-(r.out||0))}))
+  .filter(x=>x.a>0).sort((p,q)=>p.d.localeCompare(q.d));
+const convTot=conv.reduce((s,x)=>s+x.a,0);
+const rampArr=[]; { let acc=0; const bd=new Map(); for(const x of conv){acc+=x.a; bd.set(x.d,acc/convTot);} for(const [d,w] of bd) rampArr.push({d,w}); }
+const fxAdjAt=(d)=>{
+  if(CONST_MODE || !CUT || !convTot) return FXADJ;
+  if(d<=CUT) return 0;
+  let w=0; for(const x of rampArr){ if(x.d<=d) w=x.w; else break; }
+  return Math.round(FXADJ*w);
+};
 const real=rows.filter(r=>r.status==='실제 입금'||r.status==='실제 지출');
 /* 일별 순flow */
 const flow=new Map();
 for(const r of real){ const a=r.status==='실제 입금'?r.in:-r.out; flow.set(r.date,(flow.get(r.date)||0)+a); }
 /* 대시보드 일별 잔액 */
 const dates=[...trend.keys()].sort();
-let run=INIT+FXADJ;
+let run=INIT;
 const dash=new Map();
-{ /* 첫 날짜 이전 거래를 기초에 눌러 담는다 */
+{ /* 첫 날짜 이전 거래를 기초에 눌러 담는다. 환산조정은 날짜별로 emit 시점에 얹는다. */
   const first=dates[0];
   for(const r of real) if(r.date<first) run+= r.status==='실제 입금'?r.in:-r.out;
-  for(const d of dates){ run+=(flow.get(d)||0); dash.set(d,run); }
+  for(const d of dates){ run+=(flow.get(d)||0); dash.set(d,run+fxAdjAt(d)); }
 }
-console.log(`INIT_CASH ${won(INIT)} · FX_ADJ ${won(FXADJ)} · 비교일수 ${dates.length}일`);
+console.log(`INIT_CASH ${won(INIT)} · FX_ADJ ${won(FXADJ)} · 비교일수 ${dates.length}일 · 모드 ${CONST_MODE?'상수(종전)':'fxAdjAt 램프'}`);
 console.log(`허용오차 ${won(TOL)} (외화 환율 일변동)\n`);
 const bad=[];
 let prevDiff=null;
@@ -73,3 +90,9 @@ console.log(`\n=== 전일 대비 차이가 ${won(TOL)} 넘게 움직인 날 : ${
 for(const b of bad) console.log(`  ${b.d}  움직임 ${won(b.move).padStart(15)} (${eok(b.move)}억)  · 그날 cf 순flow ${won(b.flow)}  · 누적차 ${won(b.diff)}`);
 const first=dates[0], lastD=dates[dates.length-1];
 console.log(`\n레벨 차이: ${first} ${won(dash.get(first)-trend.get(first))}  →  ${lastD} ${won(dash.get(lastD)-trend.get(lastD))}`);
+/* 모델 품질 지표 — 상수 방식과 비교할 때 이게 핵심이다. */
+{
+  let sum=0,mx=0,worst=null;
+  for(const d of dates){ const e=Math.abs(dash.get(d)-trend.get(d)); sum+=e; if(e>mx){mx=e;worst=d;} }
+  console.log(`|차이| 평균 ${won(sum/dates.length)} · 최대 ${won(mx)} (${worst})`);
+}
