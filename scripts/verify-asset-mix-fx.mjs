@@ -8,6 +8,7 @@
  *
  * 검사
  *   1 현금 — 클로브 실제 일별잔액과 대조 (docs/audit/clobe-daily-trend-2026.tsv)
+ *       ⚠ 앵커는 **시작일**(settings.cf_start)이다. 시작일이 정확히 일치하고, 오늘은 잔차를 안는다.
  *   2 현금 — 음수일 수 (fxAdjAt 도입 전 40일이었다)
  *   3 세종F2·라오스 — 끝값이 big_cat 별 지출 누계와 일치하는가
  *   4 환산조정 격리 — 세종/라오스가 조정과 무관한가
@@ -46,6 +47,20 @@ const call = async (b) => {
 };
 const won = (n) => Math.round(n).toLocaleString('ko-KR');
 const eok = (n) => (n / 1e8).toFixed(2);
+/* ⚠ CF_START(settings.cf_start) 도입 후로는 기초잔액을 그대로 쓰면 안 된다.
+   INIT_CASH 는 **시작일의 개시 잔액**이고, 누적 루프가 그 이전 행까지 더하므로 그만큼을
+   미리 걷어내야 한다 — index.html 의 initCashEff() 와 같은 계산이다. */
+const initCashEff = (INIT, CF, rows) => {
+  if (!CF) return INIT;
+  let pre = 0;
+  for (const r of rows) {
+    if (!r || !r.date || String(r.date) >= CF) continue;
+    if (r.status === '실제 입금') pre += (Number(r.in) || 0);
+    else if (r.status === '실제 지출') pre -= (Number(r.out) || 0);
+  }
+  return INIT - pre;
+};
+
 const addDays = (d, n) => {
   const p = String(d).split('-').map(Number);
   const t = new Date(Date.UTC(p[0], p[1] - 1, p[2] + n));
@@ -91,7 +106,8 @@ const dates = [];
 for (let d = FROM; d <= TODAY; d = addDays(d, 1)) dates.push(d);
 
 const cashDelta = {};
-let cashBase = INIT + FX_ADJ;
+const CF = String(meta.meta.settings.cf_start || '').slice(0, 10);
+let cashBase = initCashEff(INIT, CF, rows) + FX_ADJ;
 for (const r of rows) {
   if (!r.date) continue;
   const v = r.status === '실제 입금' ? (r.in || 0) : (r.status === '실제 지출' ? -(r.out || 0) : 0);
@@ -149,7 +165,12 @@ dates.forEach((d, i) => {
 });
 ok('평균 오차 ' + won(sum / n), sum / n < 5000000, n + '일 · 최대 ' + won(mx) + ' (' + worst + ')');
 ok('종전 방식보다 개선', sum / n < sumOld / n, '신규 ' + won(sum / n) + ' vs 종전 ' + won(sumOld / n));
-ok('끝값 = 클로브 실제', tail(cash) === trend.get(TODAY), won(tail(cash)) + ' vs ' + won(trend.get(TODAY)));
+/* ⚠ 2026-08-23 CF_START 도입으로 앵커가 **시작일**로 옮겨졌다. 종전엔 오늘이 정확히 0 이었지만
+   지금은 시작일이 정확하고 오늘은 잔차(현재 545,520 — 외화 재평가 누적)를 안는다.
+   그래서 '끝값 정확히 일치' 대신 시작일 일치 + 끝값 허용오차로 검사한다. */
+const startIdx = dates.indexOf(FROM);
+ok('시작일 ' + FROM + ' = 클로브 실제', cash[startIdx] === trend.get(FROM), won(cash[startIdx]) + ' vs ' + won(trend.get(FROM)));
+ok('끝값 잔차 1천만원 미만(알림 임계)', Math.abs(tail(cash) - trend.get(TODAY)) < 10000000, won(tail(cash)) + ' vs ' + won(trend.get(TODAY)) + ' · 차 ' + won(tail(cash) - trend.get(TODAY)));
 
 console.log('\n[2] 현금 — 음수일');
 const negNew = cash.filter(v => v < 0).length;

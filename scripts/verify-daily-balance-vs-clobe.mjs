@@ -26,12 +26,27 @@ const call=async(b)=>{for(let i=1;i<=4;i++){try{
 }catch(e){ if(i===4) throw e; await new Promise(s=>setTimeout(s,800*i)); }}};
 const won=(n)=>Math.round(n).toLocaleString('ko-KR');
 const eok=(n)=>(n/1e8).toFixed(2);
+/* ⚠ CF_START(settings.cf_start) 도입 후로는 기초잔액을 그대로 쓰면 안 된다.
+   INIT_CASH 는 **시작일의 개시 잔액**이고, 누적 루프가 그 이전 행까지 더하므로 그만큼을
+   미리 걷어내야 한다 — index.html 의 initCashEff() 와 같은 계산이다. */
+const initCashEff = (INIT, CF, rows) => {
+  if (!CF) return INIT;
+  let pre = 0;
+  for (const r of rows) {
+    if (!r || !r.date || String(r.date) >= CF) continue;
+    if (r.status === '실제 입금') pre += (Number(r.in) || 0);
+    else if (r.status === '실제 지출') pre -= (Number(r.out) || 0);
+  }
+  return INIT - pre;
+};
+
 
 const trend=new Map();
 for(const l of fs.readFileSync(TR,'utf8').split(/\r?\n/)){
   if(!l.trim()) continue; const [d,v]=l.split('\t'); trend.set(d.trim(), Number(v));
 }
 const m=await call({inspect:{from:'2026-01-01',to:'2026-01-01',meta:['settings','bank_snapshot','fx_adjust_base']}});
+const CF=String(m.meta.settings.cf_start||'').slice(0,10);
 const INIT=m.meta.settings.init_cash, BS=m.meta.bank_snapshot, PRE=Number(m.meta.fx_adjust_base.pre_krw||0);
 const rows=[];
 for(const y of [2025,2026,2027]) for(let mo=1;mo<=12;mo++){
@@ -66,7 +81,7 @@ const flow=new Map();
 for(const r of real){ const a=r.status==='실제 입금'?r.in:-r.out; flow.set(r.date,(flow.get(r.date)||0)+a); }
 /* 대시보드 일별 잔액 */
 const dates=[...trend.keys()].sort();
-let run=INIT;
+let run=initCashEff(INIT, CF, real);
 const dash=new Map();
 { /* 첫 날짜 이전 거래를 기초에 눌러 담는다. 환산조정은 날짜별로 emit 시점에 얹는다. */
   const first=dates[0];

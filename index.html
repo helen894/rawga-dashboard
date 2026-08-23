@@ -2975,6 +2975,13 @@ let fxAdjustBase = (() => {
   return null;
 })();
 let FX_ADJ = 0;
+/* 현금 시계열 시작일(YYYY-MM-DD). settings.cf_start 에서 온다. 빈 문자열이면 종전 동작.
+   왜 필요했나: 2026-08-23 확인 — cf_data 의 2025년 행은 라오스 지출 4건(−3.29억)뿐인데
+   클로브 실제로는 그 기간에 −20.9억이 움직였다. 즉 **2025년 활동 17.6억이 미기록**이고,
+   INIT_CASH 가 그걸 통째로 흡수해 '기초잔액'이라는 이름과 전혀 다른 보정상수가 돼 있었다
+   (INIT_CASH 4.77억 vs 클로브 2025-10-23 실잔액 22.4억).
+   그래서 현금 시계열을 2026-01-01 부터로 끊고 INIT_CASH 를 **그날의 실제 개시 잔액**으로 뒀다. */
+let CF_START = '';
 /* 환산조정 배분 램프 — fxAdjAt() 가 쓴다. [{d, w}] 날짜 오름차순, w 는 0~1 누적 가중치.
    비어 있으면 fxAdjAt() 이 상수 FX_ADJ 를 돌려준다(종전 동작). */
 let _fxRamp = [];
@@ -3055,6 +3062,26 @@ function buildFxRamp_() {
   _fxRamp = [...byDate.entries()].map(([d, w]) => ({ d, w }));
 }
 
+/* 현금 누적의 실효 기초잔액.
+ * CF_START 가 있으면 INIT_CASH 는 **그 날짜의 개시 잔액**이므로, 누적 루프가 그 이전 행까지
+ * 더해 버리는 만큼을 미리 걷어낸다. 결과적으로 balance(CF_START) === INIT_CASH 가 된다.
+ *
+ * ⚠ 왜 루프마다 날짜 조건을 넣지 않고 기초를 보정하는가: 현금을 누적하는 곳이 열 군데가 넘고
+ *   2026-08-23 에 fxAdjAt 을 넣으면서 그중 둘(calcKPIs·renderRegularReport)을 빠뜨려 화면이
+ *   갈린 적이 있다. `initCashEff() + FX_ADJ` 라는 **한 패턴만 치환**하면 빠뜨릴 수가 없다.
+ * ⚠ 현금 계열에만 적용된다. 세종F2·라오스 누적 투입과 매출채권은 각자 기준일이 있고
+ *   2025년 라오스 4건은 그 계열에 그대로 남아야 한다(투입 누계라서). */
+function initCashEff() {
+  if (!CF_START) return INIT_CASH;
+  let pre = 0;
+  for (const r of (cfData || [])) {
+    if (!r || !r.date || String(r.date) >= CF_START) continue;
+    if (r.status === '실제 입금') pre += (Number(r.in) || 0);
+    else if (r.status === '실제 지출') pre -= (Number(r.out) || 0);
+  }
+  return INIT_CASH - pre;
+}
+
 /* FX_ADJ 안에 섞여 있는 '실현됐으나 손익 미기표' 금액. **표시 전용 — 현금 계산에 쓰지 않는다.**
  * 왜 이 값을 따로 보여주는가: FX_ADJ 는 '장부 vs 실제 외화 평가액' 차이를 메우는 플러그라
  * 그 안에 성격이 다른 금액이 섞인다. 2026-08-23 조사에서 그중 121,576,679 원이
@@ -3079,7 +3106,7 @@ function fxAdjAt(date) {
   for (const x of _fxRamp) { if (x.d <= d) w = x.w; else break; }
   return Math.round(FX_ADJ * w);
 }
-/* 그 날짜에 아직 안 붙는 부분. 누적 루프는 종전처럼 INIT_CASH + FX_ADJ 로 시작하고,
+/* 그 날짜에 아직 안 붙는 부분. 누적 루프는 종전처럼 기초 + FX_ADJ 로 시작하고,
    날짜별 값을 낼 때 이걸 빼면 된다 — 루프 구조를 안 건드리는 게 목적이다. */
 function fxAdjTail(date) { return FX_ADJ - fxAdjAt(date); }
 
@@ -3318,7 +3345,7 @@ function renderBankRecon() {
 
   computeFxAdj();
   const today = todayKST();
-  let calc = INIT_CASH + FX_ADJ;
+  let calc = initCashEff() + FX_ADJ;
   for (const r of (cfData || [])) {
     if (r.status === '실제 입금' && r.date <= today) calc += (r.in  || 0);
     if (r.status === '실제 지출' && r.date <= today) calc -= (r.out || 0);
@@ -4119,6 +4146,7 @@ async function loadDataFromSupabase() {
         if (row.key === 'settings' && row.data?.init_cash !== undefined) {
           INIT_CASH = row.data.init_cash;
           localStorage.setItem('init_cash', String(INIT_CASH));
+          CF_START = String(row.data.cf_start || '').slice(0, 10);
         }
         if (row.key === 'weekly_email_settings' && row.data) {
           emailSettings = { ...emailSettings, ...row.data };
@@ -4500,6 +4528,7 @@ function subscribeRealtime() {
             if (row.key === 'settings' && row.data?.init_cash !== undefined) {
               INIT_CASH = row.data.init_cash;
               localStorage.setItem('init_cash', String(INIT_CASH));
+              CF_START = String(row.data.cf_start || '').slice(0, 10);
               updateInitCashDisplay();
             }
             if (row.key === 'corp_card_tx_data') {
@@ -4761,7 +4790,7 @@ function calcKPIs() {
      그 날짜 기준 환산조정을 써야 한다. 안 그러면 같은 화면의 추이 차트(fxAdjAt 적용)와
      KPI 카드가 갈린다 — 2026-08-23 실제로 그렇게 어긋났다. 루프 뒤에서 fxAdjTail 로 뺀다. */
   computeFxAdj();
-  let cash = INIT_CASH + FX_ADJ;
+  let cash = initCashEff() + FX_ADJ;
   let wIn = 0, wOut = 0;
   let mOut = 0, pmOut = 0;
   let pwIn = 0, pwOut = 0;
@@ -5244,7 +5273,7 @@ function renderCashChart() {
    * (클로브 실제 일별잔액 236일 대조로 확인). 끝점(오늘)은 종전과 같아 KPI·대조 카드와 맞는다. */
   computeFxAdj();
   // 기준일 이전 전체 데이터로 잔액 계산 (정확한 시작 잔액 위해)
-  let running = INIT_CASH + FX_ADJ;
+  let running = initCashEff() + FX_ADJ;
   const dailyMap = {};
   for (const r of [...cfData].sort((a,b) => a.date.localeCompare(b.date))) {
     const _mid = r.mid_cat || '';
@@ -5257,11 +5286,11 @@ function renderCashChart() {
 
   const labels = [], vals = [];
   // minDate 직전까지의 마지막 잔액을 시작값으로
-  let last = INIT_CASH + FX_ADJ;
+  let last = initCashEff() + FX_ADJ;
   const preMin = [...cfData]
     .filter(r => (r.status === '실제 입금' || r.status === '실제 지출') && r.date < minDate)
     .sort((a,b) => a.date.localeCompare(b.date));
-  let preRunning = INIT_CASH + FX_ADJ;
+  let preRunning = initCashEff() + FX_ADJ;
   for (const r of preMin) {
     const _mid2 = r.mid_cat || '';
     if (r.status === '실제 입금') preRunning += r.in;
@@ -5279,7 +5308,7 @@ function renderCashChart() {
    * 과거 90일 확정 잔액 오른쪽에 예정 거래를 이어 그린다. 별도 화면을 만들지 않은 이유:
    * 같은 축·같은 잔액 개념이 이미 이 차트에 있어서, 따로 만들면 숫자가 두 개가 된다.
    * 시작점은 위에서 구한 확정 잔액(last)이고 거기에 예정을 날짜순으로 누적한다 —
-   * computeCFBalances(잔액 열)와 같은 기준(INIT_CASH + FX_ADJ)이라 두 화면이 안 어긋난다.
+   * computeCFBalances(잔액 열)와 같은 기준(기초 + FX_ADJ)이라 두 화면이 안 어긋난다.
    * ⚠ 기한이 지난 예정(연체)은 미래가 아니라 **오늘 시점에 한꺼번에** 얹는다. 돈은 아직
    *   안 나갔으므로 과거로 그리면 확정 구간을 왜곡한다(만기 예정 경고가 별도로 알린다). */
   const HORIZON_DAYS = 56;                    // 8주
@@ -5817,7 +5846,7 @@ function computeCFBalances() {
    * 이어 그리기로 했으므로 기준이 하나여야 한다. 숫자가 두 개면 사람이 안 믿는다(대출잔액이
    * 세 군데서 달랐던 문제와 같은 구조). 상수를 더하는 것이라 인접 행 역산은 영향 없다. */
   computeFxAdj();
-  let real = INIT_CASH + FX_ADJ, pending = 0;
+  let real = initCashEff() + FX_ADJ, pending = 0;
   for (const r of sorted) {
     if (r.status === '실제 입금')      { real += (r.in  || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
     else if (r.status === '실제 지출') { real -= (r.out || 0); balances.set(r._id, { val: real, kind: 'actual' }); }
@@ -8516,8 +8545,8 @@ function renderMonthlyReport() {
                         : r.status === '실제 지출' ? -(r.out || 0) : 0), 0);
 
   computeFxAdj();          // 외화 환산손익 — 현금 KPI·차트·주간 리포트와 같은 기준
-  let pmEndCash = INIT_CASH + FX_ADJ;
-  let mEndCash = INIT_CASH + FX_ADJ;
+  let pmEndCash = initCashEff() + FX_ADJ;
+  let mEndCash = initCashEff() + FX_ADJ;
   for (const r of cfData) {
     if (r.status === '실제 입금' && r.date <= pmEnd) pmEndCash += (r.in || 0);
     if (r.status === '실제 지출' && r.date <= pmEnd) pmEndCash -= (r.out || 0);
@@ -8742,7 +8771,7 @@ function groupWeeklyRowsByMid(rows, amtField) {
  * **선택한 주차의 월요일부터** 8주를 그린다. 주간 리포트는 주차를 앞뒤로 넘겨 보는 화면이라
  * "그 주에 잔액이 어떻게 흘렀고 앞으로 어디로 가는가" 를 그 자리에서 보게 하는 게 목적이다.
  *
- * ⚠ 기준을 대시보드 추이 차트(renderCashChart)와 **똑같이** 맞춘다 — INIT_CASH + FX_ADJ 에
+ * ⚠ 기준을 대시보드 추이 차트(renderCashChart)와 **똑같이** 맞춘다 — 기초 + FX_ADJ 에
  *   실제 입출금을 누적한다. 여기서 따로 계산하면 같은 날 잔액이 두 화면에서 다르게 나온다.
  * ⚠ 확정/궤적의 경계는 **오늘**이다(선택 주차의 끝이 아니다). 과거 주차를 보면 구간 전체가
  *   확정이고, 미래 주차를 보면 전체가 궤적이다.
@@ -8838,7 +8867,7 @@ function renderWeeklyCashChart(wStart) {
 
   const today = todayKST();
   computeFxAdj();
-  const S = computeWeeklyCashSeries(wStart, cfData, INIT_CASH, FX_ADJ, today, WKRPT_HORIZON_DAYS, fxAdjAt(addDays(wStart, -1)));
+  const S = computeWeeklyCashSeries(wStart, cfData, initCashEff(), FX_ADJ, today, WKRPT_HORIZON_DAYS, fxAdjAt(addDays(wStart, -1)));
   const { dates, from, to, actVals, projVals, actDelta, planDelta } = S;
 
   const floor = dlFloor();
@@ -9027,11 +9056,11 @@ function renderAssetMixChart() {
   for (let d = from; d <= today; d = addDays(d, 1)) dates.push(d);
 
   computeFxAdj();
-  /* 현금 — 추이 차트와 같은 기준(INIT_CASH + FX_ADJ + 실제 입출금) */
+  /* 현금 — 추이 차트와 같은 기준(기초 + FX_ADJ + 실제 입출금) */
   const cashDelta = {};
   /* ⚠ 조정 전 기준선. 날짜별 환산조정은 아래 누적 루프에서 fxAdjTail 로 뺀다 —
      이 차트는 연초부터 그리므로 상수로 얹으면 1~6월이 통째로 약 1.26억 낮게 나왔다. */
-  let cashBase = INIT_CASH + FX_ADJ;
+  let cashBase = initCashEff() + FX_ADJ;
   for (const r of (cfData || [])) {
     if (!r.date) continue;
     const v = r.status === '실제 입금' ? (r.in || 0) : (r.status === '실제 지출' ? -(r.out || 0) : 0);
@@ -9173,7 +9202,7 @@ function renderWeeklyReport() {
 
   // 기말 잔액 계산 (INIT_CASH + 누적 실제 입출금)
   computeFxAdj();          // 주간 리포트 기말잔액도 현금 KPI 와 같은 기준으로 맞춘다
-  let pwEndCash = INIT_CASH + FX_ADJ, wkEndCash = INIT_CASH + FX_ADJ;
+  let pwEndCash = initCashEff() + FX_ADJ, wkEndCash = initCashEff() + FX_ADJ;
   for (const r of cfData) {
     if (r.status === '실제 입금' && r.date <= pwEnd) pwEndCash += (r.in  || 0);
     if (r.status === '실제 지출' && r.date <= pwEnd) pwEndCash -= (r.out || 0);
@@ -10327,7 +10356,7 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
        * initCash = initCashRaw + fxAdj 로 같은 처리를 한다. 한쪽만 바꾸면 미리보기와
        * 실제 발송 메일의 숫자가 갈린다. */
       computeFxAdj();
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, INIT_CASH + FX_ADJ, _previewSummaryData);
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, initCashEff() + FX_ADJ, _previewSummaryData);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(String(previewHtml));
@@ -10404,7 +10433,7 @@ function renderRegularReport(){
 
   /* ⚠ 여기도 cash 는 ref(보고기준일) 까지 누적한다. 아래 루프 뒤에서 fxAdjTail 로 보정한다. */
   computeFxAdj();
-  var cash=INIT_CASH + FX_ADJ, inMTD=0, outMTD=0, inPrev=0;
+  var cash=initCashEff() + FX_ADJ, inMTD=0, outMTD=0, inPrev=0;
   var inDaily={}, outDaily={};
   for(var k=0;k<cfData.length;k++){ var r=cfData[k];
     var rin=Number(r.in||0), rout=Number(r.out||0);

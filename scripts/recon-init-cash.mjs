@@ -30,6 +30,20 @@ const call=async(b)=>{
   }
 };
 const won=(n)=>Math.round(n).toLocaleString('ko-KR');
+/* ⚠ CF_START(settings.cf_start) 도입 후로는 기초잔액을 그대로 쓰면 안 된다.
+   INIT_CASH 는 **시작일의 개시 잔액**이고, 누적 루프가 그 이전 행까지 더하므로 그만큼을
+   미리 걷어내야 한다 — index.html 의 initCashEff() 와 같은 계산이다. */
+const initCashEff = (INIT, CF, rows) => {
+  if (!CF) return INIT;
+  let pre = 0;
+  for (const r of rows) {
+    if (!r || !r.date || String(r.date) >= CF) continue;
+    if (r.status === '실제 입금') pre += (Number(r.in) || 0);
+    else if (r.status === '실제 지출') pre -= (Number(r.out) || 0);
+  }
+  return INIT - pre;
+};
+
 
 const m=await call({inspect:{from:'2026-01-01',to:'2026-01-01',meta:['settings','bank_snapshot','fx_adjust_base']}});
 const INIT=m.meta.settings.init_cash, BS=m.meta.bank_snapshot;
@@ -51,11 +65,14 @@ if(DROP.size) for(const r of all.filter(r=>DROP.has(r._id))) console.log(`  제�
 
 let FXSUM=0; for(const r of kept) if(r.fx_usd) FXSUM+=(r.in||0)-(r.out||0);
 const FXADJ=Math.round(BS.fxKrw-(PRE+FXSUM));
+const CF=String(m.meta.settings.cf_start||'').slice(0,10);
+const EFF=initCashEff(INIT, CF, kept);
 let S=0; for(const r of kept){ if(r.date>AT) continue; if(r.status==='실제 입금') S+=r.in; else if(r.status==='실제 지출') S-=r.out; }
 
 console.log(`\npre_krw ${won(PRE)}${PRE!==PRE_CUR?` (현재 ${won(PRE_CUR)} 에서 변경 가정)`:''}`);
 console.log(`Σ(fx_usd) ${won(FXSUM)}  →  FX_ADJ = ${won(BS.fxKrw)} − (${won(PRE)} + ${won(FXSUM)}) = ${won(FXADJ)}`);
 console.log(`Σ(실거래 ≤ ${AT}) ${won(S)}`);
 console.log(`\n은행 스냅샷 totalCash (${BS.asOf.slice(0,10)}) ${won(BS.totalCash)}`);
-console.log(`현 init_cash ${won(INIT)} 로 계산한 ${AT} 잔액 = ${won(INIT+FXADJ+S)}  (차 ${won(INIT+FXADJ+S-BS.totalCash)})`);
+console.log(`cf_start ${CF||'(없음)'} · 실효기초 ${won(EFF)}`);
+console.log(`현 init_cash ${won(INIT)} 로 계산한 ${AT} 잔액 = ${won(EFF+FXADJ+S)}  (차 ${won(EFF+FXADJ+S-BS.totalCash)})`);
 console.log(`\n➡ 맞추려면 init_cash = ${won(BS.totalCash-S-FXADJ)}`);

@@ -255,24 +255,36 @@ Deno.serve(async (req) => {
    * ⚠ 일부러 화이트리스트로 막는다. "cat_data 아무 키나 쓰기"로 만들면 이 함수가
    *   SERVICE_ROLE 범용 쓰기 도구가 되고, 오타 한 번에 학습 매핑·일별설정이 날아간다.
    *   새 경로가 필요해지면 여기 명시적으로 추가할 것.
-   * ⚠ 숫자만 받는다. 값 종류를 늘리면 검증이 헐거워진다.
+   * ⚠ 기본은 숫자만 받는다. 예외는 DATE_PATHS(settings.cf_start) 뿐이고 YYYY-MM-DD 형식을
+   *   검사한다. 값 종류를 더 늘리면 검증이 헐거워진다.
    * 낙관적 잠금: 읽은 version 일 때만 쓴다(mergeMidToBig 와 같은 규칙). */
   if (setMeta) {
     /* 화이트리스트. 새 경로가 필요하면 여기 명시적으로 추가한다 — 범용 쓰기로 만들지 않는다.
        · fx_adjust_base.unbooked_loss — FX_ADJ 중 '실현됐으나 손익 미기표' 인 금액.
          대시보드 잔액 대조 카드가 이 값을 읽어 환산손익 줄에 근거로 표시한다. 현금 계산에는
          전혀 쓰지 않는다(표시 전용). 0 을 넣으면 표시가 사라진다.
-         산출 근거·재현: docs/fx-loss-booking-analysis.md · scripts/verify-fx-loss-booking.mjs */
-    const ALLOWED = new Set(["settings.init_cash", "fx_adjust_base.pre_krw", "fx_adjust_base.unbooked_loss"]);
+         산출 근거·재현: docs/fx-loss-booking-analysis.md · scripts/verify-fx-loss-booking.mjs
+       · settings.cf_start — 현금 시계열 시작일(YYYY-MM-DD). 이 날짜 이전 행은 현금 계산에서
+         제외되고, settings.init_cash 가 **그 날짜의 실제 개시 잔액**이 된다. 빈 문자열이면 해제. */
+    const ALLOWED = new Set(["settings.init_cash", "fx_adjust_base.pre_krw", "fx_adjust_base.unbooked_loss", "settings.cf_start"]);
     const dry = body?.dry === true;
     try {
-      const plan: Array<{ key: string; field: string; path: string; next: number }> = [];
+      /* 날짜 문자열만 허용하는 경로. settings.cf_start 는 현금 시계열 시작일이라 숫자가 아니다.
+         이 경로만 예외로 YYYY-MM-DD 를 받고, 형식이 안 맞으면 거부한다. */
+      const DATE_PATHS = new Set(["settings.cf_start"]);
+      const plan: Array<{ key: string; field: string; path: string; next: number | string }> = [];
       const bad: string[] = [];
       for (const [path, raw] of Object.entries(setMeta)) {
         if (!ALLOWED.has(path)) { bad.push(`${path} (허용 경로 아님)`); continue; }
+        const [key, field] = path.split(".");
+        if (DATE_PATHS.has(path)) {
+          const d = str(raw);
+          if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) { bad.push(`${path} (YYYY-MM-DD 아님: ${d})`); continue; }
+          plan.push({ key, field, path, next: d });     // 빈 문자열 = 시작일 해제
+          continue;
+        }
         const n = Number(raw);
         if (!Number.isFinite(n)) { bad.push(`${path} (숫자 아님: ${String(raw)})`); continue; }
-        const [key, field] = path.split(".");
         plan.push({ key, field, path, next: Math.round(n) });
       }
       if (bad.length) {
@@ -297,7 +309,8 @@ Deno.serve(async (req) => {
             (arr[0].data && typeof arr[0].data === "object") ? { ...arr[0].data }
             : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : {});
           const before = data[p.field];
-          if (Number(before) === p.next) {
+          const same = (typeof p.next === "string") ? (str(before) === p.next) : (Number(before) === p.next);
+          if (same) {
             changes.push({ path: p.path, before, after: p.next, note: "변경 없음(이미 같은 값)" });
             break;
           }
