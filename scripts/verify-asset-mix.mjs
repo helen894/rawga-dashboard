@@ -17,9 +17,11 @@
  *   · Edge inspect 는 cf 를 `rows` 로, AR 을 `ar` 로 준다. `rows||ar` 로 읽으면 cf 가 AR 로
  *     들어와 채권이 0 으로 나온다 — 처음에 이렇게 틀렸다.
  *   · `rows` 는 500건에서 잘리는데 `matched` 는 전체를 알려준다. 그래서 구간을 재귀로 쪼갠다.
- *   · 현금의 **절대값은 여기서 못 만든다** — INIT_CASH + FX_ADJ 가 필요하고, FX_ADJ 는 cf 행의
- *     fx_usd 플래그가 있어야 계산되는데 Edge inspect 가 그 필드를 잘라낸다. 그래서 현금은
- *     base=0 상대값으로만 비교한다(상수는 두 구간에 똑같이 더해지므로 ②에는 영향 없음).
+ *   · 현금의 **절대값은 여기서 안 만든다** — base=0 상대값으로만 비교한다(상수는 두 구간에
+ *     똑같이 더해지므로 ②에는 영향 없음). 종전엔 Edge inspect 가 fx_usd 를 잘라내 계산이
+ *     불가능했지만, 2026-08-22 에 그 필드가 추가되고 meta 로 settings·bank_snapshot·
+ *     fx_adjust_base 까지 읽히면서 지금은 가능하다 —
+ *     **현금 절대값·환산조정 검증은 scripts/verify-asset-mix-fx.mjs 담당**이다.
  *
  * 쓰는 법: node scripts/verify-asset-mix.mjs
  *   TODAY 를 바꾸려면 아래 상수를 고친다(과거 시점 재현용).
@@ -126,4 +128,6 @@ const rTot=B.byRule; const est=rTot.fifo+rTot.due+rTot.fallback;
 console.log(`\n채권 회수일 추정: 실제 ${eok(rTot.actual)}억 · FIFO ${eok(rTot.fifo)}억 · 예정+9 ${eok(rTot.due)}억 · 발생+30 ${eok(rTot.fallback)}억 (추정합 ${eok(est)}억)`);
 const arRemain=ar.reduce((s,r)=>s+(r.remaining!=null?r.remaining:(r.expected||0)-(r.collected||0)),0);
 console.log(`불변식 — 마지막날 채권 ${B.ar.toLocaleString()} vs ar_data 미회수합 ${Math.round(arRemain).toLocaleString()}  차 ${(B.ar-Math.round(arRemain)).toLocaleString()}`);
+/* ⚠ 이 숫자를 '통장이 마이너스였다'로 읽지 말 것. base=0 상대값이라 절대 상황과 부합하지 않는다.
+   실제 절대 원화 기준 음수일은 verify-asset-mix-fx.mjs 가 셀다 — 2026-08-23 fxAdjAt 도입 후 0일이다. */
 console.log(`\n현금 음수일(base=0 상대값이라 실제 음수 여부는 아님): 연초구간 ${B.neg.length}일`);
