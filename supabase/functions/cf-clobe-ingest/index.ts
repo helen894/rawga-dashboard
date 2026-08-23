@@ -22,6 +22,12 @@
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at?, set_clobe_id? }], midToBig?:{중분류:대분류} }
  *   • 분할 { secret, split:[{ clobe_id | _id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
+ *   • 기준값 { secret, setMeta:{ "settings.init_cash": 숫자, "fx_adjust_base.pre_krw": 숫자 }, dry? }
+ *     기초잔액·환산조정 기준값만 고치는 좁은 경로다. **화이트리스트에 있는 경로만** 쓴다 —
+ *     cat_data 전체를 SERVICE_ROLE 로 자유롭게 쓰게 만들지 않으려는 의도다.
+ *     ⚠ 이 둘은 서로 얽혀 있다: FX_ADJ = fxKrw − (pre_krw + Σfx) 이므로 pre_krw 를 낮추면
+ *       잔액이 같은 만큼 올라간다. 따로 뽑은 값을 같이 넣으면 그 차이가 이중반영된다.
+ *       scripts/recon-init-cash.mjs 로 **함께** 계산한 값을 넣을 것.
  *
  * 왜 patch 가 따로 있나: push 는 clobe_id 중복을 skip 하므로 재실행으로는 이미 적재된 행의
  * 분류를 못 고친다. 대분류는 대시보드가 catMidToBig[중분류] 로 파생하므로, 새 중분류를
@@ -237,6 +243,89 @@ Deno.serve(async (req) => {
   const splitList = Array.isArray(body?.split) ? body.split : [];
   const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
     ? body.midToBig as Record<string, string> : null;
+  const setMeta = (body?.setMeta && typeof body.setMeta === "object" && !Array.isArray(body.setMeta))
+    ? body.setMeta as Record<string, unknown> : null;
+
+  /* ── 기준값 수정 모드 ──
+   * cat_data 는 RLS 때문에 publishable 키로 읽지도 쓰지도 못한다. 조회는 inspect.meta 로
+   * 뚫었지만 쓰기는 mid_to_big 병합밖에 없었다. 기초잔액(init_cash)·환산조정 기준(pre_krw)을
+   * 고치려면 대시보드에 로그인해 화면에서 눌러야 했고, 스크립트로 역산한 값을 그대로
+   * 반영할 수단이 없었다.
+   *
+   * ⚠ 일부러 화이트리스트로 막는다. "cat_data 아무 키나 쓰기"로 만들면 이 함수가
+   *   SERVICE_ROLE 범용 쓰기 도구가 되고, 오타 한 번에 학습 매핑·일별설정이 날아간다.
+   *   새 경로가 필요해지면 여기 명시적으로 추가할 것.
+   * ⚠ 숫자만 받는다. 값 종류를 늘리면 검증이 헐거워진다.
+   * 낙관적 잠금: 읽은 version 일 때만 쓴다(mergeMidToBig 와 같은 규칙). */
+  if (setMeta) {
+    const ALLOWED = new Set(["settings.init_cash", "fx_adjust_base.pre_krw"]);
+    const dry = body?.dry === true;
+    try {
+      const plan: Array<{ key: string; field: string; path: string; next: number }> = [];
+      const bad: string[] = [];
+      for (const [path, raw] of Object.entries(setMeta)) {
+        if (!ALLOWED.has(path)) { bad.push(`${path} (허용 경로 아님)`); continue; }
+        const n = Number(raw);
+        if (!Number.isFinite(n)) { bad.push(`${path} (숫자 아님: ${String(raw)})`); continue; }
+        const [key, field] = path.split(".");
+        plan.push({ key, field, path, next: Math.round(n) });
+      }
+      if (bad.length) {
+        return json({ ok: false, error: `거부: ${bad.join(", ")}`, allowed: [...ALLOWED] }, 400);
+      }
+      if (!plan.length) return json({ ok: false, error: "setMeta 가 비었습니다" }, 400);
+
+      const changes: Array<Record<string, unknown>> = [];
+      for (const p of plan) {
+        for (let attempt = 1; ; attempt++) {
+          const getRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/cat_data?select=*&key=eq.${p.key}&limit=1`,
+            { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+          );
+          if (!getRes.ok) throw new Error(`cat_data(${p.key}) 읽기 실패: ${getRes.status}`);
+          const arr = await getRes.json();
+          /* 없으면 만들지 않는다 — mergeMidToBig 와 같은 이유. 여기서 만들면 대시보드가
+             갖고 있던 다른 필드(예: settings 의 다른 설정)가 통째로 사라진다. */
+          if (!arr?.[0]) throw new Error(`cat_data 에 ${p.key} 행이 없습니다 — 대시보드에서 한 번 저장한 뒤 다시 시도하세요.`);
+          const version = arr[0].version;
+          const data: Record<string, unknown> =
+            (arr[0].data && typeof arr[0].data === "object") ? { ...arr[0].data }
+            : (typeof arr[0].data === "string" ? JSON.parse(arr[0].data) : {});
+          const before = data[p.field];
+          if (Number(before) === p.next) {
+            changes.push({ path: p.path, before, after: p.next, note: "변경 없음(이미 같은 값)" });
+            break;
+          }
+          if (dry) {
+            changes.push({ path: p.path, before, after: p.next, note: "dry — 쓰지 않음" });
+            break;
+          }
+          data[p.field] = p.next;
+          const cond = (version === undefined || version === null) ? "" : `&version=eq.${version}`;
+          const res = await fetch(`${SUPABASE_URL}/rest/v1/cat_data?key=eq.${p.key}${cond}`, {
+            method: "PATCH",
+            headers: {
+              apikey: SERVICE_ROLE,
+              Authorization: `Bearer ${SERVICE_ROLE}`,
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          if (!res.ok) throw new Error(`cat_data(${p.key}) 저장 실패: ${res.status}`);
+          const updated = await res.json();
+          if (Array.isArray(updated) && updated.length > 0) {
+            changes.push({ path: p.path, before, after: p.next });
+            break;
+          }
+          if (attempt >= 4) throw new Error(`cat_data(${p.key}) 동시 수정 충돌 — 4회 재시도 실패. 대시보드를 닫고 다시 시도하세요.`);
+        }
+      }
+      return json({ ok: true, mode: dry ? "setMeta(dry)" : "setMeta", changes });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
 
   /* ── 조회 모드 ── 분류를 고치기 전에 대상 행과 현재 상태를 확인한다(_id 선택자도 여기서 얻는다).
    * status·recur_id 도 반환한다(2026-08-14 추가) — 종전엔 이 둘이 빠져 있어 조회 스크립트로
@@ -494,7 +583,7 @@ Deno.serve(async (req) => {
   }
 
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action (push / inspect / patch / split)" }, 400);
+    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
