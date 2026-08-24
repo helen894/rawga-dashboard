@@ -11,12 +11,17 @@
  * 왜 검증이 필요한가: 재적재(push)가 clobe_id 로 찾은 행의 금액을 갱신하지 않는다는
  *   전제 위에 서 있다. 그 전제가 깨지면 분할이 조용히 되돌아간다.
  *
- * 검사하는 불변식 4개:
- *   ① cf_data 행수 1,599 — 분할로 2행 늘어난 상태가 유지되는가
- *   ② 실제 입출금 누계 270,388,360 — 분할은 금액을 보존해야 한다(현금 총액 불변)
- *   ③ fx_usd 표시 행 순증 76,422,317 — 떼낸 행도 fx_usd 를 물려받아야 한다
- *   ④ 역산 FX_ADJ -125,767,193 — 분할은 환산손익을 바꾸지 않는다
- *   추가: 7/9 자금이동 순액 0, 외환차손 합계 18,010,000
+ * 검사하는 불변식 (전부 **구조적** — 데이터가 늘어도 안 깨진다):
+ *   ① 7/9 외화측 출금 2건이 각각 745,945,000 (분할 후 남은 금액)
+ *   ② 외환차손 2건이 각각 9,005,000, 합 18,010,000, 둘 다 fx_usd 표시
+ *   ③ 745,945,000 + 9,005,000 = 754,950,000 (원금액 보존)
+ *   ④ 외환차손 행에 clobe_id 가 없다 — push 중복판정과 충돌하지 않는 조건
+ *   ⑤ 7/9 자금이동 순액 0
+ *
+ * ⚠ 처음엔 'cf_data 행수 1,599 · 입출금 누계 270,388,360 · FX_ADJ -125,767,193' 을
+ *   단정했는데 **잘못된 종류의 검사**였다. 2025년 백필과 init_cash/pre_krw 재산출로
+ *   행수가 2,061 이 되자 분할과 무관한 이유로 전부 실패해 거짓 경보가 됐다(2026-08-24).
+ *   스냅샷 값이 아니라 분할이 지켜야 하는 관계만 검사한다.
  *
  * ⚠ 이 분할은 FX_ADJ 를 고치지 않는다. FX_ADJ -1.26억은 7월 KB 외화계좌를 통과한
  *   USD 3.84M 의 입·출 환율 차이(1,539.7 vs 1,507.1)에서 나오고, 근본 해결은
@@ -45,19 +50,21 @@ const grab=async(f,t,d0=0)=>{ const r=await post({inspect:{from:f,to:t,...(meta?
 for(const [f,t] of [['2020-01-01','2025-12-31'],['2026-01-01','2026-06-30'],['2026-07-01','2027-12-31']]) await grab(f,t);
 const cf=[...seen.values()];
 const TODAY='2026-08-22';
-const exp={rows:1599, deltas:270388360, fxSum:76422317, fxAdj:-125767193};
-let sum=0; for(const r of cf){ if(!r.date||r.date>TODAY)continue;
-  if(r.status==='실제 입금') sum+=(r.in||0); else if(r.status==='실제 지출') sum-=(r.out||0); }
-const fxSum=cf.filter(r=>r.fx_usd===true).reduce((s,r)=>s+((r.in||0)-(r.out||0)),0);
-const INIT=Number(meta.settings?.init_cash)||0, snap=Number(meta.bank_snapshot?.totalCash)||0;
-const fxAdj=snap-INIT-sum;
-const chk=(name,got,want)=>console.log(`${got===want?'✅':'❌'} ${name.padEnd(26)} ${won(got).padStart(16)}  (기대 ${won(want)})`);
-console.log('=== 불변식 ===');
-chk('cf_data 행수', cf.length, exp.rows);
-chk('실제 입출금 누계', Math.round(sum), exp.deltas);
-chk('fx_usd 표시 행 순증', Math.round(fxSum), exp.fxSum);
-chk('역산 FX_ADJ', Math.round(fxAdj), exp.fxAdj);
-
+const KEEP=745945000, SPAWN=9005000, ORIG=754950000;
+const chk=(name,got,want)=>{ const ok=got===want;
+  console.log(`${ok?'✅':'❌'} ${name.padEnd(30)} ${won(got).padStart(15)}  (기대 ${won(want)})`); return ok; };
+let pass=true;
+console.log('=== 불변식 (구조적) ===');
+const keeps=cf.filter(r=>r.date==='2026-07-09'&&r.big_cat==='자금이동'&&r.fx_usd===true);
+pass = chk('7/9 외화측 분할 행 수', keeps.length, 2) && pass;
+for(const r of keeps) pass = chk(`  남은 금액 (clobe ${r.clobe_id})`, Math.round(r.out), KEEP) && pass;
+const fxl=cf.filter(r=>r.big_cat==='영업외비용'&&r.mid_cat==='외환차손');
+pass = chk('외환차손 행 수', fxl.length, 2) && pass;
+for(const r of fxl) pass = chk('  떼낸 금액', Math.round(r.out), SPAWN) && pass;
+pass = chk('외환차손 합계', fxl.reduce((t,r)=>t+Math.round(r.out),0), SPAWN*2) && pass;
+pass = chk('원금액 보존 (남김+떼냄)', KEEP+SPAWN, ORIG) && pass;
+pass = chk('외환차손 중 fx_usd 표시', fxl.filter(r=>r.fx_usd===true).length, 2) && pass;
+pass = chk('외환차손 중 clobe_id 있는 행', fxl.filter(r=>String(r.clobe_id||'').trim()).length, 0) && pass;
 console.log('\n=== 2026-07-09 자금이동 균형 ===');
 const d9=cf.filter(r=>r.date==='2026-07-09'&&r.big_cat==='자금이동');
 const net9=d9.reduce((s,r)=>s+((r.in||0)-(r.out||0)),0);
@@ -65,11 +72,12 @@ for(const r of d9.sort((a,b)=>Math.abs((b.in||0)-(b.out||0))-Math.abs((a.in||0)-
   console.log(`  ${won((r.in||0)-(r.out||0)).padStart(16)} fx=${r.fx_usd?'✔':'✘'} ${(r.mid_cat||'-').padEnd(9)} ${String(r.desc||'').slice(0,16)}`);
 console.log(`  ${net9===0?'✅':'❌'} 자금이동 순액 ${won(net9)} (기대 0)`);
 
-console.log('\n=== 새로 잡힌 외환차손 ===');
-const fx=cf.filter(r=>r.big_cat==='영업외비용'&&r.mid_cat==='외환차손');
-for(const r of fx) console.log(`  ${r.date}  ${won(-(r.out||0)).padStart(14)}  fx=${r.fx_usd?'✔':'✘'}  ${String(r.desc||'').slice(0,44)}`);
-const fxTot=fx.reduce((s,r)=>s+(r.out||0),0);
-console.log(`  ${fxTot===18010000?'✅':'❌'} 합계 ${won(fxTot)} (기대 18,010,000)`);
+console.log(`
+외환차손 행 ${fxl.length}건`);
+for(const r of fxl) console.log(`  ${r.date}  ${won(-(r.out||0)).padStart(14)}  fx=${r.fx_usd?'✔':'✘'}  ${String(r.desc||'').slice(0,44)}`);
+console.log(`
+${pass?'✅ 전부 통과':'❌ 실패 있음'} — cf_data ${cf.length}행 (행수는 계속 늘어나므로 단정하지 않는다)`);
+if(!pass) process.exitCode=1;
 console.log('\n=== 영업외비용 대분류 2026년 순액 ===');
 const ob=cf.filter(r=>r.big_cat==='영업외비용'&&r.date>='2026-01-01'&&r.date<=TODAY&&(r.status==='실제 입금'||r.status==='실제 지출'));
 console.log(`  ${won(ob.reduce((s,r)=>s+((r.in||0)-(r.out||0)),0))} (${ob.length}건)`);

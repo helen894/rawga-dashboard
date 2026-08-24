@@ -123,6 +123,14 @@
   .fresh-panel-head { font-size: 11.5px; font-weight: 700; color: var(--text2); margin-bottom: 9px; }
   .fresh-chips { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .fresh-panel-foot { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); }
+  /* 총자산 추이 차트의 범례 토글 버튼 */
+  .mix-lg { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 11px;
+            font-weight: 400; line-height: 1.5; padding: 3px 9px; border-radius: 999px;
+            border: 1px solid var(--border); background: transparent; color: var(--text);
+            cursor: pointer; transition: opacity .12s; }
+  .mix-lg:hover { background: var(--bg3); }
+  .mix-lg.off { opacity: .42; text-decoration: line-through; }
+  .mix-sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
 
   /* 좁은 화면에서는 신선도 배지를 숨긴다 — 기초잔액·보고 기준일은 매일 손대는 입력칸이라
      폭 우선권을 준다. 새 버전 알림(#app-version-alert)은 눌러야 하는 일이라 남긴다. */
@@ -777,12 +785,16 @@
        2026-08-22 에 리포팅 주간에서 여기로 옮겼다(자산 구성은 주간 보고보다 대시보드에 맞다). -->
   <div class="chart-row" style="grid-template-columns:1fr">
     <div class="chart-box" id="asset-mix-box">
-      <div class="chart-title" style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <span>📊 현금 · 매출채권 · 사업투입 추이</span>
-        <small id="asset-mix-range" style="color:var(--text3);font-weight:400"></small>
-        <span id="asset-mix-note" style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--text3)"></span>
+      <div class="chart-title" style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <span>📊 현금 · 매출채권 · 사업투입 추이</span>
+          <small id="asset-mix-range" style="color:var(--text3);font-weight:400"></small>
+          <div style="font-size:11.5px;font-weight:400;color:var(--text3);margin-top:3px">일별 잔액 · 아래에서 위로 누적 · 범례를 눌러 계열을 켜고 끌 수 있습니다</div>
+        </div>
+        <div id="asset-mix-legend" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
-      <div class="chart-wrap" style="height:260px">
+      <div id="asset-mix-note" style="font-size:11.5px;color:var(--text3);margin:6px 0 2px"></div>
+      <div class="chart-wrap" style="height:280px">
         <canvas id="assetMixChart" role="img" aria-label="현금·매출채권·세종F2·라오스 잔액을 각각 일별로 그린 영역 차트. 쌓지 않고 겹쳐 그린다">자산별 추이</canvas>
       </div>
     </div>
@@ -9013,7 +9025,14 @@ function arDailyDelta(arRows, cfRows, today) {
   const isD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
   const norm = p => String(p || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '');
   const delta = {}, byRule = { actual: 0, fifo: 0, due: 0, fallback: 0 };
-  const bump = (d, v) => { if (d) delta[d] = (delta[d] || 0) + v; };
+  /* up/down — 툴팁의 '당일 거래' 에 발생·회수를 따로 보여주려고 나눠 담는다(2026-08-24).
+     delta 는 순액이라 "발생 5억 · 회수 5억" 과 "거래 없음" 을 구분할 수 없다. */
+  const up = {}, down = {};
+  const bump = (d, v) => {
+    if (!d) return;
+    delta[d] = (delta[d] || 0) + v;
+    if (v > 0) up[d] = (up[d] || 0) + v; else if (v < 0) down[d] = (down[d] || 0) - v;
+  };
 
   const deps = (cfRows || []).filter(r => r.status === '실제 입금' && (r.in || 0) > 0)
     .map(r => ({ date: r.date, left: r.in || 0, t: norm((r.mid_cat || '') + (r.desc || '')) }))
@@ -9044,7 +9063,7 @@ function arDailyDelta(arRows, cfRows, today) {
       bump(d, -left); byRule[rule] += left;
     }
   }
-  return { delta, byRule };
+  return { delta, up, down, byRule };
 }
 
 /* ═══ 현금 · 매출채권 · 사업투입 추이 · 일별 ═════════════════════════════
@@ -9081,7 +9100,7 @@ function renderAssetMixChart() {
 
   computeFxAdj();
   /* 현금 — 추이 차트와 같은 기준(기초 + FX_ADJ + 실제 입출금) */
-  const cashDelta = {};
+  const cashDelta = {}, cashIn = {}, cashOut = {};   // in/out 은 툴팁 '당일 거래' 용
   /* ⚠ 조정 전 기준선. 날짜별 환산조정은 아래 누적 루프에서 fxAdjTail 로 뺀다 —
      이 차트는 연초부터 그리므로 상수로 얹으면 1~6월이 통째로 약 1.26억 낮게 나왔다. */
   let cashBase = initCashEff() + FX_ADJ;
@@ -9090,7 +9109,11 @@ function renderAssetMixChart() {
     const v = r.status === '실제 입금' ? (r.in || 0) : (r.status === '실제 지출' ? -(r.out || 0) : 0);
     if (!v) continue;
     if (r.date < from) cashBase += v;
-    else if (r.date <= today) cashDelta[r.date] = (cashDelta[r.date] || 0) + v;
+    else if (r.date <= today) {
+      cashDelta[r.date] = (cashDelta[r.date] || 0) + v;
+      if (v > 0) cashIn[r.date] = (cashIn[r.date] || 0) + v;
+      else       cashOut[r.date] = (cashOut[r.date] || 0) - v;
+    }
   }
   /* 세종F2·라오스 — 지출 누적(투자액) */
   const invDelta = { '세종시': {}, '라오스': {} };
@@ -9105,11 +9128,13 @@ function renderAssetMixChart() {
     else if (r.date <= today) invDelta[c][r.date] = (invDelta[c][r.date] || 0) + v;
   }
   /* 매출채권 */
-  const arDelta = arDailyDelta(arData, cfData, today).delta;   // byRule 은 안내문을 지운 뒤로 쓰지 않는다
+  const arRes = arDailyDelta(arData, cfData, today);            // byRule 은 안내문을 지운 뒤로 쓰지 않는다
+  const arDelta = arRes.delta, arUp = arRes.up, arDn = arRes.down;
   let arBase = 0;
   for (const d of Object.keys(arDelta)) if (d < from) arBase += arDelta[d];
 
   const cash = [], ar = [], sej = [], lao = [];
+  let negDays = 0;      // 쌓아 그리므로 음수가 생기면 그림이 깨진다 — 생기면 콘솔에 알린다
   let c1 = cashBase, a1 = arBase, s1 = invBase['세종시'], l1 = invBase['라오스'];
   for (const d of dates) {
     c1 += (cashDelta[d] || 0);
@@ -9125,11 +9150,16 @@ function renderAssetMixChart() {
        클로브 실제 일별잔액과의 평균 오차도 1.02억 → 126만원으로 줄었다.
        (차트에 마이너스 안내를 띄웠다가 2026-08-22 사용자 요청으로 지운 이력이 있다 —
         그 안내가 가리켰던 현상 자체가 버그였다) */
+    if (c1adj < 0) negDays++;
     cash.push(Math.round(c1adj));
     ar.push(Math.round(a1));
     sej.push(Math.round(s1));
     lao.push(Math.round(l1));
   }
+  /* ⚠ 누르지 않는다(클램프 없음). fxAdjAt 도입(2026-08-23) 이후 음수일은 0 이고, 종전 40일
+     음수는 오늘자 환산조정을 과거에 얹은 버그였다. 다시 음수가 나오면 데이터 회귀이므로
+     그림을 조용히 고치지 말고 콘솔로 알린다 — 쌓아 그리는 지금은 눈에도 바로 띈다. */
+  if (negDays) console.warn(`[asset-mix] 현금 음수 ${negDays}일 — 누적 스택이 깨집니다. 환산조정/적재 회귀 확인 필요`);
   const tail = arr => arr[arr.length - 1] || 0;
   const eok = v => (Number(v || 0) / 1e8).toFixed(1);
 
@@ -9137,44 +9167,96 @@ function renderAssetMixChart() {
   document.getElementById('asset-mix-note').textContent =
     `단위 억원 — 현금 ${eok(tail(cash))} · 채권 ${eok(tail(ar))} · 세종 ${eok(tail(sej))} · 라오스 ${eok(tail(lao))}`;
   if (assetMixChartInst) assetMixChartInst.destroy();
-  /* 영역 차트지만 **쌓지 않는다**(2026-08-22 사용자 요청). 각 계열이 0 부터 자기 값까지
-     따로 칠해지므로 넷이 겹친다 — 그래서 알파를 아주 낮게(0x24 ≈ 14%) 준다. 선이 주고
-     칠은 크기 감만 보조한다. 알파를 올리면 바닥 구간에서 넷이 겹쳐 갈색으로 뭉갠다. */
-  const set = (label, data, col, dash) => ({ label, data, borderColor: col, backgroundColor: col + '24',
-    borderWidth: 1.8, pointRadius: 0, fill: true, tension: 0.1, ...(dash ? { borderDash: dash } : {}) });
+
+  /* 당일 거래 문구 — 참고 대시보드(계정 원장 기반)는 차변/대변을 보여주지만 우리는 현금흐름
+     분류라 차·대가 없다. 성격에 맞게 입/출·발생/회수·지출로 바꿨다. 움직이지 않은 계열은
+     아예 넣지 않는다(참고 차트와 같은 방식). */
+  const wm = v => !v ? '0' : (v >= 1e8 ? `${(v / 1e8).toFixed(2)}억` : `${Math.round(v / 1e4).toLocaleString()}만`);
+  const dayLine = (i) => {
+    const d = dates[i], p = [];
+    const ci = cashIn[d] || 0, co = cashOut[d] || 0;
+    if (ci || co) p.push(`현금 입 ${wm(ci)}/출 ${wm(co)}`);
+    const au = arUp[d] || 0, ad = arDn[d] || 0;
+    if (au || ad) p.push(`채권 발생 ${wm(au)}/회수 ${wm(ad)}`);
+    const so = invDelta['세종시'][d] || 0; if (so) p.push(`세종 지출 ${wm(so)}`);
+    const lo = invDelta['라오스'][d] || 0; if (lo) p.push(`라오스 지출 ${wm(lo)}`);
+    return p.length ? `당일 거래 · ${p.join(' · ')}` : '당일 거래 없음';
+  };
+
+  /* ⚠ **아래에서 위로 누적**한다(2026-08-24 사용자 결정, 안 B).
+   *   순서 = 현금 → 매출채권 → 세종F2 → 라오스. datasets[0] 이 맨 아래다.
+   *   현금을 맨 아래 둔 이유: 3/18·5/21 투자 유입이 바닥에서 전체를 밀어 올리는 모습으로
+   *   보인다 — 참고 대시보드가 보통예금을 맨 아래 두는 것과 같은 구조다.
+   *   '큰 값부터(채권 아래)' 안도 같이 검토했는데, 그러면 현금(전체의 3%)이 맨 위 얇은 띠가
+   *   되어 자금 대시보드에서 가장 중요한 계열이 안 보인다.
+   * ⚠ 쌓으면 맨 위 선이 곧 4계열 합(약 239억)이다. 툴팁에 '합계' 라벨은 넣지 않는다
+   *   (2026-08-22 사용자 요청) — 성격이 섞인 합이라 회계적 의미가 없기 때문이다.
+   *   겹쳐 그릴 때 축이 160억이었던 게 239억으로 올라간다. */
+  const set = (label, data, col) => ({ label, data, borderColor: col, backgroundColor: col + 'CC',
+    borderWidth: 1, pointRadius: 0, fill: true, tension: 0.1 });
   assetMixChartInst = new Chart(cv.getContext('2d'), {
     type: 'line',
-    /* ⚠ 순서 = 그리는 순서 = z-순서. 큰 계열을 앞에 둬야 작은 계열이 위로 올라와 안 가려진다.
-       실측 최고값: 채권 159.6억 > 현금 94.3 > 세종 70.4 > 라오스 12.0 (2026 연초~8/22). */
-    data: { labels: dates.map(d => d.slice(2).replace(/-/g, '/')), datasets: [
-      set('매출채권', ar, '#eb6834', [6, 4]),
+    data: { labels: dates.slice(), datasets: [
       set('현금', cash, '#2a78d6'),
-      set('세종F2', sej, '#1baf7a', [2, 3]),
-      set('라오스', lao, '#eda100', [10, 3]),
+      set('매출채권', ar, '#eb6834'),
+      set('세종F2', sej, '#1baf7a'),
+      set('라오스', lao, '#eda100'),
     ] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478' } },
+        legend: { display: false },      // 아래에서 직접 만든 토글 버튼을 쓴다
         tooltip: {
-          /* 합계는 일부러 안 보여준다 — 이 차트의 목적은 "현금이 어디로 옮겨갔나" 라서
-             네 층을 더한 값은 의미가 없다(가진 돈 2층 + 쓴 돈 2층을 더하는 셈이고
-             대출도 안 빠진다). 2026-08-22 사용자 요청으로 제거. */
           callbacks: {
+            title: it => it[0].label,
             label: c2 => `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
+            footer: it => dayLine(it[0].dataIndex),
           },
           backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
-          footerColor: '#1a1d2e', borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
+          footerColor: '#5a6478', borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1, padding: 9,
+          footerFont: { size: 10.5, weight: '400' },
         },
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
-             grid: { display: true, color: 'rgba(0,0,0,0.06)' } },     // 세로 격자선(2026-08-22 요청)
-        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        /* 월이 바뀌는 첫 지점에만 '5월' 식으로 찍는다. autoSkip 을 켜두면 그 지점이 잘려
+           라벨이 사라지므로 반드시 끈다. */
+        x: { stacked: true,
+             ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: false, maxRotation: 0,
+                      callback: (v, i) => {
+                        const m = dates[i] ? dates[i].slice(5, 7) : '';
+                        const pm = i > 0 && dates[i - 1] ? dates[i - 1].slice(5, 7) : '';
+                        return m && m !== pm ? `${Number(m)}월` : '';
+                      } },
+             grid: { display: true, color: 'rgba(0,0,0,0.06)' } },
+        y: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
       },
     },
   });
+
+  /* 범례를 직접 만든다 — Chart.js 기본 범례도 클릭으로 켜고 꺼지지만 그걸 아무도 모른다.
+     네 층이 쌓여 있어 얇은 계열(라오스 12억)은 혼자 켜서 보는 게 사실상 유일한 방법인데
+     발견이 안 됐다. 버튼 모양 + 부제 안내로 드러낸다(참고 대시보드가 쓰는 방식).
+     렌더마다 다시 만든다 — renderCharts 가 여러 번 불릴 수 있어 누적되면 안 된다. */
+  const lg = document.getElementById('asset-mix-legend');
+  if (lg) {
+    lg.innerHTML = '';
+    assetMixChartInst.data.datasets.forEach((ds, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mix-lg';
+      b.setAttribute('aria-pressed', 'true');
+      b.innerHTML = html`<span class="mix-sw" style="background:${ds.borderColor}"></span>${ds.label}`;
+      b.onclick = () => {
+        const on = assetMixChartInst.isDatasetVisible(i);
+        assetMixChartInst.setDatasetVisibility(i, !on);
+        assetMixChartInst.update();
+        b.classList.toggle('off', on);
+        b.setAttribute('aria-pressed', on ? 'false' : 'true');
+      };
+      lg.appendChild(b);
+    });
+  }
 }
 
 function renderWeeklyReport() {
