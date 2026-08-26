@@ -775,7 +775,7 @@
 
   <div class="chart-row" style="grid-template-columns:1fr">
     <div class="chart-box">
-      <div class="chart-title">일별 현금 잔액 추이·궤적 <small id="chart-date-range"></small></div>
+      <div class="chart-title">💰 일별 현금 잔액 추이·궤적 <small id="chart-date-range"></small></div>
       <div class="chart-wrap" style="height:240px"><canvas id="cashChart" role="img" aria-label="일별 현금잔액 추이 차트">현금잔액 추이</canvas></div>
     </div>
   </div>
@@ -9192,19 +9192,60 @@ function renderAssetMixChart() {
    * ⚠ 쌓으면 맨 위 선이 곧 4계열 합(약 239억)이다. 툴팁에 '합계' 라벨은 넣지 않는다
    *   (2026-08-22 사용자 요청) — 성격이 섞인 합이라 회계적 의미가 없기 때문이다.
    *   겹쳐 그릴 때 축이 160억이었던 게 239억으로 올라간다. */
-  const set = (label, data, col) => ({ label, data, borderColor: col, backgroundColor: col + 'CC',
-    borderWidth: 1, pointRadius: 0, fill: true, tension: 0.1 });
+  /* ── 색 (2026-08-24, 브랜드 정합 · 안 2 '현금 강조') ──────────────────────
+   * 종전 #2a78d6/#eb6834/#1baf7a/#eda100 은 범용 팔레트라 대시보드(자연 톤 그린)와
+   * 이질적이었다. 브랜드 토큰에서 다시 가져왔다.
+   * ⚠ 브랜드 6색을 그대로는 쓸 수 없었다 — 딥그린 #314840 은 채도 0.032 로 **회색으로
+   *   읽혀** 계열색이 못 된다(UI 색이라 그렇다). 틸·소프트그린·퍼플도 채도 0.09 대로
+   *   하한(0.1) 미달이었다. 그래서 색조만 유지하고 채도를 올렸다.
+   * ⚠ **테라코타(#C24A38)와 오커(#9E6A15)는 나란히 두면 안 된다** — 정상 시력에서도
+   *   구분도 ΔE 10.6 으로 기준(15) 미달이다. 지금은 사이에 세종(초록)이 끼어 성립한다.
+   *   **계열 순서를 바꾸면 이 조건이 깨진다.**
+   * ⚠ 색약 여유가 세종↔채권 ΔE 6.1(경고 대역)이라 **끝점 직접 라벨이 필수 조건**이다.
+   *   라벨을 지우면 색만으로는 구분이 보장되지 않는다.
+   * ⚠ 현금 초록·채권 테라코타는 대시보드에서 증가/감소를 뜻하는 의미색과 겹친다.
+   *   브랜드 톤을 맞추려면 사실상 유일한 선택이라 감수하기로 했다(2026-08-24 사용자 결정).
+   * 칠 농도는 '현금 강조' — 현금 85%, 나머지 18% + 얇은 선. 자금 대시보드라 현금이
+   * 주인공이고 나머지 셋은 배경 맥락으로 둔다. */
+  const SERIES = [
+    { label: '현금',     data: cash, col: '#2A7F57', fill: 'D9', bw: 2.5 },   // --green
+    { label: '매출채권', data: ar,   col: '#C24A38', fill: '2E', bw: 1.5 },   // --red (테라코타)
+    { label: '세종F2',   data: sej,  col: '#00785E', fill: '2E', bw: 1.5 },   // 브랜드 틸 채도보정
+    { label: '라오스',   data: lao,  col: '#9E6A15', fill: '2E', bw: 1.5 },   // --amber (오커)
+  ];
+  /* 끝점 직접 라벨 — 위 주석대로 색약 대비의 보조 부호다. 장식이 아니라 접근성 요건. */
+  const endLabels = {
+    id: 'assetMixEndLabels',
+    afterDatasetsDraw(ch) {
+      const x = ch.ctx;
+      x.save();
+      x.font = '600 10px Pretendard, system-ui, sans-serif';
+      x.textBaseline = 'middle';
+      x.textAlign = 'right';
+      ch.data.datasets.forEach((ds, i) => {
+        if (!ch.isDatasetVisible(i)) return;
+        const m = ch.getDatasetMeta(i), pt = m.data[m.data.length - 1];
+        if (!pt) return;
+        x.fillStyle = ds.borderColor;
+        x.fillText(`${ds.label} ${eok(tail(SERIES[i].data))}`, pt.x - 3, pt.y - 8);
+      });
+      x.restore();
+    },
+  };
+  /* 월이 바뀌는 첫 지점만 세로선 — 요청한 세로 격자선(2026-08-22)을 유지하면서
+     시간축에 세로선을 촘촘히 두지 않는 원칙과 절충한 것이다. */
+  const isMonthStart = (i) => !!dates[i] && (i === 0 || dates[i].slice(5, 7) !== dates[i - 1].slice(5, 7));
   assetMixChartInst = new Chart(cv.getContext('2d'), {
     type: 'line',
-    data: { labels: dates.slice(), datasets: [
-      set('현금', cash, '#2a78d6'),
-      set('매출채권', ar, '#eb6834'),
-      set('세종F2', sej, '#1baf7a'),
-      set('라오스', lao, '#eda100'),
-    ] },
+    plugins: [endLabels],
+    data: { labels: dates.slice(), datasets: SERIES.map(x => ({
+      label: x.label, data: x.data, borderColor: x.col, backgroundColor: x.col + x.fill,
+      borderWidth: x.bw, pointRadius: 0, fill: true, tension: 0.1,
+    })) },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      layout: { padding: { right: 6, top: 4 } },     // 끝점 라벨이 잘리지 않게
       plugins: {
         legend: { display: false },      // 아래에서 직접 만든 토글 버튼을 쓴다
         tooltip: {
@@ -9213,23 +9254,24 @@ function renderAssetMixChart() {
             label: c2 => `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
             footer: it => dayLine(it[0].dataIndex),
           },
-          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
-          footerColor: '#5a6478', borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1, padding: 9,
-          footerFont: { size: 10.5, weight: '400' },
+          backgroundColor: '#ffffff', titleColor: '#1B2B30', bodyColor: '#1B2B30',
+          footerColor: '#55655D', borderColor: 'rgba(49,72,64,0.18)', borderWidth: 1, padding: 9,
+          titleFont: { size: 12 }, bodyFont: { size: 11.5 }, footerFont: { size: 10.5, weight: '400' },
+          boxWidth: 9, boxHeight: 9,
         },
       },
       scales: {
         /* 월이 바뀌는 첫 지점에만 '5월' 식으로 찍는다. autoSkip 을 켜두면 그 지점이 잘려
            라벨이 사라지므로 반드시 끈다. */
         x: { stacked: true,
-             ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: false, maxRotation: 0,
-                      callback: (v, i) => {
-                        const m = dates[i] ? dates[i].slice(5, 7) : '';
-                        const pm = i > 0 && dates[i - 1] ? dates[i - 1].slice(5, 7) : '';
-                        return m && m !== pm ? `${Number(m)}월` : '';
-                      } },
-             grid: { display: true, color: 'rgba(0,0,0,0.06)' } },
-        y: { stacked: true, ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+             ticks: { color: '#94A296', font: { size: 9.5, family: 'Pretendard, system-ui' },
+                      autoSkip: false, maxRotation: 0,
+                      callback: (v, i) => isMonthStart(i) ? `${Number(dates[i].slice(5, 7))}월` : '' },
+             grid: { display: true, color: 'rgba(49,72,64,0.10)',
+                     lineWidth: (c) => isMonthStart(c.index) ? 1 : 0 } },
+        y: { stacked: true, ticks: { color: '#94A296', font: { size: 9.5, family: 'Pretendard, system-ui' },
+                                     maxTicksLimit: 4, callback: v => fmtM(v) },
+             grid: { color: 'rgba(49,72,64,0.10)' } },
       },
     },
   });
