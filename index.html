@@ -11215,9 +11215,28 @@ function recurDupExists(date, desc, inAmt, outAmt, recurId) {
   );
 }
 
+/* 반복 항목의 `biz` — 지급일이 주말이면 옮긴다. 'prev' 직전 영업일 / 'next' 다음 영업일 /
+   없으면 안 옮김(종전 동작). 급여는 'prev' 다(2026-08-24 사용자 결정) — 5월 사례처럼
+   10일 일요일이면 8일 금요일에 나갔고, 자금이 더 이른 날 나가는 쪽으로 잡는 게 보수적이다.
+   ⚠ **공휴일은 처리하지 않는다.** 주말만 본다. 공휴일까지 맞추려면 연도별 표를 유지해야
+     하는데 그 표가 낡으면 조용히 틀리므로, 지금은 범위를 주말로 명확히 한정한다.
+     설·추석·어린이날처럼 10일 근처에 공휴일이 오는 달은 예정일이 하루이틀 어긋난다. */
+function shiftOffWeekend(ymd, mode) {
+  if (mode !== 'prev' && mode !== 'next') return ymd;
+  let d = ymd;
+  for (let i = 0; i < 4; i++) {
+    const w = new Date(d + 'T00:00:00').getDay();
+    if (w !== 0 && w !== 6) return d;
+    d = addDays(d, mode === 'prev' ? -1 : 1);
+  }
+  return d;
+}
+
 function generateRecurring(showToastMsg = true) {
   if (!recurData.length) return 0;
-  const today = new Date().toISOString().slice(0,10);
+  /* ⚠ 종전엔 new Date().toISOString() 이었다 — UTC 라 KST 00~09시에는 하루 전 날짜가 나와
+     당월 생성 판정(rec.day >= todayDay)이 어긋날 수 있었다. todayKST() 로 바꿨다. */
+  const today = todayKST();
   const todayDay = parseInt(today.slice(8,10));
   const [ty, tm] = today.split('-').map(Number);
   const months = parseInt(localStorage.getItem('recur_months') || '3');
@@ -11234,7 +11253,8 @@ function generateRecurring(showToastMsg = true) {
       while (nm > 12) { nm -= 12; ny++; }
       const last = new Date(ny, nm, 0).getDate();
       const day = Math.min(rec.day, last);
-      const targetDate = `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      const targetDate = shiftOffWeekend(
+        `${ny}-${String(nm).padStart(2,'0')}-${String(day).padStart(2,'0')}`, rec.biz);
       // 이미 지난 날짜는 생성 안 함
       if (targetDate < today) continue;
       // R-1: recur_id 기반 중복 체크 (없으면 desc/금액 기반 fallback)
@@ -11250,7 +11270,7 @@ function generateRecurring(showToastMsg = true) {
         amount: (rec.in||0) - (rec.out||0),
         type, status, mid_cat: mid, big_cat: getBigCat(mid),
         recur_id:  rec._id  || null, // R-1: 반복 거래 추적 ID
-        recur_day: rec.day  || null, // 디버깅/표시용 원본 반복일
+        recur_day: rec.day  || null, // 디버깅/표시용 원본 반복일 (주말 조정 전)
       }));
       added++;
     }

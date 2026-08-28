@@ -21,6 +21,7 @@
  *     meta: true → settings·bank_snapshot / meta: ["키",…] → 그 cat_data 키들(읽기 전용)
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at?, set_clobe_id? }], midToBig?:{중분류:대분류} }
  *   • 분할 { secret, split:[{ clobe_id | _id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
+ *   • 반복거래 { secret, setRecur:{ mode:"replace"|"append", items:[{day,desc,in,out,mid_cat,memo?,biz?}] }, dry? }
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *   • 기준값 { secret, setMeta:{ "settings.init_cash": 숫자, "fx_adjust_base.pre_krw": 숫자 }, dry? }
  *     기초잔액·환산조정 기준값만 고치는 좁은 경로다. **화이트리스트에 있는 경로만** 쓴다 —
@@ -241,6 +242,8 @@ Deno.serve(async (req) => {
     ? body.inspect as Record<string, unknown> : null;
   const patchList = Array.isArray(body?.patch) ? body.patch : [];
   const splitList = Array.isArray(body?.split) ? body.split : [];
+  const setRecur = (body?.setRecur && typeof body.setRecur === "object" && !Array.isArray(body.setRecur))
+    ? body.setRecur as Record<string, unknown> : null;
   const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
     ? body.midToBig as Record<string, string> : null;
   const setMeta = (body?.setMeta && typeof body.setMeta === "object" && !Array.isArray(body.setMeta))
@@ -437,6 +440,83 @@ Deno.serve(async (req) => {
     }
   }
 
+  /* ── 반복거래 등록 ── cat_data.recur_data 를 쓴다.
+   *   { secret, setRecur:{ mode:"replace"|"append", items:[…] }, dry? }
+   *
+   * 왜 setMeta 로 안 하나: setMeta 는 스칼라 화이트리스트다(숫자·날짜). recur_data 는
+   *   객체 배열이라 형식 검증이 다르다. 섞으면 setMeta 의 단순한 계약이 깨진다.
+   *
+   * ⚠ cat_data 는 publishable 키로 못 읽고 못 쓴다(RLS). 그래서 대시보드 UI 밖에서
+   *   반복거래를 등록할 방법이 아예 없었다 — 2026-08-24 급여 등록 때 필요해져 추가.
+   * ⚠ 항목별 검증: day 1~31 · desc 필수 · in/out 중 정확히 하나만 양수 · biz 는
+   *   ""|"prev"|"next". 하나라도 어긋나면 **아무것도 쓰지 않는다**(부분 적용 금지).
+   * ⚠ 예정 행을 만드는 건 대시보드의 generateRecurring() 이다. 여기서는 규칙만 저장한다 —
+   *   사용자가 대시보드를 열면 그때 예정 행이 생성된다. */
+  if (setRecur) {
+    try {
+      const dry = body?.dry === true;
+      const mode = str(setRecur.mode) || "append";
+      if (mode !== "replace" && mode !== "append") {
+        return json({ ok: false, error: 'mode 는 "replace" 또는 "append"' }, 400);
+      }
+      const items = Array.isArray(setRecur.items) ? setRecur.items : [];
+      if (!items.length) return json({ ok: false, error: "items 가 비었습니다" }, 400);
+
+      const clean: any[] = [], bad: string[] = [];
+      items.forEach((raw: any, i: number) => {
+        const tag = `items[${i}]`;
+        const day = Math.round(Number(raw?.day));
+        const desc = str(raw?.desc).trim();
+        const inA = Math.round(Number(raw?.in) || 0);
+        const outA = Math.round(Number(raw?.out) || 0);
+        const biz = str(raw?.biz);
+        if (!Number.isFinite(day) || day < 1 || day > 31) { bad.push(`${tag}.day (1~31 아님)`); return; }
+        if (!desc) { bad.push(`${tag}.desc 비었음`); return; }
+        if ((inA > 0) === (outA > 0)) { bad.push(`${tag} in/out 중 정확히 하나만 양수여야 함`); return; }
+        if (inA < 0 || outA < 0) { bad.push(`${tag} 음수 금액`); return; }
+        if (biz && biz !== "prev" && biz !== "next") { bad.push(`${tag}.biz 는 ""|"prev"|"next"`); return; }
+        clean.push({
+          _id: str(raw?._id) || `rc_${Date.now().toString(36)}_${i}_${Math.random().toString(36).slice(2, 8)}`,
+          day, desc, in: inA, out: outA,
+          mid_cat: str(raw?.mid_cat), memo: str(raw?.memo),
+          ...(biz ? { biz } : {}),
+        });
+      });
+      if (bad.length) return json({ ok: false, error: `거부: ${bad.join(" · ")}` }, 400);
+
+      const getRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/cat_data?select=*&key=eq.recur_data&limit=1`,
+        { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+      );
+      if (!getRes.ok) throw new Error(`recur_data 읽기 실패: ${getRes.status}`);
+      const arr = await getRes.json();
+      const row = arr?.[0];
+      const cur: any[] = Array.isArray(row?.data) ? row.data
+        : (typeof row?.data === "string" ? JSON.parse(row.data) : []);
+      const next = mode === "replace" ? clean : [...cur, ...clean];
+
+      if (dry) {
+        return json({ ok: true, mode: "setRecur(dry)", willWrite: next.length, before: cur.length, items: clean });
+      }
+      const method = row ? "PATCH" : "POST";
+      const url = row
+        ? `${SUPABASE_URL}/rest/v1/cat_data?key=eq.recur_data`
+        : `${SUPABASE_URL}/rest/v1/cat_data`;
+      const putRes = await fetch(url, {
+        method,
+        headers: {
+          apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}`,
+          "Content-Type": "application/json", Prefer: "return=minimal",
+        },
+        body: JSON.stringify(row ? { data: next } : { key: "recur_data", data: next }),
+      });
+      if (!putRes.ok) throw new Error(`recur_data 쓰기 실패: ${putRes.status} ${await putRes.text()}`);
+      return json({ ok: true, mode: "setRecur", written: next.length, added: clean.length, before: cur.length, items: clean });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
+
   /* ── 분할 모드 ── 한 행을 두 행으로 쪼갠다. **금액 보존을 서버가 강제한다.**
    *   { secret, split:[{ clobe_id|_id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
    *
@@ -601,7 +681,7 @@ Deno.serve(async (req) => {
   }
 
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta)" }, 400);
+    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta / setRecur)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
