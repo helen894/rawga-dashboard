@@ -144,7 +144,12 @@ function getSecret_() {
   return s;
 }
 
-function norm_(s) { return String(s == null ? '' : s).toLowerCase().replace(/\s+/g, '').trim(); }
+/* 헤더·탭 이름 비교용 정규화. 공백 제거 + 소문자 + **역슬래시 제거**.
+   ⚠ 2026-09-04: '숯 (확장)' 탭 헤더가 실제로 'BL양도금액(한화)\' 였다(끝에 역슬래시).
+     설정은 'BL양도금액(한화)' 라서 헤더를 못 찾고 그 거래처가 통째 0건이 됐다.
+     이 한글 헤더들에서 역슬래시는 의미를 가질 일이 없으니(오타·복붙 잔여물) 여기서 지운다.
+     시트 쪽 역슬래시를 지워도 계속 매칭되므로 나중에 정리해도 안전하다. */
+function norm_(s) { return String(s == null ? '' : s).toLowerCase().replace(/\s+/g, '').split(String.fromCharCode(92)).join('').trim(); }
 
 function num_(v) {
   if (v === '' || v == null) return 0;
@@ -332,7 +337,12 @@ function parseTab_(sh, cfg) {
         var cs = String(cv == null ? '' : cv).trim();
         if (cs && isNaN(Number(cs))) txt.push(cs);
       }
-      if (txt.length > hintN) { hintN = txt.length; hint = txt.slice(0, 12).join(' | '); }
+      /* ⚠ 2026-09-04: 종전 slice(0,12) 이 '숯 (확장)' 13번째 열(BL양도금액 수취일)을 잘라내서,
+         힌트만 보고 '그 열은 없다' 고 잘못 판단했다. 한도를 올리고 잘렸으면 반드시 표시한다. */
+      if (txt.length > hintN) {
+        hintN = txt.length;
+        hint = txt.slice(0, 24).join(' | ') + (txt.length > 24 ? ' | …(총 ' + txt.length + '열)' : '');
+      }
     }
     return { records: [], note: '⚠ 헤더(예상회수액=' + cfgNames_(cfg.expected).join('/') + ') 못 찾음' +
              (hint ? ' · 이 탭에서 헤더처럼 보이는 행: [' + hint + ']' : ''), anomalies: [] };
