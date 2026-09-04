@@ -108,6 +108,22 @@ function recRemaining_(r) {
   return (r.remaining !== undefined) ? r.remaining : (r.expected - r.collected);
 }
 
+/* 탭 이름 → 설정 찾기. 정확히 일치를 먼저 보고, 없으면 공백·대소문자를 무시해 다시 찾는다.
+   ⚠⚠ 2026-09-04: '숯 (확장)' 은 TAB_CONFIG 에 넣었는데도 '설정 없음' 으로 건너뛰어졌다.
+     TAB_CONFIG[name] 은 완전 일치라, 눈에 안 보이는 차이(괄호 앞 공백 유무, 줄바꿈 없는 공백
+     U+00A0, 전각 괄호 등) 하나로 거래처가 통째 누락된다. 조용한 누락이 이 스크립트의 최악
+     실패라(안전가드 ①이 있는 이유) 공백·대소문자는 무시하고 찾는다.
+     ※ norm_ 은 \s 로 지우므로 U+00A0 도 함께 제거된다. 전각 괄호처럼 글자가 다르면 여전히
+       못 찾고 '설정 없음' 으로 남으니, 그때는 안전가드 ①이 동기화를 막아 준다. */
+function findCfg_(name) {
+  if (TAB_CONFIG[name]) return { cfg: TAB_CONFIG[name], key: name, exact: true };
+  var n = norm_(name), keys = Object.keys(TAB_CONFIG);
+  for (var i = 0; i < keys.length; i++) {
+    if (norm_(keys[i]) === n) return { cfg: TAB_CONFIG[keys[i]], key: keys[i], exact: false };
+  }
+  return null;
+}
+
 /* cfg 필드의 첫 후보 이름(경고 문구·헤더 행 탐색에 쓴다) */
 function cfgNames_(want) {
   if (!want) return [];
@@ -489,9 +505,10 @@ function parseAll_() {
   sheets.forEach(function (sh) {
     var name = sh.getName();
     if (EXCLUDE_TABS.indexOf(name) >= 0) return;
-    var cfg = TAB_CONFIG[name];
-    if (!cfg) { skipped.push(name); report.push('· ' + name + ' : (설정 없음 — 건너뜀)'); return; }
-    configured[name] = true;
+    var found = findCfg_(name);
+    if (!found) { skipped.push(name); report.push('· ' + name + ' : (설정 없음 — 건너뜀)'); return; }
+    var cfg = found.cfg;
+    configured[found.key] = true;
     var res = parseTab_(sh, cfg);
     if (res.fifo && res.fifo.changed) fifoTabs.push(name + '(' + res.fifo.moved + '행)');
     if (res.anomalies && res.anomalies.length) anomalies = anomalies.concat(res.anomalies);
@@ -500,7 +517,8 @@ function parseAll_() {
     var sumR = res.records.reduce(function (s, r) { return s + recRemaining_(r); }, 0);
     report.push('· ' + name + ' : ' + res.records.length + '건, 예상 ' + Math.round(sumE).toLocaleString() +
                 ' / 회수 ' + Math.round(sumC).toLocaleString() +
-                ' / 미회수 ' + Math.round(sumR).toLocaleString() + ' — ' + res.note);
+                ' / 미회수 ' + Math.round(sumR).toLocaleString() + ' — ' + res.note +
+                (found.exact ? '' : ' 🔤탭 이름 불일치(공백 무시해 매칭): 시트 "' + name + '" ↔ 설정 "' + found.key + '"'));
     records = records.concat(res.records);
   });
 
