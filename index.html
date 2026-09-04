@@ -7490,7 +7490,15 @@ function daysBetween(startDate, endDate) {
 }
 function calcARStatusAndRisk(ar, baseDate) {
   const remaining = Number(ar.remaining || 0);
-  const due   = ar.due_date || '';
+  /* 날짜 모양이 아닌 예정일은 '없음'으로 본다.
+     ⚠ 2026-09-04: ar_data 에 due_date 가 '.' (마침표 한 글자)인 CNA 행이 실제로 있다.
+       빈값이 아니므로 '미정' 분기를 안 타고, 문자열 비교에서 '2026-09-04' > '.' 가 true 라
+       '지연' 으로 잡힌 뒤 daysBetween 이 NaN 을 내서 경과일이 'NaN일' 로 찍힌다.
+       그 행은 지금 미회수 0 이하(완료)라 화면에 안 나오지만, 회수액이 바뀌면 바로 드러난다.
+       고칠 자리는 여기다 — 동기화 쪽 fmtDate_ 에서 ''로 바꾸면 start 열의 쓰레기 문자열까지
+       빈값이 되어 '증빙 없음' 규칙이 행을 떨어뜨리고, 방금 맞춘 전체현황 대조가 깨질 수 있다. */
+  const dueRaw = ar.due_date || '';
+  const due   = /^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? dueRaw : '';
   const start = ar.start    || '';
   if (remaining <= 0) return { status: '완료',  riskLevel: '',    basisDays: 0, elapsed: 0 };
   if (!due)           { const d = start ? daysBetween(start, baseDate) : 0;
