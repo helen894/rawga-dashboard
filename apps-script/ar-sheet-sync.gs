@@ -308,16 +308,35 @@ function parseTab_(sh, cfg) {
   var values = sh.getDataRange().getValues();
   if (!values.length) return { records: [], note: '빈 시트' };
 
-  // 헤더 행 찾기: expected 헤더 후보 중 하나가 들어있는 행 (상단 20행 내)
+  /* 헤더 행 찾기: expected 헤더 후보 중 하나가 들어있는 행.
+     ⚠ 2026-09-04: 종전 '상단 20행' 제한 때문에 '숯 (확장)' 탭이 '헤더 못 찾음' 으로 0건이 됐다
+       (표 위에 제목·합계·빈 행이 20행 넘게 쌓여 있는 탭이 있다. 로가온만 해도 헤더가 9행이다).
+       탐색 비용은 무시할 만하고, 못 찾으면 어차피 실패 처리라 범위를 넉넉히 100행으로 둔다.
+       같은 탭에 표가 여러 개면 스캔 중 재검출로 따라간다(아래 참고). */
   var expNames = cfgNames_(cfg.expected).map(norm_);
   var headerRow = -1, colMap = {};
-  for (var r = 0; r < Math.min(values.length, 20); r++) {
+  for (var r = 0; r < Math.min(values.length, 100); r++) {
     var rowNorm = values[r].map(norm_);
     var found = false;
     for (var e = 0; e < expNames.length; e++) if (rowNorm.indexOf(expNames[e]) >= 0) { found = true; break; }
     if (found) { headerRow = r; colMap = mapCols_(rowNorm, cfg); break; }
   }
-  if (headerRow < 0) return { records: [], note: '⚠ 헤더(예상회수액=' + cfgNames_(cfg.expected).join('/') + ') 못 찾음', anomalies: [] };
+  if (headerRow < 0) {
+    /* 왜 못 찾았는지 바로 짚을 수 있게 '헤더처럼 보이는 행'(텍스트 셀이 가장 많은 행)을 같이 남긴다.
+       글자가 미묘하게 다른 경우(전각 괄호 등)는 이 문구를 보고 TAB_CONFIG 후보를 추가하면 된다. */
+    var hint = '', hintN = 0;
+    for (var q = 0; q < Math.min(values.length, 100); q++) {
+      var txt = [];
+      for (var t = 0; t < values[q].length; t++) {
+        var cv = values[q][t];
+        var cs = String(cv == null ? '' : cv).trim();
+        if (cs && isNaN(Number(cs))) txt.push(cs);
+      }
+      if (txt.length > hintN) { hintN = txt.length; hint = txt.slice(0, 12).join(' | '); }
+    }
+    return { records: [], note: '⚠ 헤더(예상회수액=' + cfgNames_(cfg.expected).join('/') + ') 못 찾음' +
+             (hint ? ' · 이 탭에서 헤더처럼 보이는 행: [' + hint + ']' : ''), anomalies: [] };
+  }
   if (colMap.expected === undefined) return { records: [], note: '⚠ 예상회수액 열 못 찾음', anomalies: [] };
   /* ⚠ 설정엔 있는데 헤더에서 못 찾은 열을 경고로 남긴다 — 이게 없어서 회수액이 조용히 0 이 됐다 */
   var missCols = [];
