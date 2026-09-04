@@ -55,7 +55,16 @@ var TAB_CONFIG = {
   '숯 (확장)':       { expected: 'BL양도금액(한화)',    collected: 'BL양도 회수액', remaining: '',      start: '라오스 송금일', due: 'BL양도금액 입금 예정일', collect: 'BL양도금액 수취일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
-  '세진식품':       { expected: '회수예상금액',       collected: '회수금액',     remaining: '미회수금액', start: '송금날짜', due: '회수일정', collect: '' },
+  /* 세진식품 (2026-09-04 사용자 확정) — 한 표에 성격이 다른 두 종류가 섞여 있다:
+       · 실제 채권 2건  : 송금 2026-04-29 / 05-22, 각 5억, 회수예상금액 5억
+       · 회수 예정 5건  : 송금날짜 칸에 **회수 예정일**(08-26 1억 · 09-30 2억 · 10-31 2억 ·
+                          11-30 2억 · 12-31 3억)이 들어가고 '회수금액' 열에 예정액이 적혀 있다.
+     그래서 예정 스케줄이 이미 걷힌 돈으로 집계돼 회수액이 9억 부풀었다(지앤원과 같은 구조 문제).
+     → excludeFutureStart: 회수 예정일이 미래인 행 제외. 지난 08-26 건 1억만 회수로 잡힌다.
+     → remaining 매핑 제거(예상-회수 자동계산). 시트의 '미회수금액' 열이 1억 회수를 반영하지
+        않아 5억+5억=10억 으로 남아 있어서, 그 값을 쓰면 예상-회수(9억)와 어긋난다.
+        자동계산은 전체현황 시트(예상 10억 / 회수 1억 / 미회수 9억)와 3항목 모두 일치한다. */
+  '세진식품':       { expected: '회수예상금액',       collected: '회수금액',     remaining: '',       start: '송금날짜', due: '회수일정', collect: '', excludeFutureStart: true },
   '기타대여금':      { expected: '예상회수액',         collected: '회수액',       remaining: '',       start: '날짜',     due: '',         collect: '' },
 };
 
