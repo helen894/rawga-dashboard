@@ -48,6 +48,11 @@ var TAB_CONFIG = {
   //          원칙: **실제 송금이 나간 건만 채권**(지출일자 없음 = 제외 / 미래 = excludeFutureStart).
   '지앤원':         { expected: '입금예정액(vat포함)', collected: '입금액',      remaining: '',       start: '지출일자', due: '예정입금일', collect: '입금일자', excludeFutureStart: true },
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
+  /* 2026-09 신설 '숯 (확장)' — 라오스 원물수입 건. 기존 '숯' 탭과 헤더가 완전히 다르다
+     (연도/차수/라오스 송금일/BL양도금액…). 탭 이름의 공백까지 정확히 일치해야 매칭된다.
+     ⚠ 002~005 행은 금액이 비고 ETD/ETA 만 1900-01-02 같은 더미 날짜가 박힌 서식 행이라
+       expected=0·collected=0 으로 자동 제외된다(현재 실데이터는 001 한 건뿐). */
+  '숯 (확장)':       { expected: 'BL양도금액(한화)',    collected: 'BL양도 회수액', remaining: '',      start: '라오스 송금일', due: 'BL양도금액 입금 예정일', collect: 'BL양도금액 수취일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
   '세진식품':       { expected: '회수예상금액',       collected: '회수금액',     remaining: '미회수금액', start: '송금날짜', due: '회수일정', collect: '' },
@@ -82,6 +87,12 @@ function mapCols_(rowNorm, cfg) {
   });
   return cm;
 }
+/* 한 행의 미회수액 — 미회수 열이 있는 탭은 그 값, 없으면 (예상-회수).
+   AR_preview 시트에 쓰는 값과 같은 규칙이라 미리보기 요약과 시트가 항상 일치한다. */
+function recRemaining_(r) {
+  return (r.remaining !== undefined) ? r.remaining : (r.expected - r.collected);
+}
+
 /* cfg 필드의 첫 후보 이름(경고 문구·헤더 행 탐색에 쓴다) */
 function cfgNames_(want) {
   if (!want) return [];
@@ -462,7 +473,10 @@ function parseAll_() {
     if (res.anomalies && res.anomalies.length) anomalies = anomalies.concat(res.anomalies);
     var sumE = res.records.reduce(function (s, r) { return s + r.expected; }, 0);
     var sumC = res.records.reduce(function (s, r) { return s + r.collected; }, 0);
-    report.push('· ' + name + ' : ' + res.records.length + '건, 예상 ' + Math.round(sumE).toLocaleString() + ' / 회수 ' + Math.round(sumC).toLocaleString() + ' — ' + res.note);
+    var sumR = res.records.reduce(function (s, r) { return s + recRemaining_(r); }, 0);
+    report.push('· ' + name + ' : ' + res.records.length + '건, 예상 ' + Math.round(sumE).toLocaleString() +
+                ' / 회수 ' + Math.round(sumC).toLocaleString() +
+                ' / 미회수 ' + Math.round(sumR).toLocaleString() + ' — ' + res.note);
     records = records.concat(res.records);
   });
 
@@ -498,13 +512,14 @@ function previewSync() {
   if (out.records.length) {
     var rows = out.records.map(function (r) {
       return [r.partner, r.start, r.expected, r.collected,
-              (r.remaining !== undefined ? r.remaining : (r.expected - r.collected)),
+              recRemaining_(r),
               r.due_date, r.collect_date];
     });
     sh.getRange(2, 1, rows.length, HEAD.length).setValues(rows);
   }
   var totalE = out.records.reduce(function (s, r) { return s + r.expected; }, 0);
   var totalC = out.records.reduce(function (s, r) { return s + r.collected; }, 0);
+  var totalR = out.records.reduce(function (s, r) { return s + recRemaining_(r); }, 0);
   var warn = out.skipped && out.skipped.length
     ? '⚠ 설정이 없어 대시보드에서 빠지는 탭: ' + out.skipped.join(', ') +
       '\n   → TAB_CONFIG에 추가해야 반영됩니다.\n\n'
@@ -522,6 +537,7 @@ function previewSync() {
     anomMsg + warn + fifoMsg +
     '미리보기 (대시보드 변경 없음)\n\n' +
     '총 ' + out.records.length + '건\n예상회수 합계: ' + Math.round(totalE).toLocaleString() + '\n회수 합계: ' + Math.round(totalC).toLocaleString() +
+    '\n미회수 합계: ' + Math.round(totalR).toLocaleString() +
     '\n\n[탭별]\n' + out.report.join('\n') +
     '\n\n※ 결과는 AR_preview 시트에서 행단위로 확인하세요. 이상 없으면 ②동기화 실행.'
   );
