@@ -31,7 +31,7 @@ function grab(name){
   }
   throw new Error('불균형: ' + name);
 }
-const NAMES = ['cardVisibleTail','cardMatchIssuer','cardApprovalByMonth','cardApprovalUpTo',
+const NAMES = ['cardVisibleTail','cardMatchIssuer','cardApprovalDetail','cardMedian','cardApprovalUpTo',
                'cardIngestWatermarkDay','loanShiftToBizDay','normalizeCFRow','normalizeCFAmount',
                'normalizeCFStatus','normalizeCFDate','excelDateToStr','generateCardPlanned'];
 const consts = html.match(/const CARD_PLAN_ISSUERS[\s\S]*?const CARD_PRORATE_MIN_DAYS = \d+;/)[0];
@@ -138,6 +138,33 @@ setup([], '2026-08-05'); api.run(false);
 const r6 = api.cf.find(r => r.card_bill_id==='card_국민' && r.date==='2026-09-15');
 check('평균 사용', r6?.out, AVG);
 check('근거', r6?.card_basis, '최근 3개월 평균');
+
+console.log('');
+console.log('[6b] 일회성 대형 거래는 평균 재료에서 빠진다');
+/* 시나리오: 2026-08-21 고위드 2.57억 실화. 5·6·7월이 평범한데 한 달에 초대형 1건이 섞이면
+   종전 평균은 8배로 튀었다. 여기서는 재료를 5·6·7월로 만들고 7월에 대형 1건을 넣는다.
+   ⚠ 대형 건이 든 달은 '완결월 실적' 으로는 그대로 쓰여야 한다 — 빠지는 건 평균 재료일 때만. */
+api.today = '2026-08-05'; api.cards = CARDS; api.cf = []; api.resetSaves();
+api.tx = [
+  ...['05','06'].map(m => ({ card_no:'************0814', use_date:`2026-${m}-10`, billing_amount:3000000 })),
+  { card_no:'************0814', use_date:'2026-07-10', billing_amount:3000000 },
+  { card_no:'************0814', use_date:'2026-07-21', billing_amount:257287500 },   // 고위드급 1건
+];
+api.run(false);
+/* 8/5 이면 게이트(7일) 미달이라 9/15·10/15 는 평균을 쓴다. 평균 재료 5·6·7월에서 대형 건만 빠져
+   (300만+300만+300만)/3 = 300만 이 나와야 한다. 종전 방식이면 (300만+300만+2억6029만)/3 = 8,876만. */
+const r6b = api.cf.find(r => r.card_bill_id==='card_국민' && r.date==='2026-09-15');
+check('대형건 제외 평균', r6b?.out, 3000000);
+check('근거에 제외 표시', r6b?.card_basis, '최근 3개월 평균(대형 1건 제외)');
+
+console.log('');
+console.log("[6c] 대형 건이 든 달이 완결월 실적이면 그 건을 빼지 않는다");
+/* 8/1 기준이면 7월이 완결월이고 8/15 결제의 대응 사용월이 7월 → 실적 2억 6,329만 이 그대로 나와야 한다.
+   실제로 그날 결제되는 돈이라 빼면 과소계상이다. */
+api.today = '2026-08-01'; api.cf = []; api.resetSaves(); api.run(false);
+const r6c = api.cf.find(r => r.card_bill_id==='card_국민' && r.date==='2026-08-17');   // 8/15=토 → 8/17
+check('실적은 대형건 포함', r6c?.out, 260287500);
+check('근거', r6c?.card_basis, '2026-07 승인액');
 
 console.log('\n[7] 멱등성 — 같은 날 두 번 돌려도 변화 없음');
 setup([]); api.run(false); const first = find()?.out; api.resetSaves(); api.run(false);

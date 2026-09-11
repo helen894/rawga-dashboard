@@ -12182,17 +12182,29 @@ function cardMatchIssuer(txCardNo){
   return hits.length === 1 ? hits[0] : null;
 }
 
-/* 카드사별 월 승인액 합계 — key `YYYY-MM` */
-function cardApprovalByMonth(issuer){
+/* 카드사별 월 승인액 + 그 달의 거래 금액 목록 — 이상치(일회성 대형 거래) 판정에 쓴다.
+   종전 cardApprovalByMonth 는 합계만 줘서 건별 금액을 못 봤고, 그래서 평균에서 대형 건을
+   뺄 수 없었다. 이 함수가 합계·건별을 함께 만들고 그 함수를 대체한다(호출부 없어 제거함). */
+function cardApprovalDetail(issuer){
   const out = {};
   for (const r of (Array.isArray(corpCardTxData) ? corpCardTxData : [])) {
     const c = cardMatchIssuer(r.card_no);
     if (!c || c.issuer !== issuer) continue;
     const k = String(r.use_date || '').slice(0, 7);
     if (!k) continue;
-    out[k] = (out[k] || 0) + (Number(r.billing_amount) || 0);
+    const v = Number(r.billing_amount) || 0;
+    const e = (out[k] = out[k] || { sum: 0, tx: [] });
+    e.sum += v; e.tx.push(v);
   }
   return out;
+}
+
+/* 중앙값 — 짝수 개면 가운데 두 값의 평균. 이상치 임계 계산용. */
+function cardMedian(arr){
+  const s = [...arr].filter(v => Number.isFinite(v)).sort((a,b) => a-b);
+  if (!s.length) return 0;
+  const h = s.length >> 1;
+  return s.length % 2 ? s[h] : (s[h-1] + s[h]) / 2;
 }
 
 /* 한 사용월(`YYYY-MM`)의 1일~throughDay 까지 누적 승인액 — 일할 환산의 분자 */
@@ -12243,14 +12255,47 @@ function generateCardPlanned(showToastMsg = true){
                                     && Number(c.payDay) >= 1 && Number(c.payDay) <= 31);
     if (!cards.length) continue;
     const payDay = Number(cards[0].payDay);
-    const byMonth = cardApprovalByMonth(issuer);
+    const detail  = cardApprovalDetail(issuer);
+    const byMonth = {};
+    for (const k of Object.keys(detail)) byMonth[k] = detail[k].sum;
 
     /* 최근 3개월 평균 — '완결된 달' 만 쓴다(진행 중인 달을 섞으면 평균이 내려앉는다) */
     const doneMonths = Object.keys(byMonth).filter(k => {
       const [y, m] = k.split('-').map(Number);
       return `${y}-${String(m).padStart(2,'0')}-${new Date(y, m, 0).getDate()}` < today;
     }).sort();
-    const recent = doneMonths.slice(-3).map(k => byMonth[k]).filter(v => v > 0);
+
+    /* ⚠ 평균 재료에서 **일회성 대형 거래를 뺀다**.
+       2026-08-21 고위드 2.57억 한 건이 신한 3개월 평균을 1,236만 → 9,812만으로 8배
+       부풀려 11월 예정이 그만큼 과대계상됐다(실측). 평균은 '반복되는 사용 수준' 을 잡는
+       값인데 일회성 대형 건이 섞이면 의미가 없다. 그 건 자체는 **완결월 실적으로 제 날짜에
+       정확히 잡히므로** 빼도 누락이 아니다.
+       ⚠ 임계는 '비중(%)' 이 아니라 **절대 크기**여야 한다 — 사용액이 적은 달은 정상 거래도
+         비중이 커진다(국민 2026-08 최대 건이 합계의 54% 였는데 평범한 거래였다).
+         임계 = 그 카드사의 월 합계 중앙값. 한 건이 한 달치를 넘으면 일회성으로 본다.
+       백테스트(2026-04~08 × 카드사 4곳, 표본 20) 절대오차:
+         3개월 평균(종전)    중앙값 46% · 평균 96% · 최대 553%
+         3개월 중앙값         중앙값 30% · 평균 70% · 최대 446%
+         이상치 제외 후 평균   중앙값 22% · 평균 45% · 최대 172%  ← 세 지표 전부 최고
+       임계 배수도 재봤다(중앙값의 ×1 / ×1.5 / ×2 / ×3 / ×5): ×1 이 22%/45%/172% 로 최적이고
+       배수를 올리면 오차가 다시 커진다. 어느 배수든 고위드는 잡힌다(월 중앙값의 19.4배). */
+    const outlierThr = cardMedian(Object.values(byMonth).filter(v => v > 0));
+    let avgCut = 0;
+    const recent = doneMonths.slice(-3).map(k => {
+      const e = detail[k];
+      if (!e) return 0;
+      if (!(outlierThr > 0)) return e.sum;
+      let keep = 0, cut = 0;
+      /* ⚠ '>' 다. '>=' 로 두면 월 중앙값과 정확히 같은 **정상 거래까지 잘리고**, 그 달 거래가
+         적으면 전부 잘려 아래 가드가 발동해 제외 자체가 무효가 된다(회귀 테스트 [6b]). */
+      for (const v of e.tx) { if (v > outlierThr) cut++; else keep += v; }
+      /* ⚠ 전액 제외는 막는다. 월 사용액이 큰 거래 한 건으로 이뤄진 카드는 그 건이 곧 한 달치라
+         매달 통째로 빠져 평균이 0 이 되고 예정 행이 아예 안 만들어진다 — 회귀 테스트 [6]에서
+         실제로 밟았다. 이 가드 덕분에 임계를 배수 없이 중앙값 그대로 쓸 수 있다. */
+      if (keep <= 0) return e.sum;
+      avgCut += cut;
+      return keep;
+    }).filter(v => v > 0);
     const avg = recent.length ? Math.round(recent.reduce((a,b)=>a+b,0) / recent.length) : 0;
 
     const offsets = [];
@@ -12282,10 +12327,10 @@ function generateCardPlanned(showToastMsg = true){
         const through = cardIngestWatermarkDay(useKey, todayDay - 1);
         const part = through >= CARD_PRORATE_MIN_DAYS ? cardApprovalUpTo(issuer, useKey, through) : 0;
         if (part > 0) { amt = Math.round(part * useLast / through); basis = `${useKey} 일할환산(${through}일)`; }
-        else          { amt = avg; basis = '최근 3개월 평균'; }
+        else          { amt = avg; basis = avgCut > 0 ? `최근 3개월 평균(대형 ${avgCut}건 제외)` : '최근 3개월 평균'; }
       } else {
         amt   = avg;
-        basis = '최근 3개월 평균';
+        basis = avgCut > 0 ? `최근 3개월 평균(대형 ${avgCut}건 제외)` : '최근 3개월 평균';
       }
       if (!(amt > 0)) continue;
 
