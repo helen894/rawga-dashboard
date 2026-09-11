@@ -25,6 +25,9 @@
  *     같은 approval_id 가 이미 있고 **billing_amount 만 달라졌으면 그 금액을 갱신**한다(amended).
  *     해외 결제는 원화 확정액이 나중에 오기 때문 — 예전엔 무조건 skip 이라 낡은 금액이 남았다.
  *     memo·card_alias 는 사람이 손본 값일 수 있어 갱신 대상이 아니다.
+ *     `cancels: ["<approval_id>", ...]` 를 같이 보내면 **그 승인건을 삭제**한다(취소 반영).
+ *     적재 스크립트가 순액 0 인 건을 rows 에서 빼기 때문에, 그 목록을 따로 줘야 Edge 가 안다.
+ *     지운 행은 removedRows 로 돌려준다 — 되돌릴 수 없으니 호출부가 사람에게 보여줘야 한다.
  *   • 수정  { secret, patch: [{approval_id | _id, memo?, billing_amount?}] }
  *     선택자는 approval_id 또는 _id. 수기 업로드분은 approval_id 가 없어 _id 로만 잡힌다
  *     (_id 는 inspect 로 확인). 금액 수정은 청구 확정액으로 맞출 때 쓴다.
@@ -87,16 +90,22 @@ Deno.serve(async (req) => {
   if (!SECRET || body?.secret !== SECRET) return json({ ok: false, error: 'unauthorized' }, 401);
 
   const rows  = Array.isArray(body?.rows)  ? body.rows  : [];
+  /* 취소된 승인건의 approval_id 목록. rows 와 함께 온다(별도 모드 아님).
+     ⚠ 적재 후에 취소된 건은 지금까지 영원히 남았다 — 적재 스크립트가 순액 0 을 rows 에서
+     빼버려 Edge 가 그 존재를 아예 몰랐기 때문이다. 실측(2026-09-11): REMBRANDT SUITES
+     HOTEL 167,771원이 9/1 적재 후 전액취소됐는데 9월 사용액에 그대로 남아 있었다. */
+  const cancels = Array.isArray(body?.cancels)
+    ? [...new Set(body.cancels.map((v: unknown) => String(v ?? '').trim()).filter(Boolean))] : [];
   const patch = Array.isArray(body?.patch) ? body.patch : [];
   const aliasFill = (body?.aliasFill && typeof body.aliasFill === 'object' && !Array.isArray(body.aliasFill))
     ? body.aliasFill as Record<string, unknown> : null;
   const aliasRange = Array.isArray(body?.aliasRange) ? body.aliasRange : [];
   const inspect = (body?.inspect && typeof body.inspect === 'object' && !Array.isArray(body.inspect))
     ? body.inspect as Record<string, unknown> : null;
-  const modes = [rows.length ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : '',
+  const modes = [(rows.length || cancels.length) ? 'rows' : '', patch.length ? 'patch' : '', aliasFill ? 'aliasFill' : '',
     aliasRange.length ? 'aliasRange' : '', inspect ? 'inspect' : ''].filter(Boolean);
   if (modes.length > 1)  return json({ ok: false, error: `모드는 하나만: ${modes.join(', ')}` }, 400);
-  if (modes.length === 0) return json({ ok: false, error: 'rows / patch / aliasFill / aliasRange 없음' }, 400);
+  if (modes.length === 0) return json({ ok: false, error: 'rows / cancels / patch / aliasFill / aliasRange 없음' }, 400);
 
   try {
     // 1) 기존 데이터 읽기
@@ -317,6 +326,30 @@ Deno.serve(async (req) => {
     // 수기 업로드분(approval_id 없음)만 복합키 대상 — 위 주석의 오탈락 방지
     const seenComposite = new Set(cur.filter((r) => !str(r.approval_id)).map(compositeKey));
 
+    /* ── 취소건 제거 ──────────────────────────────────────────────
+       클로브가 '취소(순액 0)' 라고 알려준 승인건이 우리 쪽에 남아 있으면 지운다.
+       ⚠ 되돌릴 수 없다. 그래서 지운 행을 removedRows 로 그대로 돌려준다 — 호출부가
+         사람에게 보여줄 수 있어야 한다(과거 사용액이 줄어드는 일이라 조용히 넘기면 안 된다).
+       ⚠ 읽기가 비었으면 전체가 날아갈 수 있으니 손대지 않는다(patch 와 같은 이유). */
+    let removed = 0;
+    const removedRows: Array<Record<string, unknown>> = [];
+    if (cancels.length && cur.length) {
+      const kill = new Set(cancels);
+      const kept = cur.filter((r) => {
+        const a = str(r.approval_id);
+        if (a && kill.has(a)) {
+          removed++;
+          if (removedRows.length < 50) removedRows.push({
+            approval_id: a, use_date: str(r.use_date), card_no: str(r.card_no),
+            merchant: str(r.merchant), billing_amount: num(r.billing_amount),
+          });
+          return false;
+        }
+        return true;
+      });
+      cur = kept;
+    }
+
     let added = 0, skipped = 0, amended = 0;
     const amendments: Array<Record<string, unknown>> = [];
     const now = Date.now();
@@ -376,7 +409,7 @@ Deno.serve(async (req) => {
     });
     if (!put.ok) throw new Error(`cat_data 저장 실패: ${put.status} ${(await put.text()).slice(0, 200)}`);
 
-    return json({ ok: true, added, skipped, amended, amendments: amendments.slice(0, 50), total: cur.length });
+    return json({ ok: true, added, skipped, amended, amendments: amendments.slice(0, 50), removed, removedRows, total: cur.length });
   } catch (e) {
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);
   }

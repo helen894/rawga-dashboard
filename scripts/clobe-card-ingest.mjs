@@ -342,7 +342,10 @@ const res = await fetch(EDGE, {
     apikey: SUPA_PUBLISHABLE_KEY,
     Authorization: `Bearer ${SUPA_PUBLISHABLE_KEY}`,
   },
-  body: JSON.stringify({ secret, rows }),
+  /* cancels: 클로브가 취소(순액 0)라고 알려준 승인건. rows 에서는 빠지지만 **이미 적재된
+     것을 지우려면** Edge 가 그 목록을 알아야 한다. 안 보내면 적재 후 취소분이 영원히 남는다
+     (2026-09-11 REMBRANDT SUITES HOTEL 167,771원 실측). */
+  body: JSON.stringify({ secret, rows, cancels: cancelled.map(r => String(r.approvalId)).filter(Boolean) }),
 });
 const out = await res.json().catch(() => ({}));
 if (!res.ok || out.ok === false) {
@@ -350,9 +353,15 @@ if (!res.ok || out.ok === false) {
   process.exit(3);
 }
 console.log(`
-적재 완료 — 추가 ${out.added} · 금액 갱신 ${out.amended ?? 0} · 중복 skip ${out.skipped} · 카드내역 총 ${out.total}건`);
+적재 완료 — 추가 ${out.added} · 금액 갱신 ${out.amended ?? 0} · 취소 삭제 ${out.removed ?? 0} · 중복 skip ${out.skipped} · 카드내역 총 ${out.total}건`);
 /* 금액 갱신은 조용히 넘기면 안 된다 — 이미 적재된 과거 숫자가 바뀌는 일이라 사람이 알아야 한다.
    해외 결제 원화 확정액이 늦게 오는 게 정상 사유다(2026-08-18 확인). 국내 건이 바뀌면 이상 신호. */
+if (out.removed > 0) {
+  console.log(`
+⚠ 취소 반영으로 삭제 ${out.removed}건 — 과거 사용액이 그만큼 줄어듭니다:`);
+  for (const r of (out.removedRows || []))
+    console.log(`   ${r.use_date}  ${String(r.merchant).slice(0, 28).padEnd(30)} ${won(r.billing_amount).padStart(11)}  [${r.approval_id}]`);
+}
 if (out.amended > 0) {
   console.log('금액이 바뀐 건:');
   for (const a of (out.amendments || []))
