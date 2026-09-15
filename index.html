@@ -12415,11 +12415,38 @@ function loanMonthlyInterest(L){
   return { amt: loanNum(L.balance) * loanNum(L.rate) / 100 / 12, est: true };
 }
 
+/* 원금을 나눠 갚는 상환방식 — 이 건들은 매월 '이자' 가 아니라 '원리금' 이 나간다.
+   만기일시·마이너스한도는 만기까지 원금 상환이 없어 월 유출 = 월이자다. */
+const LOAN_AMORT = ['원리금균등', '원금분할'];
+function loanIsAmort(L){ return LOAN_AMORT.includes(String(L && L.repay || '')); }
+
+/* 매월 실제로 나가는 돈. 균등상환이면 월상환액(원금+이자), 아니면 월이자.
+   ⚠ 월상환액은 **입력값만** 쓴다(2026-09-15 사용자 결정). 계산으로 채우지 않는 이유:
+     거치기간/상환개시일 필드가 없어 공식이 안 맞는다. 실측 1건(우리 기술보증 1,940,000)으로
+     검증하니 잔액÷잔여기간은 +11.0%, 원금÷전체기간은 -34.8% 어긋났다. 역산하면 잔여 37개월이
+     나오는데 만기까지는 33개월이다 — 거치기간이 빠진 만큼이다.
+     그리고 현재 원리금균등 4건 중 3건은 잔액 = 원금이라 **아직 원금을 한 푼도 안 갚았다**.
+     계산값을 넣으면 안 나가는 돈이 매월 나가는 것처럼 보인다.
+   미입력이면 월이자로 대체하되 summary.amortMissing 으로 개수를 올려 화면에 밝힌다 —
+   조용히 과소 계상되면 자금 계획이 틀어진다. */
+function loanMonthlyOut(L){
+  if(loanIsAmort(L)){
+    const m = loanNum(L.monthly);
+    if(m > 0) return { amt:m, kind:'상환', partial:false };
+    return { amt: loanMonthlyInterest(L).amt, kind:'이자', partial:true };  // 원금분 누락 상태
+  }
+  return { amt: loanMonthlyInterest(L).amt, kind:'이자', partial:false };
+}
+
 function loanSummary(){
   let bal=0, mi=0, miCalc=0, maxRate=0, maxRateBank='', minRate=null, immN=0, immSum=0, nextDue=null, nextDday=null;
+  let fixedOut=0, amortN=0, amortMissing=0;
   for(const L of loanData){
     const b=loanNum(L.balance), r=loanNum(L.rate);
     bal+=b;
+    const mo=loanMonthlyOut(L);
+    fixedOut += mo.amt;
+    if(loanIsAmort(L)){ amortN++; if(mo.partial) amortMissing++; }
     miCalc += b*r/100/12;                 // 금리 기준 — 평균금리 계산용
     mi     += loanMonthlyInterest(L).amt; // 실측 우선 — 실제 나갈 돈
     if(r>maxRate){ maxRate=r; maxRateBank=(L.bank||'')+' '+(L.product||''); }
@@ -12434,7 +12461,8 @@ function loanSummary(){
   // ⚠ mi(실측 우선) 가 아니라 miCalc(금리 기준)로 계산한다 — 실측 이자에는 원금·수수료가 섞일 수 있어
   //   그걸로 나누면 '평균 금리'가 아니게 된다.
   const effRate = bal>0 ? (miCalc*12/bal*100) : 0;
-  return { count:loanData.length, bal, mi, maxRate, maxRateBank:maxRateBank.trim(), minRate, effRate, immN, immSum, nextDue, nextDday };
+  return { count:loanData.length, bal, mi, maxRate, maxRateBank:maxRateBank.trim(), minRate, effRate, immN, immSum, nextDue, nextDday,
+           fixedOut, amortN, amortMissing };
 }
 
 function renderLoanTab(){
@@ -12468,7 +12496,7 @@ function renderLoanTab(){
   // 표 (만기일 오름차순)
   const thead=document.querySelector('#loan-table thead');
   const tbody=document.querySelector('#loan-table tbody');
-  if(thead) thead.innerHTML = `<tr><th>금융기관</th><th>대출계좌</th><th>상품명</th><th>구분</th><th>만기일</th><th style="text-align:right">현재잔액</th><th style="text-align:right">금리</th><th style="text-align:right">월이자</th><th>이자 출금일</th><th>이자 출금계좌</th><th>상환방식</th><th>차환 계획</th><th></th></tr>`;
+  if(thead) thead.innerHTML = `<tr><th>금융기관</th><th>대출계좌</th><th>상품명</th><th>구분</th><th>만기일</th><th style="text-align:right">현재잔액</th><th style="text-align:right">금리</th><th style="text-align:right">월이자</th><th style="text-align:right">월상환액</th><th>이자 출금일</th><th>이자 출금계좌</th><th>상환방식</th><th>차환 계획</th><th></th></tr>`;
   if(tbody){
     if(!loanData.length){
       tbody.innerHTML = `<tr><td colspan="13" class="empty">등록된 대출이 없습니다. <b>+ 대출 추가</b> 또는 <b>엑셀 업로드</b>로 시작하세요.</td></tr>`;
@@ -12489,6 +12517,13 @@ function renderLoanTab(){
           <td class="num">${loanNum(L.balance)?loanWon(L.balance):'—'}</td>
           <td class="num">${loanNum(L.rate)?loanNum(L.rate).toFixed(3)+'%':'—'}</td>
           <td class="num">${mi.amt?loanWon(mi.amt):'—'}${mi.amt&&mi.est?html`<span style="font-weight:400;color:var(--text3);font-size:10.5px;margin-left:3px" title="잔액×금리÷12 로 추정한 값입니다. 실제 출금액을 입력하면 그 값이 우선합니다">추정</span>`:''}</td>
+          ${/* 월상환액 — 균등상환 건만. 입력값이 없으면 채우지 않는다(위 loanMonthlyOut 주석 참고).
+               잔액 >= 원금이면 원금을 아직 안 갚은 상태라 '거치 추정' 을 덧붙인다 — 어디까지나
+               데이터에서 읽은 추정이고 거치기간 필드가 따로 없다. */''}
+          <td class="num">${!loanIsAmort(L) ? html`<span style="color:var(--text3)">—</span>`
+            : loanNum(L.monthly) ? loanWon(L.monthly)
+            : html`${미입력('color:var(--text3)')}${(loanNum(L.principal)>0 && loanNum(L.balance)>=loanNum(L.principal))
+                ? html`<span style="font-weight:400;color:var(--text3);font-size:10.5px;margin-left:3px" title="잔액이 대출원금과 같아 원금 상환이 아직 시작되지 않은 것으로 보입니다(거치기간 추정). 거치기간 필드가 없어 데이터에서 유추한 값입니다.">거치 추정</span>` : ''}`}</td>
           <td>${loanNum(L.intDay)?'매월 '+loanNum(L.intDay)+'일':미입력('color:var(--text3)')}</td>
           <td style="font-size:11.5px;color:var(--text2)">${L.intAccount||미입력('color:var(--text3)')}</td>
           <td>${L.repay||'—'}</td>
@@ -12525,6 +12560,13 @@ function renderLoanSummaryCard(){
       ${/* 대출 탭 요약과 같은 표기 — 원 단위 전액. 억/만 축약은 자릿수가 뭉개져 자금 판단에 못 쓴다. */''}
       ${card('총 대출잔액', loanWon(s.bal), s.count+'건')}
       ${card('월 이자', loanWon(s.mi), '연 '+loanWon(s.mi*12))}
+      ${/* 월 고정 유출 = 균등상환 건의 월상환액(원금+이자) + 나머지 건의 월이자.
+           ⚠ '월 이자' 와 더하면 이중계상이다 — 월상환액에 이자가 이미 들어 있다.
+           월상환액 미입력 건은 월이자로만 잡히므로 그만큼 과소 계상된다. 그 개수를 부기해
+           숫자를 믿기 전에 보이게 한다(조용히 낮게 나오는 게 제일 위험하다). */''}
+      ${card('월 고정 유출', loanWon(s.fixedOut),
+             s.amortMissing>0 ? html`<span title="균등상환 ${s.amortMissing}건의 월상환액이 입력되지 않아 이자만 반영됐습니다. 그만큼 실제보다 낮습니다.">미입력 ${s.amortMissing}건</span>`
+                              : '원금+이자')}
       ${/* 평균 금리 = 잔액가중(effRate). 소액 대출이 왜곡하는 단순평균 대신 실제 조달비용률.
            최고금리는 범위 부기로 남겨 '가장 비싼 건'도 계속 보이게 함. */''}
       ${card('평균 금리', s.effRate?s.effRate.toFixed(2)+'%':'—',
