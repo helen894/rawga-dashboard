@@ -88,8 +88,11 @@
         따라서 락업 높이는 24.2px 이상이어야 한다 — 아래 26px 는 그 여유를 둔 값이다.
      딥그린 배경이므로 로고는 화이트(2.9). currentColor 라 color 로만 제어된다. */
   .brand-lockup { height: 26px; width: auto; display: block; flex: none; color: #ffffff; }
-  .brand-sub { font-size: 9.5px; font-weight: 600; line-height: 1; letter-spacing: 0.16em;
-    color: rgba(255,255,255,0.62); font-family: var(--font-brand); white-space: nowrap;
+  /* 로고 옆 라벨. 9.5px 는 너무 작아 12px 로 키웠다(2026-09-18 사용자 요청).
+     자간을 0.16em 그대로 두면 키운 만큼 폭이 늘어 로고와 붙어 보이므로 0.11em 으로 줄인다.
+     ⚠ 로고타입(21.5px)보다 커지면 락업이 부제에 눌린다 — 13px 이상으로는 올리지 말 것. */
+  .brand-sub { font-size: 12px; font-weight: 600; line-height: 1; letter-spacing: 0.11em;
+    color: rgba(255,255,255,0.72); font-family: var(--font-brand); white-space: nowrap;
     padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.28); }
   /* 좌상단 로고 = 대시보드로 이동 버튼 */
   #brand-home { cursor: pointer; user-select: none; border-radius: 6px; padding: 4px 8px; margin-left: -8px; gap: 10px; transition: background .12s; }
