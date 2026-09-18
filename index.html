@@ -3523,6 +3523,75 @@ function notifyBankRecon(ad, diff, stale, asOf) {
   });
 }
 
+/* ═══ 입출금 예정 임박 알림 ═════════════════════════════════════════════
+ * 대시보드를 열면 **예정일이 지난 건 + D-3 이내 건**을 토스트로 알린다
+ * (2026-09-18 사용자 요청 · 금액 무관, 전부 대상).
+ *
+ * 왜 필요했나: 요청 시점에 예정일이 지난 채로 남아 있던 4건 −4.67억(9/16 해외 무역대금,
+ *   9/17 CNA 중계무역 2건·인오가닉)이 조용히 지나가고 있었다. 같은 금액의 실거래가
+ *   하나도 없어 실제 미집행이었다.
+ *
+ * ⚠⚠ '지남' 을 곧바로 미집행이라고 말하면 안 된다 — 적재가 안 됐을 뿐일 수 있다.
+ *   입출금 적재는 평일 09:10 에 돈다. 그 전에 대시보드를 열면 어제 거래가 아직 없다.
+ *   그래서 **실거래가 들어온 마지막 날(covered)** 을 구해 그보다 이른 예정만 '미집행' 으로
+ *   부르고, 그 뒤 것은 '확인 전' 으로 따로 센다. 이 구분이 없으면 매일 아침 가짜 경보가 뜬다.
+ *   (은행 대조 알림이 '갱신 필요' 를 따로 두는 것과 같은 이유다.)
+ * ⚠ 반복 억제: 날짜 + 건수/금액 서명을 localStorage 에 남긴다. 같은 날이라도 대상이
+ *   바뀌면 다시 알린다 — 새 건이 임박한 건 새 정보다. */
+const PENDING_ALERT_KEY = 'pending_due_alert';
+const PENDING_DUE_DAYS  = 3;
+
+function collectPendingDue() {
+  const today = todayKST();
+  const limit = addDays(today, PENDING_DUE_DAYS);
+  let covered = '';
+  for (const r of (cfData || [])) {
+    if ((r.status === '실제 입금' || r.status === '실제 지출') && r.date && r.date > covered) covered = r.date;
+  }
+  const overdue = [], unconfirmed = [], soon = [];
+  for (const r of (cfData || [])) {
+    if (r.status !== '지출 예정' && r.status !== '입금 예정') continue;
+    if (!r.date || r.date > limit) continue;
+    if (r.date >= today) soon.push(r);
+    else if (covered && r.date <= covered) overdue.push(r);   // 적재가 덮은 날인데도 남아 있다
+    else unconfirmed.push(r);                                  // 아직 적재 전 — 단정 불가
+  }
+  const net = a => a.reduce((t, r) => t + ((r.in || 0) - (r.out || 0)), 0);
+  return { today, covered, overdue, unconfirmed, soon,
+           overdueNet: net(overdue), unconfirmedNet: net(unconfirmed), soonNet: net(soon) };
+}
+
+function notifyPendingDue() {
+  if (typeof _isInitialized === 'undefined' || !_isInitialized) return;
+  const p = collectPendingDue();
+  const n = p.overdue.length + p.unconfirmed.length + p.soon.length;
+  if (!n) return;
+
+  const bits = [];
+  if (p.overdue.length)     bits.push(`미집행 ${p.overdue.length}건 ${fmt(p.overdueNet)}`);
+  if (p.unconfirmed.length) bits.push(`확인 전 ${p.unconfirmed.length}건 ${fmt(p.unconfirmedNet)}`);
+  if (p.soon.length)        bits.push(`${PENDING_DUE_DAYS}일 내 ${p.soon.length}건 ${fmt(p.soonNet)}`);
+
+  /* 지난 게 있으면 빨강, 임박만이면 노랑. '확인 전' 만 있을 땐 단정할 수 없으니 노랑. */
+  const tone = p.overdue.length ? 'red' : 'amber';
+  const icon = p.overdue.length ? '⚠️' : '📅';
+  const token = `${p.today}|${p.overdue.length}|${p.unconfirmed.length}|${p.soon.length}|${Math.round(p.overdueNet + p.unconfirmedNet + p.soonNet)}`;
+  try { if (localStorage.getItem(PENDING_ALERT_KEY) === token) return; } catch (e) {}
+  try { localStorage.setItem(PENDING_ALERT_KEY, token); } catch (e) {}
+
+  showToast(`${icon} 입출금 예정 — ${bits.join(' · ')} (눌러서 보기)`, tone, {
+    ms: 10000,
+    onClick: () => {
+      const tab = document.querySelector('.tab[data-tab="cashflow"]');
+      if (tab) tab.click();
+      requestAnimationFrame(() => {
+        const panel = document.getElementById('panel-cashflow');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+  });
+}
+
 // 거래처별 집계 스냅샷 { 거래처: {n, exp, col} }
 function arPartnerSnapshot() {
   const s = {};
@@ -15000,6 +15069,9 @@ function getDefaultAR() {
 
 function renderAll() {
   renderKPIs();
+  /* 예정 임박 알림 — 데이터가 다 실린 뒤 한 번. localStorage 토큰이 중복을 막으므로
+     renderAll 이 여러 번 불려도 하루 한 번만 뜬다(대상이 바뀌면 다시 뜬다). */
+  try { notifyPendingDue(); } catch (e) { console.warn('[pending-due]', e); }
   renderCorpCardDashboard();
   if (typeof renderLoanSummaryCard === 'function') try { renderLoanSummaryCard(); } catch(e) {}
   renderCharts();
