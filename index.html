@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAWGA 자금 대시보드</title>
-<!-- RAWGA Brand Identity Guidelines V2.0 — 국문 Pretendard / 영문(브랜드) Poppins, 수치는 JetBrains Mono 유지 -->
+<!-- RAWGA Brand Identity Guidelines V3.0 (2026) — 국문 Pretendard / 영문(브랜드) Poppins, 수치는 JetBrains Mono 유지.
+     색·서체·로고 원본 토큰은 C:/Users/RAWGA/Downloads/rawga-brand (tokens/rawga-brand.css · .json) 가 단일 기준.
+     V3.0 에서 6색 HEX·서체 3종은 V2.0 과 동일 — 바뀐 건 메시지 체계(1.1)·로고 조합(2.7)·적용/SNS 규격(3·4장). -->
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -12,7 +14,7 @@
 <style>
   :root {
     /* 뉴트럴은 브랜드 그린 쪽으로 색조를 살짝 기울인 값 — 차가운 회색 대신
-       'Designed by Nature' 무드의 차분한 자연 톤 (Brand Identity V2.0) */
+       'Designed by Nature' 무드의 차분한 자연 톤 (Brand Identity V3.0) */
     --bg: #F2F5F1;
     --bg2: #ffffff;
     --bg3: #E9EFE7;
@@ -24,7 +26,7 @@
     --text: #1B2B30;      /* RAWGA DARK GREEN */
     --text2: #55655D;
     --text3: #94A296;
-    /* ── RAWGA Brand Identity Guidelines V2.0 (2026) 주요 색상 ──
+    /* ── RAWGA Brand Identity Guidelines V3.0 (2026) 2.8 주요 색상 ──
        강조(--blue)는 RAWGA DEEP GREEN. 아래 semantic 색(green/red/amber)은
        증감·경고를 나타내는 기능색이라 브랜드색과 별개로 유지한다. */
     --brand-deep: #314840;        /* RAWGA DEEP GREEN  · PANTONE 561 C  */
@@ -52,7 +54,7 @@
   body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
 
   /* HEADER */
-  /* 헤더 = 브랜드 딥그린 배너 (Brand Identity V2.0 로고 락업).
+  /* 헤더 = 브랜드 딥그린 배너 (Brand Identity V3.0 로고 락업).
      헤더 안의 컨트롤들이 인라인 style 로 var(--text2) 같은 토큰을 참조하므로,
      토큰 자체를 .header 스코프에서 재정의해 어두운 배경에서도 읽히게 한다. !important 불필요. */
   .header { background: var(--brand-deep); border-bottom: none; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 100;
@@ -76,15 +78,19 @@
      흰 배경에는 RAWGA DEEP GREEN 적용(2.9). 색을 고정해 부모 hover 색 변화의 영향을 받지 않게 함 */
   /* 딥그린 배경에는 화이트 로고를 쓴다(가이드 2.9). 심볼+로고타입 가로 조합은 허용 조합(2.7).
      최소 20px 규정(2.4)은 로고타입 기준 — 심볼은 조합 시 로고타입 높이에 맞춰 축소한다. */
-  /* 워드마크 'RAWGA' — 영문 전용 서체 Poppins Bold(가이드 2.11). 딥그린 배경엔 화이트(2.9).
-     CI 벡터 로고타입에서 텍스트 조판으로 바꾼 것(2026-08-03 사용자 지정, 자사 배너 표기와 동일).
-     벡터 원본이 필요하면 [[rawga-brand-identity]] 의 추출법으로 다시 뽑을 수 있다. */
-  .brand-mark { font-family: var(--font-brand); font-weight: 700; font-size: 21px; line-height: 1;
-    letter-spacing: 0.03em; color: #ffffff; display: block; flex: none; white-space: nowrap; }
-  .brand-symbol { height: 16px; width: auto; display: block; flex: none; color: #ffffff; }
-  .brand-stack { display: flex; flex-direction: column; gap: 3px; }
+  /* 로고 락업 = 가이드 2.7 이 허용한 '심볼 + 로고타입 가로 조합' **원본 벡터 그대로**.
+     2026-09-18 이전에는 워드마크를 Poppins Bold 텍스트로 조판했는데, 2.5 가 "로고를 임의로
+     비슷하게 만들어서 사용" 을 금지하므로 V3.0 원본 패스로 교체했다(실제 로고타입은 A 가
+     삼각형 Λ 인 전용 레터링이라 Poppins 와 글자꼴이 다르다).
+     원본: C:/Users/RAWGA/Downloads/rawga-brand/logo/rawga-lockup-horizontal.svg
+     ⚠ 조합을 손으로 다시 짜지 말 것 — 심볼과 로고타입의 간격·비례가 이 한 파일에 들어 있다.
+     ⚠ 2.4 의 최소 20px 는 **로고타입 높이** 기준이고, 락업 안에서 로고타입은 전체 높이의 약 83%다.
+        따라서 락업 높이는 24.2px 이상이어야 한다 — 아래 26px 는 그 여유를 둔 값이다.
+     딥그린 배경이므로 로고는 화이트(2.9). currentColor 라 color 로만 제어된다. */
+  .brand-lockup { height: 26px; width: auto; display: block; flex: none; color: #ffffff; }
   .brand-sub { font-size: 9.5px; font-weight: 600; line-height: 1; letter-spacing: 0.16em;
-    color: rgba(255,255,255,0.62); font-family: var(--font-brand); white-space: nowrap; }
+    color: rgba(255,255,255,0.62); font-family: var(--font-brand); white-space: nowrap;
+    padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.28); }
   /* 좌상단 로고 = 대시보드로 이동 버튼 */
   #brand-home { cursor: pointer; user-select: none; border-radius: 6px; padding: 4px 8px; margin-left: -8px; gap: 10px; transition: background .12s; }
   #brand-home:hover { background: rgba(255,255,255,0.10); }   /* 로고 색은 그대로 — 재색 금지(2.5) */
@@ -603,7 +609,7 @@
 </div>
 
 <div class="header">
-  <div class="logo" id="brand-home" role="button" tabindex="0" title="대시보드로 이동" aria-label="RAWGA 자금 대시보드 — 대시보드로 이동"><svg class="brand-symbol" viewBox="0 0 463.38 250.23" fill="currentColor" aria-hidden="true"><path d="M250.23 125.11C250.23 194.21 194.21 250.23 125.11 250.23C56.02 250.23 0 194.21 0 125.11C0 56.02 56.02 0 125.11 0C194.21 0 250.23 56.02 250.23 125.11"/><path d="M462.93 231.69L250.67 231.69C250.43 231.69 250.23 231.49 250.23 231.25L250.23 18.98C250.23 18.74 250.43 18.54 250.67 18.54L462.93 18.54C463.18 18.54 463.38 18.74 463.38 18.98L463.38 231.25C463.38 231.49 463.18 231.69 462.93 231.69"/></svg><span class="brand-stack"><span class="brand-mark">RAWGA</span><span class="brand-sub">자금 대시보드</span></span></div>
+  <div class="logo" id="brand-home" role="button" tabindex="0" title="대시보드로 이동" aria-label="RAWGA 자금 대시보드 — 대시보드로 이동"><svg class="brand-lockup" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 274.1 43.39" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M43.39 21.69C43.39 33.67 33.68 43.39 21.69 43.39C9.71 43.39 0 33.67 0 21.69C0 9.71 9.71 0 21.69 0C33.68 0 43.39 9.71 43.39 21.69ZM43.39 2.96H79.45V39.02H43.39ZM189.8 38.33L183.06 14.02L176.02 38.33L170.52 38.33L160.83 3.46L166.44 3.46L173.53 30.74L181.05 3.46L184.76 3.46L192.28 30.74L199.37 3.46L204.98 3.46L195.3 38.33L189.8 38.33ZM223.89 38.86C213.81 38.86 206.21 31.15 206.21 20.93C206.21 10.69 213.81 2.96 223.89 2.96C231.47 2.96 237.53 6.93 240.12 13.58L240.38 14.27L233.98 14.27L233.84 13.98C232.06 10.17 228.43 7.99 223.89 7.99C216.65 7.99 211.78 13.19 211.78 20.93C211.78 28.65 216.65 33.83 223.89 33.83C229.98 33.83 234.23 30.27 235.27 24.3L235.36 23.74L221.77 23.74L221.77 19.11L241.18 19.11L241.18 23.04C240.34 32.19 233.07 38.86 223.89 38.86ZM268.27 38.33L257.66 10.24L247.05 38.33L241.22 38.33L255.36 3.46L259.96 3.46L274.1 38.33L268.27 38.33ZM106.04 18.94L116.07 18.94C117.08 18.94 118 18.72 118.78 18.27C119.58 17.82 120.17 17.2 120.61 16.37C121.04 15.56 121.25 14.6 121.25 13.54C121.25 12.48 121.04 11.52 120.61 10.71C120.17 9.88 119.58 9.26 118.79 8.81C118.02 8.36 117.1 8.14 116.07 8.14L106.04 8.14L106.04 18.94M122.21 38.35L114.03 23.62L106.04 23.62L106.04 38.35L100.64 38.35L100.64 3.46L115.86 3.46C118.07 3.46 120.03 3.88 121.71 4.71C123.38 5.54 124.69 6.73 125.61 8.25C126.53 9.77 127 11.55 127 13.54C127 15.53 126.53 17.31 125.6 18.83C124.67 20.35 123.35 21.54 121.68 22.37C121.27 22.57 120.83 22.75 120.33 22.91L119.77 23.09L128.61 38.35L122.21 38.35ZM157.54 38.33L147.7 11.55L137.9 38.33L132.08 38.33L145.4 3.46L150 3.46L163.37 38.33L157.54 38.33ZM151.47 34.58C151.47 36.65 149.79 38.33 147.72 38.33C145.65 38.33 143.97 36.65 143.97 34.58C143.97 32.51 145.65 30.83 147.72 30.83C149.79 30.83 151.47 32.51 151.47 34.58ZM254.64 32.29H260.68V38.33H254.64Z"/></svg><span class="brand-sub">자금 대시보드</span></div>
   <div class="header-right">
     <div class="user-badge" id="user-badge" style="display:none">
       <span class="user-dot"></span><span id="user-email-label"></span>
