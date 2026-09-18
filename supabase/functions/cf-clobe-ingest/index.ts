@@ -22,6 +22,7 @@
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at?, set_clobe_id? }], midToBig?:{중분류:대분류} }
  *   • 분할 { secret, split:[{ clobe_id | _id, spawn:{ amount, big_cat, mid_cat, desc? } }], dry?, midToBig? }
  *   • 반복거래 { secret, setRecur:{ mode:"replace"|"append", items:[{day,desc,in,out,mid_cat,memo?,biz?}] }, dry? }
+ *   • 예정삭제 { secret, dropPlanned:{ recur_id, from? }, dry? }   — 반복거래가 만든 '예정' 행만 지운다
  *     tx_at 은 비어 있을 때만 채운다(거래 시각 백필용 · 멱등).
  *   • 기준값 { secret, setMeta:{ "settings.init_cash": 숫자, "fx_adjust_base.pre_krw": 숫자 }, dry? }
  *     기초잔액·환산조정 기준값만 고치는 좁은 경로다. **화이트리스트에 있는 경로만** 쓴다 —
@@ -244,6 +245,8 @@ Deno.serve(async (req) => {
   const splitList = Array.isArray(body?.split) ? body.split : [];
   const setRecur = (body?.setRecur && typeof body.setRecur === "object" && !Array.isArray(body.setRecur))
     ? body.setRecur as Record<string, unknown> : null;
+  const dropPlanned = (body?.dropPlanned && typeof body.dropPlanned === "object" && !Array.isArray(body.dropPlanned))
+    ? body.dropPlanned as Record<string, unknown> : null;
   const midToBig = (body?.midToBig && typeof body.midToBig === "object" && !Array.isArray(body.midToBig))
     ? body.midToBig as Record<string, string> : null;
   const setMeta = (body?.setMeta && typeof body.setMeta === "object" && !Array.isArray(body.setMeta))
@@ -435,6 +438,63 @@ Deno.serve(async (req) => {
 
       return json({ ok: true, mode: "inspect", matched: hit.length, rows: hit.slice(0, 500), total: cur.length,
         ...(meta ? { meta } : {}), ...(arRows ? { ar: arRows, arTotal: arRows.length } : {}) });
+    } catch (e) {
+      return json({ ok: false, error: (e as Error).message }, 500);
+    }
+  }
+
+  /* ── 예정 행 삭제 ── 반복거래가 만든 '예정' 행만 지운다.
+   *   { secret, dropPlanned:{ recur_id, from? }, dry? }
+   *
+   * 왜 필요한가 (2026-09-18): setRecur 로 등록은 되는데 되돌릴 방법이 없었다. 대시보드는
+   *   반복거래를 지워도 "이미 생성된 예정 항목은 유지됩니다" 라 예정 행이 남는다.
+   *   실제로 스파크플러스를 기존 수기 예정과 중복 등록해 매월 12,534,500 이 이중계상됐고,
+   *   그걸 치우려다 삭제 경로가 없다는 걸 알았다.
+   *
+   * ⚠ 안전장치 — 이 액션은 **아래 둘을 모두 만족하는 행만** 지운다. 하나라도 어긋나면 안 지운다.
+   *     ① status 가 '지출 예정' 또는 '입금 예정'  (실거래는 구조적으로 못 지운다)
+   *     ② recur_id 가 정확히 일치           (수기 입력 행은 recur_id 가 없어 안 걸린다)
+   *   from 을 주면 그 날짜 이후만. 기본은 오늘 이후 — 과거 예정은 이력이라 함부로 지우지 않는다.
+   * ⚠ dry 로 지울 목록을 먼저 확인할 것. 삭제는 되돌릴 수 없다. */
+  if (dropPlanned) {
+    try {
+      const dry = body?.dry === true;
+      const rid = str(dropPlanned.recur_id);
+      if (!rid) return json({ ok: false, error: "recur_id 가 필요합니다" }, 400);
+      const from = str(dropPlanned.from) || todaySeoul();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return json({ ok: false, error: `from 형식 오류: ${from}` }, 400);
+
+      const hit = (r: any) =>
+        str(r.recur_id) === rid &&
+        (str(r.status) === "지출 예정" || str(r.status) === "입금 예정") &&
+        str(r.date) >= from;
+
+      if (dry) {
+        const getRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/cf_data?select=data&limit=1`,
+          { headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+        );
+        if (!getRes.ok) throw new Error(`cf_data 읽기 실패: ${getRes.status}`);
+        const arr = await getRes.json();
+        const cur: any[] = Array.isArray(arr?.[0]?.data) ? arr[0].data
+          : (typeof arr?.[0]?.data === "string" ? JSON.parse(arr[0].data) : []);
+        const will = cur.filter(hit).map((r) => ({ _id: str(r._id), date: str(r.date), desc: str(r.desc),
+          in: Number(r.in || 0), out: Number(r.out || 0), status: str(r.status) }));
+        return json({ ok: true, mode: "dropPlanned(dry)", recur_id: rid, from, willDelete: will.length, rows: will, total: cur.length });
+      }
+
+      const out = await mutateCfData((cur) => {
+        const gone: any[] = [];
+        for (let i = cur.length - 1; i >= 0; i--) {
+          if (!hit(cur[i])) continue;
+          const r = cur[i];
+          gone.push({ _id: str(r._id), date: str(r.date), desc: str(r.desc), out: Number(r.out || 0), in: Number(r.in || 0) });
+          cur.splice(i, 1);
+        }
+        return gone;
+      });
+      return json({ ok: true, mode: "dropPlanned", recur_id: rid, from,
+                    deleted: out.result.length, rows: out.result, total: out.total });
     } catch (e) {
       return json({ ok: false, error: (e as Error).message }, 500);
     }
@@ -681,7 +741,7 @@ Deno.serve(async (req) => {
   }
 
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta / setRecur)" }, 400);
+    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta / setRecur / dropPlanned)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
