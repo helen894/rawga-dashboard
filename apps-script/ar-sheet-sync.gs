@@ -5,6 +5,7 @@
  *   - 컬럼은 위치가 아니라 헤더 '이름'으로 찾음(열 이동에 강함)
  *   - partner(거래처) = 탭(시트) 이름
  *   - 미회수 열이 있는 탭은 그 값 사용, 없으면 (예상-회수)로 자동 계산
+ *   - 전용 탭이 없는 거래처는 '인오가닉사업 전체현황' 행에서 직접 읽음(OVERVIEW_ROWS)
  *
  * 메뉴(시트 새로고침 후 'RAWGA 동기화'):
  *   ① 미리보기(검증)     : 파싱 결과를 'AR_preview' 시트 + 요약창에 표시(대시보드 변경 X) — 먼저 꼭 실행
@@ -16,6 +17,10 @@
  *              ③ 설정 없는 탭을 미리보기/동기화에서 눈에 띄게 경고(새 거래처 조용한 누락 방지)
  *              ④ 동기화 안전가드: 설정없는 탭 있으면 중단 + 직전 대비 건수 급감 시 재확인
  *                 (실수로 데이터가 통째 사라지는 것 방지. 기준 건수는 스크립트속성 AR_LAST_COUNT에 자동 저장)
+ *
+ * 2026-09-18 수정: 전용 탭 없이 전체현황에만 있는 거래처 지원 ('숯 (보증금)' 미회수 1억이
+ *              통째로 빠져 있었다). OVERVIEW_ROWS 로 전체현황 구분↔탭 대응을 명시하고,
+ *              지도에 없는 구분이 금액을 달고 나타나면 ①미리보기 경고 + ②동기화 전 확인(가드 ④).
  */
 
 // ⚠ Supabase 함수 slug = quick-service (대시보드에서 이름은 ar-sheet-sync로 표시되나 URL slug는 quick-service로 고정됨)
@@ -23,6 +28,59 @@ var EDGE_URL = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/quick-serv
 
 // 동기화에서 제외할 탭(전체현황·미리보기 등)
 var EXCLUDE_TABS = ['인오가닉사업 전체현황', 'AR_preview'];
+
+/* ────────────────────────────────────────────────────────────────────────────
+   전체현황 탭 — 거래처 목록의 '정본'
+
+   2026-09-18: '숯 (보증금)' 이 전체현황에만 추가되고 전용 탭이 없어서, 탭만 읽는
+   기존 파이프라인에서 통째로 빠져 있었다(미회수 1억). 전체현황 합계행은 그 1억을
+   **이미 포함**하고 있어서(합계 미회수 15,164,740,921 = 거래처 합) 미리보기와
+   전체현황의 3항목 대조가 정확히 1억 어긋나는 상태였다.
+
+   그래서 두 가지를 넣는다.
+    ⑴ fromOverview 거래처는 전체현황 행 자체를 1건짜리 채권 레코드로 만든다.
+    ⑵ 전체현황에 있는데 아래 지도에 없는 구분이 **금액을 달고** 나타나면 미리보기에
+       경고한다. 안전가드 ①(설정 없는 탭)의 전체현황 판이다.
+
+   ⚠ 전체현황의 '구 분' 표기는 탭 이름과 다른 경우가 많다(CNA(중계무역)↔CNA,
+     천대표(수산물)↔천대표, 숯 (기존)↔숯, 기타 대여금↔기타대여금). 그래서 "탭에 없으면
+     경고" 같은 자동 판정은 오탐 범벅이 된다 — 대응을 여기 명시적으로 적어 둔다.
+   ⚠ 금액이 0/공란인 행은 경고하지 않는다. 라오스 (원물수입) 처럼 자리만 잡아 둔 행이
+     매번 경고를 띄우면, 진짜 새 거래처가 생겼을 때 아무도 안 본다.
+   ──────────────────────────────────────────────────────────────────────────── */
+var OVERVIEW_TAB = '인오가닉사업 전체현황';
+
+// 전체현황 헤더 이름 (norm_ 로 공백 무시 비교 — 실제 셀은 '구   분' 처럼 띄어져 있다)
+var OVERVIEW_COLS = {
+  partner:   '구 분',
+  expected:  '예상회수액',
+  collected: '현재 회수액',
+  remaining: '미회수액',
+  due:       '예상최종 회수일',
+};
+
+/* 전체현황 '구 분' → 처리 방법
+     tab           : 이 탭에서 읽는다(전체현황 행은 참고용, 레코드 안 만듦)
+     fromOverview  : 전용 탭이 없다 → 전체현황 행을 그대로 1건 레코드로
+     placeholder   : 아직 숫자가 없는 자리 행 → 무시(금액이 생기면 경고한다) */
+var OVERVIEW_ROWS = {
+  'CNA(중계무역)':     { tab: 'CNA' },
+  '핀다':              { tab: '핀다' },
+  'JHT':               { tab: 'JHT' },
+  '팬텀':              { tab: '팬텀' },
+  '천대표(수산물)':     { tab: '천대표' },
+  '천대표(부산영업)':   { tab: '천대표(부산영업)' },
+  '동이식품':          { tab: '동이식품' },
+  '지앤원':            { tab: '지앤원' },
+  '숯 (기존)':         { tab: '숯' },
+  '숯 (확장)':         { tab: '숯 (확장)' },
+  '숯 (보증금)':       { fromOverview: true },
+  '라오스 (원물수입)':  { placeholder: true },
+  '기타 대여금':        { tab: '기타대여금' },
+  '세진식품':          { tab: '세진식품' },
+  '로가온':            { tab: '로가온' },
+  '디앤비푸드':         { tab: '디앤비푸드' },
+};
 
 // 탭별 매핑: 키 = 탭(시트) 이름과 일치해야 함. 값 = 각 필드의 헤더 텍스트.
 //  - remaining 이 ''(빈값)이면 (예상-회수)로 자동 계산
@@ -526,6 +584,123 @@ function parseTab_(sh, cfg) {
   };
 }
 
+/* 전체현황 '구 분' 표기 → OVERVIEW_ROWS 설정. 탭 이름과 마찬가지로 공백·대소문자 무시.
+   (전체현황은 사람이 손으로 쓰는 표라 '숯 (기존)' / '숯(기존)' 같은 흔들림이 잦다) */
+function findOverviewCfg_(label) {
+  if (OVERVIEW_ROWS[label]) return OVERVIEW_ROWS[label];
+  var n = norm_(label), keys = Object.keys(OVERVIEW_ROWS);
+  for (var i = 0; i < keys.length; i++) {
+    if (norm_(keys[i]) === n) return OVERVIEW_ROWS[keys[i]];
+  }
+  return null;
+}
+
+/* 전체현황 탭 파싱 → { records, report, warn, anomalies }
+   전용 탭이 없는 거래처(fromOverview)를 1건짜리 레코드로 만들고,
+   지도에 없는 새 구분이 금액을 달고 나타나면 경고를 모은다. */
+function parseOverview_() {
+  var out = { records: [], report: [], warn: [], anomalies: [] };
+  var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  var sh = null;
+  for (var i = 0; i < sheets.length; i++) {
+    if (norm_(sheets[i].getName()) === norm_(OVERVIEW_TAB)) { sh = sheets[i]; break; }
+  }
+  if (!sh) {
+    out.warn.push('전체현황 탭("' + OVERVIEW_TAB + '")을 못 찾았습니다 — 전체현황 전용 거래처가 통째로 빠집니다.');
+    return out;
+  }
+
+  var vals = sh.getDataRange().getValues();
+  // 헤더 행 = '구분' 과 '예상회수액' 이 같이 있는 행 (위쪽 병합 제목·날짜 행을 건너뛴다)
+  var cm = null, hdr = -1;
+  for (var r = 0; r < vals.length && hdr < 0; r++) {
+    var rowNorm = vals[r].map(function (c) { return norm_(c); });
+    if (rowNorm.indexOf(norm_(OVERVIEW_COLS.partner)) < 0) continue;
+    if (rowNorm.indexOf(norm_(OVERVIEW_COLS.expected)) < 0) continue;
+    hdr = r; cm = {};
+    Object.keys(OVERVIEW_COLS).forEach(function (k) {
+      var ci = rowNorm.indexOf(norm_(OVERVIEW_COLS[k]));
+      if (ci >= 0) cm[k] = ci;
+    });
+  }
+  if (hdr < 0) {
+    out.warn.push('전체현황 탭에서 헤더 행을 못 찾았습니다 (구 분 / 예상회수액) — 헤더 이름이 바뀌었는지 확인하세요.');
+    return out;
+  }
+
+  var seen = {};
+  for (var r2 = hdr + 1; r2 < vals.length; r2++) {
+    var label = String(vals[r2][cm.partner] == null ? '' : vals[r2][cm.partner]).trim();
+    /* 거래처 표는 연속이다. 첫 빈 구분에서 멈춰야 아래 'Review & History' 메모 블록의
+       제목들(회수모델_JHT 등)을 새 거래처로 오해하지 않는다. */
+    if (!label) break;
+    var n = norm_(label);
+    if (n === '합계' || n === 'total') continue;
+
+    var expected  = cm.expected  !== undefined ? num_(vals[r2][cm.expected])  : 0;
+    var collected = cm.collected !== undefined ? num_(vals[r2][cm.collected]) : 0;
+    var remRaw    = cm.remaining !== undefined ? vals[r2][cm.remaining] : '';
+    var remaining = num_(remRaw);
+    var hasMoney  = !!(expected || collected || remaining);
+
+    var cfg = findOverviewCfg_(label);
+    if (cfg) seen[n] = true;
+
+    if (!cfg) {
+      if (hasMoney) {
+        out.warn.push('전체현황에 새 거래처 "' + label + '" (미회수 ' + Math.round(remaining).toLocaleString() +
+                      ') — OVERVIEW_ROWS 에 없어 동기화에서 빠집니다.');
+      }
+      continue;
+    }
+    if (cfg.tab) continue;                       // 전용 탭에서 읽는다
+    if (cfg.placeholder) {
+      if (hasMoney) {
+        out.warn.push('"' + label + '" 은 자리 행(placeholder)으로 두었는데 금액이 생겼습니다 ' +
+                      '(미회수 ' + Math.round(remaining).toLocaleString() + ') — 탭을 만들어 TAB_CONFIG 에 넣거나 ' +
+                      'OVERVIEW_ROWS 를 fromOverview 로 바꾸세요.');
+      }
+      continue;
+    }
+    if (!cfg.fromOverview) continue;
+
+    var rec = {
+      _id: '',
+      partner: label,
+      start: '',                                  // 전체현황은 집계라 개별 송금일이 없다
+      expected: expected,
+      collected: collected,
+      due_date: cm.due !== undefined ? fmtDate_(vals[r2][cm.due]) : '',
+      collect_date: '',
+      note: '',
+    };
+    /* ⚠ 미회수 칸에 값이 있으면 반드시 그대로 넘긴다 — 전체현황 행은 집계라
+       (예상-회수) 와 다를 수 있다. '숯 (보증금)' 은 예상·회수가 비어 있고 미회수만 1억이라,
+       Edge 의 자동계산(예상-회수)에 맡기면 0 이 되어 그 1억이 조용히 사라진다. */
+    if (remRaw !== '' && remRaw != null) rec.remaining = remaining;
+
+    if (Math.abs(expected) > MAX_SANE_AMOUNT || Math.abs(collected) > MAX_SANE_AMOUNT) {
+      out.anomalies.push({ tab: OVERVIEW_TAB, row: r2 + 1, expected: expected, collected: collected });
+    }
+
+    out.records.push(rec);
+    out.report.push('· ' + label + ' : 1건, 예상 ' + Math.round(expected).toLocaleString() +
+                    ' / 회수 ' + Math.round(collected).toLocaleString() +
+                    ' / 미회수 ' + Math.round(recRemaining_(rec)).toLocaleString() +
+                    ' — 전체현황 행에서 직접(전용 탭 없음)');
+  }
+
+  /* fromOverview 로 설정했는데 표에서 못 만난 거래처 — 행이 지워졌거나 첫 빈 구분 아래로
+     밀려난 것이다. 조용히 빠지는 게 이 스크립트 최악의 실패라 반드시 알린다. */
+  Object.keys(OVERVIEW_ROWS).forEach(function (k) {
+    if (OVERVIEW_ROWS[k].fromOverview && !seen[norm_(k)]) {
+      out.warn.push('OVERVIEW_ROWS 의 "' + k + '" 를 전체현황 표에서 못 찾았습니다 — 행이 지워졌거나 표 아래 빈 줄 밑으로 내려갔는지 확인하세요.');
+    }
+  });
+
+  return out;
+}
+
 // 전체 탭 파싱 → { records:[], report:[], skipped:[] }
 function parseAll_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -558,7 +733,15 @@ function parseAll_() {
     if (!configured[k]) report.push('⚠ 설정에 있으나 탭 못 찾음: ' + k + ' (탭 이름 확인 필요)');
   });
 
-  return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs, anomalies: anomalies };
+  /* 전용 탭이 없는 거래처(전체현황 행에서 직접) — 2026-09-18 '숯 (보증금)' 부터.
+     탭 루프가 끝난 뒤에 붙여야 EXCLUDE_TABS(전체현황 제외)와 충돌하지 않는다. */
+  var ov = parseOverview_();
+  records = records.concat(ov.records);
+  report = report.concat(ov.report);
+  if (ov.anomalies.length) anomalies = anomalies.concat(ov.anomalies);
+
+  return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs,
+           anomalies: anomalies, overviewWarn: ov.warn };
 }
 
 /* 비정상 금액(안전가드 ③) 안내문 — 미리보기·동기화 중단 메시지에서 같이 쓴다 */
@@ -597,6 +780,11 @@ function previewSync() {
     ? '⚠ 설정이 없어 대시보드에서 빠지는 탭: ' + out.skipped.join(', ') +
       '\n   → TAB_CONFIG에 추가해야 반영됩니다.\n\n'
     : '';
+  /* 전체현황에만 있는 새 거래처 — 탭이 없으니 위 '설정 없는 탭' 경고로는 절대 안 잡힌다.
+     '숯 (보증금)'(미회수 1억)이 이 경로로 조용히 빠져 있었다(2026-09-18). */
+  var ovMsg = out.overviewWarn && out.overviewWarn.length
+    ? '⚠ 전체현황 점검\n' + out.overviewWarn.map(function (w) { return '   · ' + w; }).join('\n') + '\n\n'
+    : '';
   var fifoMsg = out.fifoTabs && out.fifoTabs.length
     ? '⚙ 과입금 감지 → FIFO 재배분된 탭: ' + out.fifoTabs.join(', ') +
       '\n   회수액을 오래된 채권부터 예상액 상한으로 재분배(총액 불변). AR_preview에서 행별 확인하세요.\n\n'
@@ -607,7 +795,7 @@ function previewSync() {
       '\n   → 해당 탭에 열 구조가 다른 표가 섞여 있거나 헤더 이름이 바뀐 것입니다.\n\n'
     : '';
   ui.alert(
-    anomMsg + warn + fifoMsg +
+    anomMsg + warn + ovMsg + fifoMsg +
     '미리보기 (대시보드 변경 없음)\n\n' +
     '총 ' + out.records.length + '건\n예상회수 합계: ' + Math.round(totalE).toLocaleString() + '\n회수 합계: ' + Math.round(totalC).toLocaleString() +
     '\n미회수 합계: ' + Math.round(totalR).toLocaleString() +
@@ -645,6 +833,19 @@ function pushToDashboard() {
       '· 반영하려면 → TAB_CONFIG에 해당 탭을 추가 후 다시 시도\n' +
       '· 원래 제외 대상이면 → EXCLUDE_TABS에 추가');
     return;
+  }
+
+  /* ── 안전가드 ④: 전체현황에만 있는 미설정 거래처 (2026-09-18 '숯 (보증금)') ──
+     탭이 없으니 가드 ①에 안 걸리고, 한 거래처가 통째 빠져도 건수는 정상이라 가드 ②에도
+     안 걸린다. 중단까지는 하지 않는다 — 일부러 안 넣는 행일 수도 있어서. 대신 물어본다. */
+  if (out.overviewWarn && out.overviewWarn.length) {
+    var okOv = ui.alert('⚠ 전체현황 점검 (데이터 보호)\n\n' +
+      out.overviewWarn.map(function (w) { return '· ' + w; }).join('\n') + '\n\n' +
+      '이 거래처들은 이번 동기화에 포함되지 않습니다.\n' +
+      '· 반영하려면 → OVERVIEW_ROWS 에 fromOverview 로 추가(전용 탭이 없을 때)\n' +
+      '  또는 전용 탭을 만들고 TAB_CONFIG 에 추가\n\n그래도 이대로 진행할까요?',
+      ui.ButtonSet.YES_NO);
+    if (okOv !== ui.Button.YES) return;
   }
 
   // ── 안전가드 ②: 직전 성공 대비 건수 급감 방지 (매핑 실패로 인한 누락 차단) ──
