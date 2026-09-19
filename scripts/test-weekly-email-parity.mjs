@@ -320,8 +320,10 @@ console.log('\n[현금 기준] initCashEff+computeFxAdj  vs  computeCashBasisSer
     ...(() => {
       /* nwIn/nwOut 에 더하는 줄만 뽑는다 — 선언(let nwIn = 0)은 += 가 없어 안 걸린다 */
       const nwLines = (src) => (src.match(/^.*nw(?:In|Out)\s*\+=.*$/gm) || []).join('\n');
-      const appNw  = nwLines(grabBody(html,  'buildWeeklyReportHTML'));
-      const edgeNw = nwLines(grabBody(tsSrc, 'buildWeeklyReportHTML'));
+      const appWk  = grabBody(html,  'buildWeeklyReportHTML');
+      const edgeWk = grabBody(tsSrc, 'buildWeeklyReportHTML');
+      const appNw  = nwLines(appWk);
+      const edgeNw = nwLines(edgeWk);
       return [
         ['앱: 차주예상 줄을 찾았다',   appNw.length  > 0],
         ['Edge: 차주예상 줄을 찾았다', edgeNw.length > 0],
@@ -329,6 +331,13 @@ console.log('\n[현금 기준] initCashEff+computeFxAdj  vs  computeCashBasisSer
         ['Edge: 차주예상 예정에 하한이 없다', !/nwStart/.test(edgeNw)],
         ['앱: 차주예상이 실제 거래를 안 센다',   !/실제/.test(appNw)],
         ['Edge: 차주예상이 실제 거래를 안 센다', !/실제/.test(edgeNw)],
+        /* 매출채권 잔액 — remTotal 은 **전체 합산(음수 포함)** 이어야 한다.
+           remAll(양수만)로 계산하면 과회수가 빠져 화면과 갈린다.
+           2026-09-19 실제 사고: 실제 발송만 양수만이라 메일 15,397,503,716 vs
+           화면 15,164,740,921 (과회수 19건 -232,762,794). 미리보기는 전체 합산이어서
+           미리보기로는 발견되지 않았다 — 두 벌 문제의 전형이다. */
+        ['앱: remTotal 이 전체 합산',   /remTotal\s*=\s*arView\.reduce/.test(appWk)],
+        ['Edge: remTotal 이 전체 합산', /remTotal\s*=\s*arView\.reduce/.test(edgeWk)],
       ];
     })(),
   ];

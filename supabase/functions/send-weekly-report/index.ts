@@ -825,8 +825,15 @@ function buildWeeklyReportHTML(
     (r.ar_applied_date as string) <= wEnd,
   );
   const wColAmt   = wColCF.reduce((s, r) => s + ((r.in as number) || 0), 0);
-  const remAll    = arView.filter(a => ((a.remaining as number) || 0) > 0);
-  const remTotal  = remAll.reduce((s, a) => s + ((a.remaining as number) || 0), 0);
+  /* ⚠ remAll 은 **건수 표시용**(양수만), remTotal 은 **전체 합산(음수 포함)** 이다.
+   * 둘을 같은 집합으로 쓰면 안 된다 — 2026-09-19 실제 사고: remTotal 을 remAll 로 계산해
+   *   과회수 19건 -232,762,794원이 빠지면서 메일의 매출채권이 15,397,503,716,
+   *   화면은 15,164,740,921 로 갈렸다. 미리보기(index.html 10208)는 전체 합산이었는데
+   *   **실제 발송만 양수만** 이어서 미리보기로는 발견되지 않았다.
+   * 과회수는 실재한다(디앤비푸드 -1억·동이식품 -1억 등, 2026-08 확인). 순채권 포지션을
+   *   보는 게 대시보드 KPI 기준이므로 거기에 맞춘다. */
+  const remAll    = arView.filter(a => ((a.remaining as number) || 0) > 0);   // 건수 표시용
+  const remTotal  = arView.reduce((s, a) => s + (Number(a.remaining) || 0), 0); // 금액: 전체 합산
   const highRisk  = arView
     .filter(a => a.riskLevel === '위험')
     .sort((a, b) => {
