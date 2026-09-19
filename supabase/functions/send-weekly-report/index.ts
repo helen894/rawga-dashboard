@@ -1136,6 +1136,31 @@ serve(async (req: Request) => {
     (initRes.data?.data as Record<string, unknown>)?.init_cash ?? 134838617,
   );
 
+  /* ⚠⚠ cf_start 보정 — 대시보드 index.html 의 initCashEff() 와 **같은 계산**이다.
+   * settings.cf_start(현금 시계열 시작일)가 생기면서 init_cash 의 의미가 바뀌었다:
+   *   종전 = 전체 기간의 기초잔액  /  지금 = **cf_start 시점의 관측 잔액**
+   * 그런데 아래 누적 루프는 cf_data 를 전체 훑으므로, 보정 없이 두면 cf_start 이전 거래가
+   * 이중으로 반영된다. 그만큼(preCfStart)을 init_cash 에서 미리 빼 상쇄한다.
+   *
+   * 실제 사고 (2026-09-19): 이 보정이 없어 메일의 현금이 화면보다 **정확히 328,588,261원**
+   *   낮게 나갔다. 현금·총유동자산·총자산합계·차주예상기말현금 네 KPI 가 동시에 틀렸고,
+   *   차주 예상기말현금이 실제 +293,859,253 인데 메일엔 -34,729,008(적자)로 보였다.
+   *   원인은 cf_start 도입 때 대시보드만 고치고 이 Edge 를 안 따라간 것이다.
+   * ⚠ 메일 HTML 은 미리보기(index.html)와 실제발송(이 파일) **두 벌**이다. 계산 기준을
+   *   한쪽만 고치면 반드시 이렇게 갈린다. 둘 다 고칠 것. */
+  const cfStart = String((initRes.data?.data as Record<string, unknown>)?.cf_start ?? '').slice(0, 10);
+  let preCfStart = 0;
+  if (cfStart) {
+    for (const r of cfArr) {
+      const row = r as Record<string, unknown>;
+      const d = String(row.date ?? '');
+      if (!d || d >= cfStart) continue;
+      const st = String(row.status ?? '');
+      if (st === '실제 입금')      preCfStart += Number(row.in)  || 0;
+      else if (st === '실제 지출') preCfStart -= Number(row.out) || 0;
+    }
+  }
+
   /* 외화 환산손익 — 대시보드(index.html computeFxAdj)와 같은 정의를 서버에서도 계산한다.
    * cf_data 는 외화를 '거래일 환율'로 원화 환산해 기록하는데 은행 실잔액의 외화는
    * '현재 평가환율' 기준이라, 반영하지 않으면 리포트의 현금이 실제와 어긋난다.
@@ -1153,7 +1178,7 @@ serve(async (req: Request) => {
     }
     fxAdj = Math.round(spot - book);
   }
-  const initCash = initCashRaw + fxAdj;
+  const initCash = (initCashRaw - preCfStart) + fxAdj;
   const dlFloor = Number((dlRes.data?.data as Record<string, unknown>)?.floor) || 1500000000;
 
   /* ⑧ 주간 요약 — body 우선 → Supabase fallback
@@ -1253,6 +1278,16 @@ serve(async (req: Request) => {
       report_end_date:      endDate,
       dashboard_url_exists: dashboardUrlExists,
       deeplink_hash:        '#reporting-weekly',
+      /* 현금 기준 진단 — 메일과 대시보드의 현금이 갈리면 여기부터 본다.
+         2026-09-19 에 cf_start 보정 누락으로 328,588,261원 어긋난 적이 있다.
+         대시보드 initCashEff() 와 같은 값이 나와야 한다: init_cash_raw - pre_cf_start. */
+      cash_basis_debug: {
+        cf_start:       cfStart || null,
+        init_cash_raw:  initCashRaw,
+        pre_cf_start:   preCfStart,
+        fx_adj:         fxAdj,
+        init_cash_used: initCash,
+      },
       // 주간 요약 진단 정보 (요약 본문 비노출)
       weekly_summary_debug: {
         function_version:  FUNCTION_VERSION,
