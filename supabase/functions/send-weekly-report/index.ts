@@ -1101,7 +1101,12 @@ ${buildNextWeekPlanHTML(todaySeoul(), addDays(todaySeoul(), 10), cfArr, initCash
 </table></td></tr></table>
 </body></html>`;
 
-  return { html, subject, weekKey: wStart, startDate: wStart, endDate: wEnd };
+  /* kpi — 메일이 **실제로 렌더한** 월간 요약 값. dry_run 응답으로 내보내 화면과 대조한다.
+     dry_run 이 HTML 을 안 돌려주므로 이게 없으면 스크린샷 없이는 검증이 불가능하다
+     (2026-09-19: 매출채권 2.3억 차이를 테스트 발송 스크린샷으로야 겨우 잡았다). */
+  return { html, subject, weekKey: wStart, startDate: wStart, endDate: wEnd,
+           kpi: { kpiDate: dashboardKpiDate, cash, totalAR, totalLiquid,
+                  totalPhysical, totalAsset, nextCash, arCount: remAll.length } };
 }
 
 /* ── 메인 핸들러 ──────────────────────────────────────────────────────── */
@@ -1345,7 +1350,7 @@ serve(async (req: Request) => {
     summaryPreview: weeklySummary.summary.slice(0, 30),
     updatedAt: weeklySummary.updated_at,
   });
-  const { html, subject, weekKey, startDate, endDate } =
+  const { html, subject, weekKey, startDate, endDate, kpi } =
     buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, DASHBOARD_URL, weeklySummary, dlFloor,
                           fxAdj, fxAdjAtFn);
 
@@ -1368,6 +1373,8 @@ serve(async (req: Request) => {
       /* 현금 기준 진단 — 메일과 대시보드의 현금이 갈리면 여기부터 본다.
          2026-09-19 에 cf_start 보정 누락으로 328,588,261원 어긋난 적이 있다.
          대시보드 initCashEff() 와 같은 값이 나와야 한다: init_cash_raw - pre_cf_start. */
+      /* 메일이 실제로 렌더한 월간 요약 KPI — 대시보드 화면과 한 줄씩 대조할 수 있다 */
+      kpi_rendered: kpi,
       cash_basis_debug: {
         cf_start:       cfStart || null,
         init_cash_raw:  initCashRaw,
