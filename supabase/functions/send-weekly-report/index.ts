@@ -667,7 +667,9 @@ function buildWeeklyReportHTML(
   /* 기말 잔액 + 월간 대시보드 요약용 계산 */
   // dashboardKpiDate: 월간 대시보드 요약 전용 기준일 = wEnd(해당 주 일요일)
   // targetDate가 월요일(wStart)인 경우에도 화~일 거래가 포함되도록 wEnd를 사용
-  const dashboardKpiDate = wEnd;
+  /* dashboardKpiDate — min(wEnd, 오늘). index.html 의 같은 이름 주석 참고(2026-09-19 통일). */
+  const _todayStr = todaySeoul();
+  const dashboardKpiDate = wEnd < _todayStr ? wEnd : _todayStr;
   let pwEndCash = initCash, wkEndCash = initCash, cash = initCash;
   let nwIn = 0, nwOut = 0;
   for (const r of cfArr) {
@@ -678,9 +680,13 @@ function buildWeeklyReportHTML(
     // 월간 대시보드 요약: wEnd(해당 주 일요일) 기준 — 화~일 거래 포함 보장
     if (r.status === '실제 입금' && (r.date as string) <= dashboardKpiDate)  cash += (r.in  as number) || 0;
     if (r.status === '실제 지출' && (r.date as string) <= dashboardKpiDate)  cash -= (r.out as number) || 0;
-    // 차주 예상 기말현금: 입금예정+실제, 지출예정+실제 (calcKPIs의 nextCash와 동일 기준)
-    if ((r.status === '입금 예정' || r.status === '실제 입금') && (r.date as string) >= nwStart && (r.date as string) <= nwEnd) nwIn  += (r.in  as number) || 0;
-    if ((r.status === '지출 예정' || r.status === '실제 지출') && (r.date as string) >= nwStart && (r.date as string) <= nwEnd) nwOut += (r.out as number) || 0;
+    /* 차주 예상 기말현금 — **대시보드 calcKPIs 와 같은 기준**(2026-09-19 통일).
+       예정만 세고 상한(nwEnd)만 둔다. 하한을 두면 **예정일이 지난 미처리 건이 빠져**
+       현금을 실제보다 높게 본다. 2026-09-18 에 미처리 4건 -4.67억이 있었는데, 그 상태로
+       메일이 나갔으면 화면과 4.67억 갈렸다.
+       실제 거래는 이미 위 cash 누적에 들어갔으므로 여기서 또 세면 이중계상이다. */
+    if (r.status === '입금 예정' && (r.date as string) <= nwEnd) nwIn  += (r.in  as number) || 0;
+    if (r.status === '지출 예정' && (r.date as string) <= nwEnd) nwOut += (r.out as number) || 0;
   }
   const nextCash = cash + nwIn - nwOut;
 

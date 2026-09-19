@@ -31,6 +31,41 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const tsSrc = readFileSync(path.join(ROOT, 'supabase/functions/send-weekly-report/index.ts'), 'utf8');
 
+/* grab() 은 'function NAME(' 다음의 첫 { 를 본체로 본다. TS 시그니처에 객체 타입이 있으면
+   (weeklySummary: { summary: string; ... }, 반환형 : { html: string; ... }) 거기서 잘린다 —
+   buildWeeklyReportHTML 을 뽑다가 269자만 나와 검사가 헛돌았다(2026-09-19).
+   파라미터 괄호를 먼저 닫고, 반환형 주석이 있으면 그것까지 건너뛴 뒤의 { 를 본체로 본다. */
+function grabBody(src, name){
+  const i = src.indexOf(`function ${name}(`);
+  if (i < 0) throw new Error('없음: ' + name);
+  let j = src.indexOf('(', i), d = 0;
+  for (; j < src.length; j++){
+    if (src[j] === '(') d++;
+    else if (src[j] === ')') { d--; if (d === 0) { j++; break; } }
+  }
+  while (j < src.length && /\s/.test(src[j])) j++;
+  if (src[j] === ':') {                       // 반환형 주석 건너뛰기
+    j++;
+    while (j < src.length && /\s/.test(src[j])) j++;
+    if (src[j] === '{') {                     // 객체 반환형 — 짝을 맞춰 넘긴다
+      let k = 0;
+      for (; j < src.length; j++){
+        if (src[j] === '{') k++;
+        else if (src[j] === '}') { k--; if (k === 0) { j++; break; } }
+      }
+    } else {                                   // 단순 타입 — 다음 { 까지
+      while (j < src.length && src[j] !== '{') j++;
+    }
+  }
+  while (j < src.length && src[j] !== '{') j++;
+  let d2 = 0;
+  for (let k = j; k < src.length; k++){
+    if (src[k] === '{') d2++;
+    else if (src[k] === '}') { d2--; if (d2 === 0) return src.slice(i, k + 1); }
+  }
+  throw new Error('불균형: ' + name);
+}
+
 function grab(src, name){
   const i = src.indexOf(`function ${name}(`);
   if (i < 0) throw new Error('없음: ' + name);
@@ -267,6 +302,32 @@ console.log('\n[현금 기준] initCashEff+computeFxAdj  vs  computeCashBasisSer
     ['index.html 에 cf_start 보정이 있다', /CF_START[\s\S]{0,400}INIT_CASH\s*-\s*pre/.test(html)],
     ['Edge 에 cf_start 보정이 있다', /cfStart[\s\S]{0,600}initCashRaw\s*-\s*preCfStart/.test(tsSrc)],
     ['Edge 의 현금 기준이 이름 있는 함수다', /function computeCashBasisServer\(/.test(tsSrc)],
+    /* ②-b 기준일 — 양쪽 다 min(wEnd, 오늘). 한쪽만 wEnd 로 되돌리면 기준일이 갈린다. */
+    ['앱: dashboardKpiDate = min(wEnd, 오늘)',
+      /dashboardKpiDate\s*=\s*wEnd\s*<\s*_todayStr\s*\?\s*wEnd\s*:\s*_todayStr/.test(html)],
+    ['Edge: dashboardKpiDate = min(wEnd, 오늘)',
+      /dashboardKpiDate\s*=\s*wEnd\s*<\s*_todayStr\s*\?\s*wEnd\s*:\s*_todayStr/.test(tsSrc)],
+    /* ②-a 예정 범위 — 하한(>= nwStart)이 있으면 예정일 지난 미처리 건이 빠진다.
+       calcKPIs 는 상한만 둔다. 메일 두 벌도 같아야 한다.
+       ⚠ 검사 범위를 buildWeeklyReportHTML 안으로 좁힌다 — 대시보드의 '차주 입출금 예정'
+         카드(index.html 8312행)는 구간 표시가 목적이라 하한이 정상이다. 파일 전체를 훑으면
+         그게 잡혀 거짓 실패가 난다.
+       ⚠ 처음엔 'nwIn 첫 등장부터 900자' 창으로 봤는데 주석이 길어지며 창 밖으로 밀려
+         회귀를 못 잡았다. 창을 쓰지 말고 **해당 줄만 정확히 뽑아** 본다. */
+    ...(() => {
+      /* nwIn/nwOut 에 더하는 줄만 뽑는다 — 선언(let nwIn = 0)은 += 가 없어 안 걸린다 */
+      const nwLines = (src) => (src.match(/^.*nw(?:In|Out)\s*\+=.*$/gm) || []).join('\n');
+      const appNw  = nwLines(grabBody(html,  'buildWeeklyReportHTML'));
+      const edgeNw = nwLines(grabBody(tsSrc, 'buildWeeklyReportHTML'));
+      return [
+        ['앱: 차주예상 줄을 찾았다',   appNw.length  > 0],
+        ['Edge: 차주예상 줄을 찾았다', edgeNw.length > 0],
+        ['앱: 차주예상 예정에 하한이 없다',   !/nwStart/.test(appNw)],
+        ['Edge: 차주예상 예정에 하한이 없다', !/nwStart/.test(edgeNw)],
+        ['앱: 차주예상이 실제 거래를 안 센다',   !/실제/.test(appNw)],
+        ['Edge: 차주예상이 실제 거래를 안 센다', !/실제/.test(edgeNw)],
+      ];
+    })(),
   ];
   for (const [label, got] of guard) {
     console.log(`  ${got ? '✅' : '❌'} ${label}`);
