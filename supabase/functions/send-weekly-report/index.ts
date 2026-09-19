@@ -212,8 +212,13 @@ function fmt(n: number): string {
  *   오늘 시점에 한꺼번에 얹는다 — 돈이 아직 안 나갔으므로 과거로 그리면 확정을 왜곡한다. */
 const WKRPT_HORIZON_DAYS = 56;   // 8주 — 화면(대시보드·리포팅)과 같은 지평
 
+/* ⚠ 시그니처를 index.html 의 같은 이름 함수와 **정확히 맞춘다**(2026-09-19, ②-c).
+   종전엔 fxAdj/fxAdjBefore 가 없어 주차 시작 잔액에 늘 '오늘자' 환산조정이 얹혔다.
+   대시보드 추이 차트는 주차 시작 시점의 배분값(fxAdjAt)을 쓰므로 과거 주차에서 갈렸다.
+   parity 테스트가 fxAdjBefore 를 생략해 호출하고 있어 이 차이를 못 잡고 있었다. */
 function computeWeeklyCashSeries(
-  wStart: string, rows: Record<string, unknown>[], initCash: number, today: string, horizonDays: number,
+  wStart: string, rows: Record<string, unknown>[], initCash: number, fxAdj: number,
+  today: string, horizonDays: number, fxAdjBefore?: number,
 ) {
   const from = wStart;
   const to   = addDays(wStart, horizonDays - 1);
@@ -222,8 +227,9 @@ function computeWeeklyCashSeries(
 
   const actDelta: Record<string, number> = {}, planAll: Record<string, number> = {};
   let overdueSum = 0;
-  let beforeFrom = initCash;      // from 직전까지의 확정 잔액 (initCash 에 환산손익 포함)
-  let cashToday  = initCash;      // 오늘까지의 확정 잔액
+  const fxB = (fxAdjBefore === undefined || fxAdjBefore === null) ? fxAdj : fxAdjBefore;
+  let beforeFrom = initCash + fxB;        // from 직전까지의 확정 잔액 (주차 시작 시점 기준)
+  let cashToday  = initCash + fxAdj;      // 오늘까지의 확정 잔액 (오늘 기준)
 
   for (const r of (rows || [])) {
     const d = String(r.date || '');
@@ -266,8 +272,10 @@ function computeWeeklyCashSeries(
 function buildWeeklyTrajBlockHTML(
   wStart: string, cfArr: Record<string, unknown>[], initCash: number, floor: number,
   C: Record<string, string>, horizonDays: number, today: string,
+  fxAdjNow = 0, fxAdjBefore?: number,
 ): string {
-  const { dates, actVals, projVals } = computeWeeklyCashSeries(wStart, cfArr, initCash, today, horizonDays);
+  const { dates, actVals, projVals } = computeWeeklyCashSeries(wStart, cfArr, initCash - (fxAdjNow || 0), fxAdjNow || 0,
+    today, horizonDays, fxAdjBefore);
   const line = dates.map((_d, i) => (actVals[i] !== null ? actVals[i] : projVals[i]));
   const known = line.filter((v): v is number => v !== null);
   if (!known.length) return '';
@@ -582,6 +590,52 @@ function buildNextWeekPlanHTML(
 // index.html buildWeeklyReportHTML()과 동일한 계산 로직
 // KPI: 전주 기말 / 주간 입금 / 주간 지출 / 금주 기말 (화면과 동일)
 // 입금·지출 표 세 번째 컬럼: 중분류 (거래처가 아닌 mid_cat 값)
+/* ═══ 환산조정 날짜별 배분 ═══════════════════════════════════════════════
+ * index.html 의 buildFxRamp_() + fxAdjAt() 를 그대로 옮긴 것이다. 같은 값을 내야 한다.
+ *
+ * 왜 필요한가: FX_ADJ 는 '장부 vs 실제 외화 평가액' 차이를 메우는 플러그인데, 날짜 없는
+ *   상수로 전 구간에 얹으면 과거가 왜곡된다(2026-08-23 실측: 1~6월 추이선이 통째로 약
+ *   1.26억 낮게 그려졌다). 그래서 환전 시점에 실현되는 것으로 보고 |금액| 비중으로 배분한다.
+ *
+ * ⚠ 여기 없으면 메일 궤적의 **주차 시작 잔액**에 늘 오늘자 값이 얹혀 대시보드 추이 차트와
+ *   갈린다. 현재 주차는 램프가 완료돼 차이가 0 이라 눈에 안 띄지만 과거 주차에서 드러난다
+ *   (2026-09-19 추가, ②-c).
+ * ⚠ 모듈 전역 상태(_fxRamp)를 두지 않고 클로저로 만든다 — Edge 는 요청마다 도므로
+ *   전역에 남기면 다음 요청에 샌다. */
+const FX_CONV_MIDS_SERVER = ['계좌간이체', '외환차손'];
+
+function makeFxAdjAt(
+  cfArr: Record<string, unknown>[],
+  fxBase: Record<string, unknown> | undefined,
+  fxAdj: number,
+): (date: string) => number {
+  const cut = String(fxBase?.through ?? '').slice(0, 10);
+  if (!cut) return () => fxAdj;                       // 램프 없음 → 종전 동작(상수)
+
+  const conv = cfArr
+    .filter((r) => r && r.fx_usd && String(r.date) > cut
+                && FX_CONV_MIDS_SERVER.includes(String(r.mid_cat ?? '')))
+    .map((r) => ({ d: String(r.date).slice(0, 10),
+                   a: Math.abs((Number(r.in) || 0) - (Number(r.out) || 0)) }))
+    .filter((x) => x.a > 0)
+    .sort((p, q) => p.d.localeCompare(q.d));
+  const tot = conv.reduce((s, x) => s + x.a, 0);
+  if (!tot) return () => fxAdj;
+
+  let acc = 0;
+  const byDate = new Map<string, number>();
+  for (const x of conv) { acc += x.a; byDate.set(x.d, acc / tot); }
+  const ramp = [...byDate.entries()].map(([d, w]) => ({ d, w }));
+
+  return (date: string) => {
+    const d = String(date ?? '').slice(0, 10);
+    if (!d || d <= cut) return 0;
+    let w = 0;
+    for (const x of ramp) { if (x.d <= d) w = x.w; else break; }
+    return Math.round(fxAdj * w);
+  };
+}
+
 /* ═══ 현금 기준 산출 ═══════════════════════════════════════════════════
  * index.html 의 initCashEff() + computeFxAdj() 와 **같은 값**을 내야 하는 함수다.
  *
@@ -639,6 +693,8 @@ function buildWeeklyReportHTML(
   dashboardUrl  : string = '',
   weeklySummary : { summary: string; updated_at: string | null } = { summary: '', updated_at: null },
   floor         : number = 0,          // 안전선 — 궤적 블록의 '하회' 판정용
+  fxAdjNow      : number = 0,          // 오늘자 환산조정 (②-c)
+  fxAdjAtFn     : ((d: string) => number) | null = null,   // 날짜별 환산조정 조회 (②-c)
 ): { html: string; subject: string; weekKey: string; startDate: string; endDate: string } {
 
   const C = {
@@ -670,6 +726,8 @@ function buildWeeklyReportHTML(
   /* dashboardKpiDate — min(wEnd, 오늘). index.html 의 같은 이름 주석 참고(2026-09-19 통일). */
   const _todayStr = todaySeoul();
   const dashboardKpiDate = wEnd < _todayStr ? wEnd : _todayStr;
+  /* 주차 시작 직전의 환산조정 — 궤적 시작 잔액에 쓴다(대시보드 추이 차트와 같은 기준) */
+  const _fxBefore = typeof fxAdjAtFn === 'function' ? fxAdjAtFn(addDays(wStart, -1)) : fxAdjNow;
   let pwEndCash = initCash, wkEndCash = initCash, cash = initCash;
   let nwIn = 0, nwOut = 0;
   for (const r of cfArr) {
@@ -972,7 +1030,7 @@ function buildWeeklyReportHTML(
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div>
 </td></tr>
-${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul())}
+${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, WKRPT_HORIZON_DAYS, todaySeoul(), fxAdjNow, _fxBefore)}
 ${buildNextWeekPlanHTML(todaySeoul(), addDays(todaySeoul(), 10), cfArr, initCash, floor, C, todaySeoul())}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 
@@ -1198,6 +1256,8 @@ serve(async (req: Request) => {
     fxBaseRes.data?.data as Record<string, unknown> | undefined,
   );
   const { initCashRaw, cfStart, preCfStart, fxAdj, initCash } = basis;
+  /* 환산조정 날짜별 조회 — 궤적의 주차 시작 잔액에 쓴다(위 makeFxAdjAt 주석 참고) */
+  const fxAdjAtFn = makeFxAdjAt(cfArr, fxBaseRes.data?.data as Record<string, unknown> | undefined, fxAdj);
   const dlFloor = Number((dlRes.data?.data as Record<string, unknown>)?.floor) || 1500000000;
 
   /* ⑧ 주간 요약 — body 우선 → Supabase fallback
@@ -1279,7 +1339,8 @@ serve(async (req: Request) => {
     updatedAt: weeklySummary.updated_at,
   });
   const { html, subject, weekKey, startDate, endDate } =
-    buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, DASHBOARD_URL, weeklySummary, dlFloor);
+    buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, DASHBOARD_URL, weeklySummary, dlFloor,
+                          fxAdj, fxAdjAtFn);
 
   /* ⑨ Dry-run: 전송 없음, email_log 기록 없음 — 메타데이터만 반환 */
   if (dryRun) {

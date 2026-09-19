@@ -117,8 +117,8 @@ const edgeBlock = new Function('fmt', `
   ${addDaysSrc}
   ${edgeJs}
   return {
-    traj: (ws, rows, init, floor, C, hz, today) =>
-      String(buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz, today)),
+    traj: (ws, rows, init, floor, C, hz, today, fxNow, fxBefore) =>
+      String(buildWeeklyTrajBlockHTML(ws, rows, init, floor, C, hz, today, fxNow, fxBefore)),
     nw:   (a, b, rows, init, floor, C, today) =>
       String(buildNextWeekPlanHTML(a, b, rows, init, floor, C, today)),
   };`);
@@ -157,14 +157,17 @@ const H_DAYS = H;   // 지평 일수 = 열 개수
 let pass = 0, fail = 0;
 console.log('');
 for (const [label, wStart] of CASES) {
-  const a = appFn(wStart, ROWS, INIT, FX, TODAY, H);
+  /* ⚠ fxAdjBefore 를 **실제 값으로** 태운다. 종전엔 생략해 호출해서(=fxAdj 로 대체) 양쪽이
+     같아 보였고, 그래서 Edge 에 fxAdj/fxAdjBefore 가 아예 없다는 걸 못 잡았다(2026-09-19). */
+  const FXB = Math.round(FX * 0.37);
+  const a = appFn(wStart, ROWS, INIT, FX, TODAY, H, FXB);
   /* Edge 판은 fxAdj 인자가 없다 — initCash 에 이미 얹혀 오기 때문. 같은 기준으로 넘긴다. */
-  const b = edgeFn(wStart, ROWS, INIT + FX, TODAY, H);
+  const b = edgeFn(wStart, ROWS, INIT, FX, TODAY, H, FXB);   // 시그니처 통일(②-c)
   /* HTML 블록 비교 — 공백만 다른 건 무시(들여쓰기 관습이 두 파일에서 다르다) */
   const norm = (x) => String(x).replace(/\s+/g, ' ').trim();
-  const ah = norm(appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H));
+  const ah = norm(appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, FX, FXB));
   const E = edgeBlock(FMT);
-  const bh = norm(E.traj(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, TODAY));
+  const bh = norm(E.traj(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, TODAY, FX, FXB));
   const hOk = ah === bh;
   console.log(`  ${hOk ? '✅' : '❌'} ${label} — 궤적 HTML 일치 (${ah.length} bytes)`);
   if (!hOk) {
@@ -193,7 +196,7 @@ for (const [label, wStart] of CASES) {
      ⚠⚠ 2026-08-21: 메일에서 차트가 통째로 안 보였다. 중첩 table 에 width 가 없어
        열 폭이 0 으로 접힌 것인데, 그때 검증이 **높이와 색만 재고 폭을 안 봐서** 통과했다.
        같은 부류가 다시 나면 여기서 잡는다 — 브라우저 없이 마크업만 보고 판정한다. */
-  const raw = appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H);
+  const raw = appBlock(TODAY)(wStart, ROWS, INIT + FX, 1500000000, C_MAIL, H, FX, FXB);
   /* valign 은 그림 방식에 따라 top/bottom 이 바뀐다(열 차트 → 선 차트). 거기 매달리지 말고
      '폭과 높이를 둘 다 명시한 열 셀' 인지만 본다 — 폭 누락이 잡고 싶은 결함이다. */
   const colTds = raw.match(/<td width="[\d.]+%" valign="\w+" height="\d+"/g) || [];
@@ -332,6 +335,68 @@ console.log('\n[현금 기준] initCashEff+computeFxAdj  vs  computeCashBasisSer
   for (const [label, got] of guard) {
     console.log(`  ${got ? '✅' : '❌'} ${label}`);
     got ? pass++ : fail++;
+  }
+}
+
+/* ═══ 환산조정 램프 대조 ═══════════════════════════════════════════════
+   앱 buildFxRamp_()+fxAdjAt()  ↔  Edge makeFxAdjAt()
+   ②-c 로 Edge 에 새로 옮긴 것이다. 배분 규칙이 미묘하게 달라도 궤적 숫자는 그럴듯해 보이므로
+   램프 자체를 날짜별로 대조한다. */
+console.log('\n[환산조정 램프] buildFxRamp_+fxAdjAt  vs  makeFxAdjAt');
+{
+  const edgeMakeJs = (() => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ramp-'));
+    const f = path.join(dir, 'r.ts');
+    writeFileSync(f, [
+      (tsSrc.match(/const FX_CONV_MIDS_SERVER[^;]*;/) || [''])[0],
+      grab(tsSrc, 'makeFxAdjAt'),
+    ].join('\n'), 'utf8');
+    return execFileSync('npx', ['--yes', 'esbuild@0.24.0', '--format=esm', f],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' });
+  })();
+  const edgeMake = new Function(`${edgeMakeJs}\nreturn makeFxAdjAt;`)();
+
+  const FX_CONV_MIDS_SRC = (html.match(/const FX_CONV_MIDS\s*=\s*\[[^\]]*\];/) || [''])[0];
+  const appMake = (rows, fxBase, fxAdj) => new Function('S', `
+    let _fxRamp = [], _fxRampCut = '';
+    let cfData = S.rows, fxAdjustBase = S.fxBase, FX_ADJ = S.fxAdj;
+    ${FX_CONV_MIDS_SRC}
+    ${grab(html, 'buildFxRamp_')}
+    ${grab(html, 'fxAdjAt')}
+    buildFxRamp_();
+    return (d) => fxAdjAt(d);`)({ rows, fxBase, fxAdj });
+
+  const F = (date, amt, mid, fx = true) => ({ date, status: amt > 0 ? '실제 입금' : '실제 지출',
+    in: amt > 0 ? amt : 0, out: amt < 0 ? -amt : 0, mid_cat: mid, ...(fx ? { fx_usd: true } : {}) });
+  const FXADJ = -132380573;
+  const RAMP_CASES = [
+    ['through 없음 — 램프 미형성(상수)', { pre_krw: 1 },
+      [F('2026-07-09', -1509900000, '계좌간이체')]],
+    ['환전 2건 — 비중 배분', { through: '2026-06-30' },
+      [F('2026-07-09', -1509900000, '계좌간이체'), F('2026-07-13', -37677500, '계좌간이체')]],
+    ['환전 아닌 fx 행은 램프에 안 들어감', { through: '2026-06-30' },
+      [F('2026-07-06', 5912371015, '해외'), F('2026-07-09', -1509900000, '계좌간이체')]],
+    ['외환차손도 환전으로 셈', { through: '2026-06-30' },
+      [F('2026-07-09', -9005000, '외환차손'), F('2026-07-13', -37677500, '계좌간이체')]],
+    ['cut 이전 행은 무시', { through: '2026-06-30' },
+      [F('2026-05-01', -100000000, '계좌간이체'), F('2026-07-09', -1509900000, '계좌간이체')]],
+    ['환전이 하나도 없으면 상수', { through: '2026-06-30' },
+      [F('2026-07-06', 5912371015, '해외')]],
+  ];
+  const PROBE = ['2026-06-29', '2026-06-30', '2026-07-01', '2026-07-09', '2026-07-12',
+                 '2026-07-13', '2026-09-19'];
+  for (const [label, fxBase, rows] of RAMP_CASES) {
+    const A = appMake(rows, fxBase, FXADJ), B = edgeMake(rows, fxBase, FXADJ);
+    const av = PROBE.map(d => A(d)), bv = PROBE.map(d => B(d));
+    const ok = JSON.stringify(av) === JSON.stringify(bv);
+    console.log(`  ${ok ? '✅' : '❌'} ${label}`);
+    if (!ok) {
+      const i = av.findIndex((v, k) => v !== bv[k]);
+      console.log(`       ${PROBE[i]} — 앱 ${av[i]?.toLocaleString()} vs Edge ${bv[i]?.toLocaleString()}`);
+      console.log(`       앱   ${JSON.stringify(av)}`);
+      console.log(`       Edge ${JSON.stringify(bv)}`);
+    }
+    ok ? pass++ : fail++;
   }
 }
 

@@ -9789,9 +9789,13 @@ document.getElementById('wkrpt-summary-generate-btn').addEventListener('click', 
  * ⚠ 이 블록은 Edge(send-weekly-report)에도 같은 내용이 한 벌 더 있다. 메일 HTML 이
  *   미리보기(여기)와 실제 발송(Edge) 두 벌로 관리되는 구조라 **둘 다 고쳐야 한다.**
  * initCash 는 이미 환산손익(FX_ADJ)이 얹힌 값이 넘어온다 — 호출부에서 더해 준다. */
-function buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, horizonDays) {
+/* ⚠ initCash 에는 **오늘자** 환산조정이 이미 들어 있다. 주차 시작 잔액은 그 시점의 배분값
+   (fxAdjAt)을 써야 대시보드 추이 차트와 같아진다 — 기초에서 걷어내고 성분으로 다시 넘긴다
+   (2026-09-19, ②-c). 종전엔 fxAdj=0 을 넘겨 늘 오늘자 값이 주차 시작에 얹혔다. */
+function buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, floor, C, horizonDays, fxAdjNow = 0, fxAdjBefore) {
   const today = todayKST();
-  const S = computeWeeklyCashSeries(wStart, cfArr, initCash, 0, today, horizonDays);
+  const S = computeWeeklyCashSeries(wStart, cfArr, initCash - (fxAdjNow || 0), fxAdjNow || 0,
+    today, horizonDays, fxAdjBefore);
   const { dates, projVals, actVals } = S;
 
   /* 표시할 값: 각 날짜의 '그 시점 잔액' — 확정이면 확정값, 아니면 궤적값 */
@@ -10098,7 +10102,9 @@ function buildNextWeekPlanHTML(from, to, cfArr, initCash, floor, C, today) {
 </td></tr>`;
 }
 
-function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null) {
+/* fxAdjNow / fxAdjAtFn — 환산조정의 '오늘자 값' 과 '날짜별 조회 함수'. 궤적 블록이 주차 시작
+   시점의 값을 쓰기 위해 필요하다(2026-09-19, ②-c). 안 넘기면 종전 동작(오늘자 상수). */
+function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData = null, fxAdjNow = 0, fxAdjAtFn = null) {
   // ── 색상 상수 (email-safe, CSS 변수 미사용) ──
   const C = {
     green:'#2A7F57', green2:'#E7F1E1', red:'#C24A38', red2:'#F7E4DE',
@@ -10152,6 +10158,8 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
        (2026-09-19: 메일 09-20 vs 화면 09-19). 2026-09-19 통일. */
   const _todayStr = todayKST();
   const dashboardKpiDate = wEnd < _todayStr ? wEnd : _todayStr;
+  /* 주차 시작 직전의 환산조정 — 궤적의 시작 잔액에 쓴다(대시보드 추이 차트와 같은 기준) */
+  const _fxBefore = (typeof fxAdjAtFn === 'function') ? fxAdjAtFn(addDays(wStart, -1)) : fxAdjNow;
 
   let pwEndCash = initCash, wkEndCash = initCash, cash = initCash;
   let nwIn = 0, nwOut = 0;
@@ -10346,7 +10354,7 @@ function buildWeeklyReportHTML(targetDate, cfArr, arArr, initCash, summaryData =
     <span style="font-weight:700;color:${wNet>=0?C.green:C.red};margin-left:6px">${wNet>=0?'+':''}${fmt(wNet)}</span>
     <span style="font-size:11px;color:${C.t3};margin-left:8px">입금 ${fmt(wIn)} − 지출 ${fmt(wOut)}</span>
   </div></td></tr>
-${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, dlFloor(), C, WKRPT_HORIZON_DAYS)}
+${buildWeeklyTrajBlockHTML(wStart, cfArr, initCash, dlFloor(), C, WKRPT_HORIZON_DAYS, fxAdjNow, _fxBefore)}
 ${buildNextWeekPlanHTML(todayKST(), addDays(todayKST(), 10), cfArr, initCash, dlFloor(), C, todayKST())}
 <tr><td style="background:${C.card};padding:0 18px"><div style="height:1px;background:${C.border}"></div></td></tr>
 <!-- 입금 내역 -->
@@ -10610,7 +10618,8 @@ async function callEdgeFunction(sendType, dryRun = false, recipientOverride = nu
        * initCash = initCashRaw + fxAdj 로 같은 처리를 한다. 한쪽만 바꾸면 미리보기와
        * 실제 발송 메일의 숫자가 갈린다. */
       computeFxAdj();
-      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, initCashEff() + FX_ADJ, _previewSummaryData);
+      const previewHtml = buildWeeklyReportHTML(refDate, cfData, arData, initCashEff() + FX_ADJ,
+        _previewSummaryData, FX_ADJ, fxAdjAt);
       const win = window.open('', '_blank', 'width=720,height=900,scrollbars=yes');
       if (win) {
         win.document.write(String(previewHtml));
