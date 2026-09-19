@@ -11,6 +11,13 @@
  * 어떻게: index.html 에서 computeWeeklyCashSeries 를 그대로 잘라내고, Edge 는 esbuild 로
  * 타입만 벗겨 같은 함수를 뽑아, 같은 입력에 같은 출력이 나오는지 비교한다.
  *
+ * ⚠⚠ 2026-09-19: 이 테스트가 **궤적만 보고 '현금 기준' 은 안 봐서** 사고를 놓쳤다.
+ *   settings.cf_start 도입 때 대시보드(initCashEff)만 고치고 Edge 를 안 따라가, 메일의
+ *   현금이 화면보다 정확히 328,588,261원 낮게 나갔다. 차주 예상기말현금이 실제 +2.9억인데
+ *   메일엔 -3,472만(적자)으로 보였다. 궤적 숫자는 멀쩡했으므로 이 테스트는 통과했다.
+ *   → 그래서 **현금 기준 산출(initCashEff vs computeCashBasisServer)** 대조를 추가했다.
+ *   계산 기준이 양쪽에 사본으로 존재하는 한, 값이 아니라 **기준** 을 대조해야 한다.
+ *
  * 실행: node scripts/test-weekly-email-parity.mjs
  * (esbuild 를 npx 로 내려받는다 — 오프라인이면 건너뛴다)
  */
@@ -183,6 +190,90 @@ for (const [label, wStart] of CASES) {
     ok ? pass++ : fail++;
   }
 }
+
+/* ═══ 현금 기준 산출 대조 ═══════════════════════════════════════════════
+   대시보드 initCashEff() + computeFxAdj()  ↔  Edge computeCashBasisServer()
+   같은 입력에 같은 initCash 가 나와야 한다. 위 ⚠⚠ 참고 — 이게 없어 사고를 놓쳤다. */
+console.log('\n[현금 기준] initCashEff+computeFxAdj  vs  computeCashBasisServer');
+{
+  const edgeBasisJs = (() => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'basis-'));
+    const f = path.join(dir, 'b.ts');
+    writeFileSync(f, grab(tsSrc, 'computeCashBasisServer'), 'utf8');
+    return execFileSync('npx', ['--yes', 'esbuild@0.24.0', '--format=esm', f],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32' });
+  })();
+  const edgeBasis = new Function(`${edgeBasisJs}\nreturn computeCashBasisServer;`)();
+
+  /* 대시보드 쪽은 전역(CF_START·INIT_CASH·cfData·bankSnapshot·fxAdjustBase·FX_ADJ)에
+     의존하므로 shim 으로 주입한다. 사본을 만들지 않고 index.html 본문을 그대로 쓴다. */
+  /* computeFxAdj 가 buildFxRamp_ 를 부르고, 그게 FX_CONV_MIDS 를 쓴다 — 상수도 원본에서 읽는다
+     (테스트에 베껴 두면 원본이 바뀔 때 조용히 갈린다). */
+  const FX_CONV_MIDS = JSON.parse(
+    (html.match(/const FX_CONV_MIDS\s*=\s*(\[[^\]]*\])/) || [])[1]
+      ?.replace(/'/g, '"') ?? '[]');
+  const appBasis = (cfRows, settings, snap, fxBase) => {
+    const ctx = new Function('S', `
+      let CF_START = S.cf_start, INIT_CASH = S.init_cash, FX_ADJ = 0;
+      let cfData = S.cfData, bankSnapshot = S.snap, fxAdjustBase = S.fxBase;
+      let _fxRamp = [], _fxRampCut = '';
+      ${grab(html, 'initCashEff')}
+      ${grab(html, 'computeFxAdj')}
+      ${grab(html, 'buildFxRamp_')}
+      const FX_CONV_MIDS = ${JSON.stringify(FX_CONV_MIDS)};
+      computeFxAdj();
+      return { initCash: initCashEff() + FX_ADJ, fxAdj: FX_ADJ, eff: initCashEff() };`);
+    return ctx({ cf_start: String(settings.cf_start || '').slice(0, 10),
+                 init_cash: Number(settings.init_cash || 0),
+                 cfData: cfRows, snap, fxBase });
+  };
+
+  /* cf_start 앞뒤에 거래를 두고, 외화 행도 섞는다 — 보정과 환산손익을 동시에 태운다. */
+  const R = (date, status, amt, extra = {}) => ({
+    date, status, in: status.includes('입금') ? amt : 0, out: status.includes('지출') ? amt : 0, ...extra });
+  const CASES = [
+    ['cf_start 없음 (종전 동작)', { init_cash: 100000000 },
+      [R('2025-11-05', '실제 입금', 5000000), R('2026-02-10', '실제 지출', 3000000)]],
+    ['cf_start 이전 거래가 순증', { init_cash: 148963934, cf_start: '2026-01-01' },
+      [R('2025-10-24', '실제 입금', 80000000), R('2025-12-31', '실제 지출', 20000000),
+       R('2026-03-01', '실제 지출', 7000000)]],
+    ['cf_start 이전 거래가 순감 (실제 상황)', { init_cash: 148963934, cf_start: '2026-01-01' },
+      [R('2025-11-01', '실제 지출', 400000000), R('2025-12-20', '실제 입금', 71411739),
+       R('2026-05-05', '실제 입금', 12000000)]],
+    ['cf_start 경계 — 당일은 포함 안 함', { init_cash: 50000000, cf_start: '2026-01-01' },
+      [R('2025-12-31', '실제 지출', 1000000), R('2026-01-01', '실제 지출', 2000000)]],
+    ['외화 행이 섞임 (환산손익 동시)', { init_cash: 148963934, cf_start: '2026-01-01' },
+      [R('2025-12-01', '실제 입금', 30000000, { fx_usd: true }),
+       R('2026-07-06', '실제 입금', 5912371015, { fx_usd: true }),
+       R('2026-07-13', '실제 지출', 4280191128, { fx_usd: true })]],
+    ['예정 행은 무시해야 함', { init_cash: 100000000, cf_start: '2026-01-01' },
+      [R('2025-12-10', '지출 예정', 9000000), R('2025-12-11', '실제 지출', 1000000)]],
+  ];
+  const SNAP = { fxKrw: 65636224 }, FXB = { pre_krw: 114935167 };
+  for (const [label, settings, rows] of CASES) {
+    const a = appBasis(rows, settings, SNAP, FXB);
+    const b = edgeBasis(rows, settings, SNAP, FXB);
+    const ok = a.initCash === b.initCash && a.fxAdj === b.fxAdj;
+    console.log(`  ${ok ? '✅' : '❌'} ${label}`);
+    if (!ok) {
+      console.log(`       미리보기 initCash ${a.initCash.toLocaleString()} / fxAdj ${a.fxAdj.toLocaleString()}`);
+      console.log(`       Edge      initCash ${b.initCash.toLocaleString()} / fxAdj ${b.fxAdj.toLocaleString()}`);
+    }
+    ok ? pass++ : fail++;
+  }
+  /* 회귀 방어 — 보정 자체가 어느 한쪽에서 사라지는 걸 막는다.
+     위 케이스는 '두 구현이 같은가' 만 보므로, **둘 다 틀리면** 통과해 버린다. */
+  const guard = [
+    ['index.html 에 cf_start 보정이 있다', /CF_START[\s\S]{0,400}INIT_CASH\s*-\s*pre/.test(html)],
+    ['Edge 에 cf_start 보정이 있다', /cfStart[\s\S]{0,600}initCashRaw\s*-\s*preCfStart/.test(tsSrc)],
+    ['Edge 의 현금 기준이 이름 있는 함수다', /function computeCashBasisServer\(/.test(tsSrc)],
+  ];
+  for (const [label, got] of guard) {
+    console.log(`  ${got ? '✅' : '❌'} ${label}`);
+    got ? pass++ : fail++;
+  }
+}
+
 console.log('');
 console.log(`${fail === 0 ? '✅ 두 사본이 같은 숫자를 냅니다' : '❌ 사본이 갈라졌습니다 — ' + fail + '건'} (${pass}/${pass+fail})`);
 process.exitCode = fail ? 1 : 0;

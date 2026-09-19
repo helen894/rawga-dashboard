@@ -582,6 +582,55 @@ function buildNextWeekPlanHTML(
 // index.html buildWeeklyReportHTML()과 동일한 계산 로직
 // KPI: 전주 기말 / 주간 입금 / 주간 지출 / 금주 기말 (화면과 동일)
 // 입금·지출 표 세 번째 컬럼: 중분류 (거래처가 아닌 mid_cat 값)
+/* ═══ 현금 기준 산출 ═══════════════════════════════════════════════════
+ * index.html 의 initCashEff() + computeFxAdj() 와 **같은 값**을 내야 하는 함수다.
+ *
+ * ⚠⚠ settings.cf_start(현금 시계열 시작일)가 생기면서 init_cash 의 의미가 바뀌었다:
+ *   종전 = 전체 기간의 기초잔액  /  지금 = **cf_start 시점의 관측 잔액**
+ *   누적 루프는 cf_data 를 전체 훑으므로, 보정 없이 두면 cf_start 이전 거래가 이중 반영된다.
+ *   그만큼(preCfStart)을 init_cash 에서 미리 빼 상쇄한다.
+ *
+ * 실제 사고 (2026-09-19): 이 보정이 없어 메일의 현금이 화면보다 **정확히 328,588,261원**
+ *   낮게 나갔다. 현금·총유동자산·총자산합계·차주예상기말현금 네 KPI 가 동시에 틀렸고,
+ *   차주 예상기말현금이 실제 +293,859,253 인데 메일엔 -34,729,008(적자)로 보였다.
+ *   원인은 cf_start 도입 때 대시보드만 고치고 이 Edge 를 안 따라간 것이다.
+ *
+ * ⚠ 핸들러에 인라인으로 두지 말 것 — 이름 있는 함수여야 parity 테스트가 뽑아 대조할 수 있다. */
+function computeCashBasisServer(
+  cfArr: Record<string, unknown>[],
+  settings: Record<string, unknown> | undefined,
+  snap: Record<string, unknown> | undefined,
+  fxBase: Record<string, unknown> | undefined,
+) {
+  const initCashRaw = Number(settings?.init_cash ?? 134838617);
+  const cfStart = String(settings?.cf_start ?? '').slice(0, 10);
+
+  let preCfStart = 0;
+  if (cfStart) {
+    for (const r of cfArr) {
+      const d = String(r.date ?? '');
+      if (!d || d >= cfStart) continue;
+      const st = String(r.status ?? '');
+      if (st === '실제 입금')      preCfStart += Number(r.in)  || 0;
+      else if (st === '실제 지출') preCfStart -= Number(r.out) || 0;
+    }
+  }
+
+  /* 외화 환산손익 — cf_data 는 '거래일 환율', 은행 실잔액의 외화는 '현재 평가환율' 기준이라
+     반영하지 않으면 리포트 현금이 실제와 어긋난다.
+       환산손익 = 외화 실잔액(평가) − ( fx_adjust_base.pre_krw + Σ fx_usd 행의 in−out ) */
+  let fxAdj = 0;
+  if (snap) {
+    const spot = Number(snap.fxKrw) || 0;
+    let book = Number(fxBase?.pre_krw) || 0;
+    for (const r of cfArr) {
+      if (r.fx_usd) book += (Number(r.in) || 0) - (Number(r.out) || 0);
+    }
+    fxAdj = Math.round(spot - book);
+  }
+  return { initCashRaw, cfStart, preCfStart, fxAdj, initCash: (initCashRaw - preCfStart) + fxAdj };
+}
+
 function buildWeeklyReportHTML(
   targetDate    : string,
   cfArr         : Record<string, unknown>[],
@@ -1131,54 +1180,18 @@ serve(async (req: Request) => {
   // Supabase 원본을 수정하지 않고 계산용 배열만 정규화
   cfArr = cfArr.map(normalizeCFRowServer);
 
-  // INIT_CASH: cat_data.settings.init_cash → 기본값 134838617 (앱과 동일)
-  const initCashRaw = Number(
-    (initRes.data?.data as Record<string, unknown>)?.init_cash ?? 134838617,
+  /* 현금 기준 = init_cash(cf_start 보정) + 환산손익.
+     ⚠ 이 계산은 index.html 의 initCashEff() + computeFxAdj() 와 **같은 값**을 내야 한다.
+       한쪽만 고치면 메일과 화면의 현금이 갈린다(2026-09-19 실제로 328,588,261원 갈렸다).
+       scripts/test-weekly-email-parity.mjs 가 두 구현을 같은 입력으로 돌려 대조한다 —
+       그래서 핸들러 인라인이 아니라 **이름 있는 함수**로 둔다(인라인이면 테스트가 못 뽑는다). */
+  const basis = computeCashBasisServer(
+    cfArr,
+    initRes.data?.data as Record<string, unknown> | undefined,
+    snapRes.data?.data as Record<string, unknown> | undefined,
+    fxBaseRes.data?.data as Record<string, unknown> | undefined,
   );
-
-  /* ⚠⚠ cf_start 보정 — 대시보드 index.html 의 initCashEff() 와 **같은 계산**이다.
-   * settings.cf_start(현금 시계열 시작일)가 생기면서 init_cash 의 의미가 바뀌었다:
-   *   종전 = 전체 기간의 기초잔액  /  지금 = **cf_start 시점의 관측 잔액**
-   * 그런데 아래 누적 루프는 cf_data 를 전체 훑으므로, 보정 없이 두면 cf_start 이전 거래가
-   * 이중으로 반영된다. 그만큼(preCfStart)을 init_cash 에서 미리 빼 상쇄한다.
-   *
-   * 실제 사고 (2026-09-19): 이 보정이 없어 메일의 현금이 화면보다 **정확히 328,588,261원**
-   *   낮게 나갔다. 현금·총유동자산·총자산합계·차주예상기말현금 네 KPI 가 동시에 틀렸고,
-   *   차주 예상기말현금이 실제 +293,859,253 인데 메일엔 -34,729,008(적자)로 보였다.
-   *   원인은 cf_start 도입 때 대시보드만 고치고 이 Edge 를 안 따라간 것이다.
-   * ⚠ 메일 HTML 은 미리보기(index.html)와 실제발송(이 파일) **두 벌**이다. 계산 기준을
-   *   한쪽만 고치면 반드시 이렇게 갈린다. 둘 다 고칠 것. */
-  const cfStart = String((initRes.data?.data as Record<string, unknown>)?.cf_start ?? '').slice(0, 10);
-  let preCfStart = 0;
-  if (cfStart) {
-    for (const r of cfArr) {
-      const row = r as Record<string, unknown>;
-      const d = String(row.date ?? '');
-      if (!d || d >= cfStart) continue;
-      const st = String(row.status ?? '');
-      if (st === '실제 입금')      preCfStart += Number(row.in)  || 0;
-      else if (st === '실제 지출') preCfStart -= Number(row.out) || 0;
-    }
-  }
-
-  /* 외화 환산손익 — 대시보드(index.html computeFxAdj)와 같은 정의를 서버에서도 계산한다.
-   * cf_data 는 외화를 '거래일 환율'로 원화 환산해 기록하는데 은행 실잔액의 외화는
-   * '현재 평가환율' 기준이라, 반영하지 않으면 리포트의 현금이 실제와 어긋난다.
-   *   환산손익 = 외화 실잔액(평가) − ( fx_adjust_base.pre_krw + Σ fx_usd 행의 in−out )
-   * ⚠ 대시보드와 정의가 갈리면 리포트와 화면 숫자가 달라진다. 한쪽만 고치지 말 것. */
-  const snap = snapRes.data?.data as Record<string, unknown> | undefined;
-  let fxAdj = 0;
-  if (snap) {
-    const spot = Number(snap.fxKrw) || 0;
-    let book = Number((fxBaseRes.data?.data as Record<string, unknown>)?.pre_krw) || 0;
-    for (const r of cfArr) {
-      if ((r as Record<string, unknown>).fx_usd) {
-        book += (Number((r as Record<string, unknown>).in) || 0) - (Number((r as Record<string, unknown>).out) || 0);
-      }
-    }
-    fxAdj = Math.round(spot - book);
-  }
-  const initCash = (initCashRaw - preCfStart) + fxAdj;
+  const { initCashRaw, cfStart, preCfStart, fxAdj, initCash } = basis;
   const dlFloor = Number((dlRes.data?.data as Record<string, unknown>)?.floor) || 1500000000;
 
   /* ⑧ 주간 요약 — body 우선 → Supabase fallback
