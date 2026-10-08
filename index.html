@@ -2631,6 +2631,13 @@
     <span style="font-size:12px">위 폼에서 매월 발생하는 입출금을 등록하세요.</span>
   </div>
 
+  <!-- 건너뛴 달 — 예정 행을 지우면 여기 쌓인다. 안 보이면 큰 건이 조용히 예측에서 빠진다. -->
+  <div id="rec-skip-box" style="display:none;margin-top:18px;padding:14px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px">
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">🔁 건너뛴 달</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">예정 항목을 삭제한 달입니다. 자동 생성이 다시 만들지 않습니다. 되살리면 다음 생성 때 복구됩니다.</div>
+    <div id="rec-skip-list" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+
 </div>
 <!-- ======== CATEGORY TAB ======== -->
 <div class="panel" id="panel-category">
@@ -4237,6 +4244,10 @@ async function loadDataFromSupabase() {
           recurData = row.data;
           localStorage.setItem('recur_data', JSON.stringify(recurData));
         }
+        if (row.key === 'recur_skip' && Array.isArray(row.data)) {
+          recurSkip = row.data;
+          localStorage.setItem('recur_skip', JSON.stringify(recurSkip));
+        }
         if (row.key === 'settings') {
           SETTINGS_RAW = { ...(row.data || {}) };   // 저장 시 병합용 — 미지의 키 보존
           if (row.data?.init_cash !== undefined) {
@@ -4350,6 +4361,7 @@ async function loadDataFromSupabase() {
     const savedRecur         = localStorage.getItem('recur_data');
     const savedEmailSettings = localStorage.getItem('weekly_email_settings');
     if (savedRecur)          recurData     = JSON.parse(savedRecur);
+    loadRecurSkip();   // 건너뛴 달도 같이 복구 — 없으면 지운 예정이 되살아난다
     if (savedEmailSettings)  emailSettings = { ...emailSettings, ...JSON.parse(savedEmailSettings) };
     if (!Object.keys(catMidToBig).length)  catMidToBig  = {...DEFAULT_MID_TO_BIG};
     if (!Object.keys(catDescToMid).length) catDescToMid = {...DEFAULT_DESC_TO_MID};
@@ -4612,6 +4624,11 @@ function subscribeRealtime() {
             if (row.key === 'desc_type_to_mid') {
               catDescTypeToMid = row.data;
               localStorage.setItem('cat_desc_type_to_mid', JSON.stringify(catDescTypeToMid));
+            }
+            if (row.key === 'recur_skip' && Array.isArray(row.data)) {
+              recurSkip = row.data;
+              localStorage.setItem('recur_skip', JSON.stringify(recurSkip));
+              renderRecurSkipList();
             }
             if (row.key === 'recur_data' && Array.isArray(row.data)) {
               recurData = row.data;
@@ -6129,6 +6146,9 @@ function deleteCF(id) {
   }
 
   cfData.splice(idx, 1);
+  /* 반복 생성분이면 '그 달은 만들지 마라' 를 남긴다 — 안 남기면 새로고침 때 되살아난다
+     (2026-10-08 급여 중복 사고). splice 뒤에 불러야 '같은 달에 남은 행' 판정이 맞다. */
+  if (noteRecurSkips([row])) deleteMsg += ' | 🔁 이 달 반복 생성 중지 (반복 거래 탭에서 되살리기)';
   saveDataExplicit();
   logAudit('data_modify', `입출금 삭제: [${row.date}] ${row.desc || ''} (${(row.in||0)>0 ? '입금 '+row.in : '출금 '+(row.out||0)})`);
   renderAll();
@@ -6689,13 +6709,17 @@ document.getElementById('cf-delete-selected-btn').addEventListener('click', () =
     }
   }
 
+  const _deleted = cfData.filter(r => idSet.has(r._id));
   cfData = cfData.filter(r => !idSet.has(r._id));
+  // 반복 생성분은 그 달을 건너뛰도록 기록 (deleteCF 와 같은 이유 — 반드시 삭제 뒤)
+  const _recSkipped = noteRecurSkips(_deleted);
   cfSelectedIds.clear();  // 삭제 완료 후 선택 상태 초기화
   saveDataExplicit();
   renderAll();
   const checkAll = document.getElementById('cf-check-all');
   if (checkAll) { checkAll.checked = false; checkAll.indeterminate = false; }
   let msg = `🗑 ${ids.length}건 삭제됐습니다.`;
+  if (_recSkipped)   msg += ` | 🔁 반복 ${_recSkipped}개 달 생성 중지`;
   if (arRevCreated)  msg += ` | AR ${arRevCreated}건 삭제`;
   if (arProtected)   msg += ` | AR ${arProtected}건 보호됨`;
   if (arRevDeducted) msg += ` | AR 차감 ${arRevDeducted}건 원복`;
@@ -11274,9 +11298,68 @@ document.querySelectorAll('#reporting-sub-tabs .sheet-tab').forEach(btn => {
 
 let recurData = []; // { day, desc, in, out, mid_cat, memo }
 
+/* ===== 반복 생성 '건너뛴 달' =====
+ * "recur_id|YYYY-MM" 문자열 배열. generateRecurring 이 이 달은 만들지 않는다.
+ *
+ * ⚠⚠ 왜 필요한가 (2026-10-08) — 생성기는 '없으면 만든다' 만 안다. 예정 행을 지워도
+ *   새로고침 때 generateRecurring 이 다시 만들어, 지우는 행위 자체가 의미가 없었다.
+ *   "지웠다" 는 사실을 어딘가 남겨야 끝난다. 그게 이 목록이다.
+ * ⚠ 되살릴 수 있어야 한다. 잘못 지운 뒤 조용히 영영 안 생기면 급여 같은 큰 건이
+ *   예측에서 통째로 빠진다 — 이 대시보드에서 제일 위험한 실패 유형이다.
+ *   그래서 반복 거래 탭에 목록과 '되살리기' 를 같이 띄운다.
+ * ※ cat_data 의 'recur_skip' 키에 저장한다. ar_meta 와 같은 방식으로 cf_data 동기화와
+ *   분리해 둬야, 입출금 전체 교체가 이 기록을 지우지 않는다. */
+let recurSkip = []; // ["rc_xxx|2026-10", ...]
+
+function loadRecurSkip() {
+  try {
+    const saved = localStorage.getItem('recur_skip');
+    recurSkip = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(recurSkip)) recurSkip = [];
+  } catch (e) { recurSkip = []; }
+}
+const recurSkipKey = (recurId, date) =>
+  (recurId && date) ? recurId + '|' + String(date).slice(0, 7) : '';
+function isRecurSkipped(recurId, date) {
+  const k = recurSkipKey(recurId, date);
+  return !!k && recurSkip.indexOf(k) >= 0;
+}
+async function saveRecurSkip() {
+  try { localStorage.setItem('recur_skip', JSON.stringify(recurSkip)); } catch (e) {}
+  if (!_supa) return { error: null };
+  try {
+    const { error } = await _supa.from('cat_data')
+      .upsert([{ key: 'recur_skip', data: recurSkip }], { onConflict: 'key' });
+    if (error) throw error;
+    return { error: null };
+  } catch (e) {
+    console.warn('[saveRecurSkip] Supabase 저장 실패:', e);
+    try { showToast('⚠ 건너뛴 달 서버 저장 실패 — 로컬에만 남았습니다', 'red'); } catch (e2) {}
+    return { error: e };
+  }
+}
+/* 삭제된 cf 행들에서 '그 달은 만들지 마라' 를 기록한다. 반환: 새로 기록된 건수
+   ⚠ **cfData 에서 지운 뒤** 불러야 한다. 같은 템플릿의 행이 그 달에 아직 남아 있으면
+     (예: 10/09 를 지웠지만 날짜를 옮겨 둔 10/08 이 있는 경우) 건너뛸 이유가 없다 —
+     그때 기록하면 '건너뛴 달' 목록에 멀쩡히 존재하는 달이 떠서 사람을 헷갈리게 한다. */
+function noteRecurSkips(rows) {
+  let n = 0;
+  for (const r of (rows || [])) {
+    const k = recurSkipKey(r && r.recur_id, r && r.date);
+    if (!k || recurSkip.indexOf(k) >= 0) continue;
+    const ym = String(r.date).slice(0, 7);
+    const stillThere = cfData.some(x => x.recur_id === r.recur_id && String(x.date || '').slice(0, 7) === ym);
+    if (stillThere) continue;
+    recurSkip.push(k); n++;
+  }
+  if (n) saveRecurSkip();
+  return n;
+}
+
 function loadRecurData() {
   const saved = localStorage.getItem('recur_data');
   recurData = saved ? JSON.parse(saved) : [];
+  loadRecurSkip();
 }
 /* ⚠ Supabase 쿼리 빌더는 then() 만 가진 thenable 이라 .catch() 가 없다.
    빌더에 바로 .catch() 를 걸면 TypeError 가 나면서 두 가지가 동시에 깨진다:
@@ -11314,14 +11397,25 @@ function ensureRecurIds() {
   if (dirty) saveRecurData();
 }
 
-/* R-1: 중복 체크 개선
- * - recur_id 있는 신규 데이터: recur_id + date 기준 (상태 무관)
+/* R-1: 중복 체크
+ * - recur_id 있는 신규 데이터: recur_id + **같은 달** 기준 (상태 무관)
  * - recur_id 없는 과거 데이터 fallback: date + desc + amount 기준 (상태 무관, 예정→실제 변경 후 재생성 방지)
+ *
+ * ⚠⚠ 2026-10-08: 종전엔 `recur_id + 정확한 날짜` 였다. 생성된 행의 **날짜를 옮기면**
+ *   원래 날짜가 비어 "없다"로 판정돼 그 자리에 다시 만들었다. 급여가 그렇게 두 벌이 됐다:
+ *   템플릿이 10일+주말보정(prev)이라 2026-10-10(토) → 10-09(금)을 만들었는데, 10-09 는
+ *   한글날이라 실제 지급일이 10-08 이었다. 대표님이 10-08 로 옮기자 10-09 가 부활해
+ *   10월 급여 122,586,410 원이 중복 계상됐다(타행 82,206,410 + 당행 30,873,930 + 세금 9,506,070).
+ *   한 템플릿은 한 달에 한 건이므로 '달' 로 보는 것이 맞다 — 날짜를 옮겨도 다시 안 만든다.
+ *   ※ fallback 은 날짜 기준 그대로 둔다. recur_id 가 없는 과거 행은 적요+금액으로만
+ *     구분되는데, 같은 달에 같은 금액이 두 번 나가는 거래처가 실제로 있어 달 단위로 묶으면
+ *     정상 건을 '중복'으로 지워 버린다.
  */
 function recurDupExists(date, desc, inAmt, outAmt, recurId) {
   if (recurId) {
-    // 신규: recur_id + date 기준 (상태 무관 — 예정→실제 변경 후에도 중복 방지)
-    return cfData.some(r => r.recur_id === recurId && r.date === date);
+    // 신규: recur_id + 같은 달 (상태 무관 — 예정→실제 변경 후에도, 날짜를 옮겨도 중복 방지)
+    const ym = String(date).slice(0, 7);
+    return cfData.some(r => r.recur_id === recurId && String(r.date || '').slice(0, 7) === ym);
   }
   // fallback: recur_id 없는 과거 생성분 — 날짜+내용+금액 기준 (상태 무관)
   return cfData.some(r =>
@@ -11355,7 +11449,7 @@ function generateRecurring(showToastMsg = true) {
   const todayDay = parseInt(today.slice(8,10));
   const [ty, tm] = today.split('-').map(Number);
   const months = parseInt(localStorage.getItem('recur_months') || '3');
-  let added = 0;
+  let added = 0, skipped = 0;
 
   for (const rec of recurData) {
     // R-4: 당월 포함 조건 — rec.day >= todayDay (기준일이 오늘이거나 이후이면 당월 생성)
@@ -11374,6 +11468,8 @@ function generateRecurring(showToastMsg = true) {
       if (targetDate < today) continue;
       // R-1: recur_id 기반 중복 체크 (없으면 desc/금액 기반 fallback)
       if (recurDupExists(targetDate, rec.desc, rec.in||0, rec.out||0, rec._id)) continue;
+      // 사용자가 그 달 예정을 지웠으면 다시 만들지 않는다 (recurSkip 주석 참고)
+      if (isRecurSkipped(rec._id, targetDate)) { skipped++; continue; }
       const type = (rec.in||0) > 0 ? '입금' : '지출';
       const status = type === '입금' ? '입금 예정' : '지출 예정';
       const mid = rec.mid_cat || getMidCat(rec.desc, type) || '';
@@ -11397,10 +11493,58 @@ function generateRecurring(showToastMsg = true) {
   }
 
   const statusEl = document.getElementById('recur-gen-status');
-  if (statusEl) statusEl.textContent = added > 0 ? `✅ ${added}건 생성 (${today})` : `최신 상태 (${today})`;
+  if (statusEl) {
+    const skipTxt = skipped > 0 ? ' · 건너뛴 달 ' + skipped + '건' : '';
+    statusEl.textContent = (added > 0 ? `✅ ${added}건 생성 (${today})` : `최신 상태 (${today})`) + skipTxt;
+  }
+  renderRecurSkipList();
   if (showToastMsg && added > 0) showToast(`🔄 반복 거래 ${added}건 예정 항목이 생성됐습니다.`, 'green');
   return added;
 }
+
+/* ------ 건너뛴 달 목록 ------
+   지운 예정이 어디로 갔는지 보여주고 되돌릴 수 있게 한다. 이게 없으면 잘못 지운 급여가
+   조용히 예측에서 빠진 채 아무도 모른다 — 이 대시보드에서 제일 위험한 실패 유형이다. */
+function renderRecurSkipList() {
+  const box = document.getElementById('rec-skip-box');
+  const list = document.getElementById('rec-skip-list');
+  if (!box || !list) return;
+  if (!recurSkip.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
+  box.style.display = '';
+  const byId = {};
+  for (const r of recurData) byId[r._id] = r;
+  const rows = recurSkip.slice().sort();
+  list.innerHTML = html`${rows.map(k => {
+    const [rid, ym] = String(k).split('|');
+    const rec = byId[rid];
+    const name = rec ? rec.desc : '(삭제된 반복 거래)';
+    const amt  = rec ? fmt(Math.abs((rec.in || 0) - (rec.out || 0))) : '-';
+    const dir  = rec && (rec.in || 0) > 0 ? '입금' : '지출';
+    return html`<div style="display:flex;align-items:center;gap:10px;font-size:12px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px">
+      <span style="color:var(--text3);min-width:62px">${ym}</span>
+      <span style="color:var(--text);font-weight:500;flex:1">${name}</span>
+      <span style="color:var(--text2)">${dir} ${amt}</span>
+      <button class="btn" data-skip-key="${k}" style="font-size:11px;padding:3px 10px">되살리기</button>
+    </div>`;
+  })}`;
+}
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-skip-key]');
+  if (!btn) return;
+  const k = btn.dataset.skipKey;
+  const i = recurSkip.indexOf(k);
+  if (i < 0) return;
+  const backup = recurSkip.slice();
+  recurSkip.splice(i, 1);
+  const { error } = await saveRecurSkip();
+  if (error) { recurSkip = backup; renderRecurSkipList(); return; }
+  /* 바로 다시 만들어 준다 — '되살리기' 를 눌렀는데 아무 일도 안 일어나면 고장으로 보인다.
+     ⚠ 이미 지난 달은 generateRecurring 이 만들지 않는다(과거 날짜는 건너뜀). 그건 정상이다. */
+  const n = generateRecurring(false);
+  renderAll();
+  showToast(n > 0 ? `🔁 ${n}건 복구됐습니다.` : '🔁 해제했습니다. (지난 달이라 생성되진 않습니다)', n > 0 ? 'green' : 'amber');
+});
 
 /* ------ 반복 거래 탭 렌더 ------ */
 function buildRecMidCatSelect() {
@@ -11410,6 +11554,7 @@ function buildRecMidCatSelect() {
 }
 
 function renderRecurTable() {
+  renderRecurSkipList();
   const tbody = document.getElementById('rec-tbody');
   const empty = document.getElementById('rec-empty');
   if (!tbody) return;
