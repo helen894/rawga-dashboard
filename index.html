@@ -11338,6 +11338,23 @@ async function saveRecurSkip() {
     return { error: e };
   }
 }
+/* 지난 달 기록은 치운다. 반환: 지운 건수
+   생성기가 과거 날짜는 어차피 안 만들어(`targetDate < today` 로 건너뜀) 남겨둘 이유가 없다.
+   매달 실제 급여가 적재된 뒤 예정 행을 지우면 3건씩 쌓여 1년이면 36건이 되는데, 그러면
+   '건너뛴 달' 목록이 소음이 되고 정작 봐야 할 때 아무도 안 본다 — 안전 UI 가 죽는 전형적인
+   방식이다. **이번 달과 미래 달은 그대로 둔다** (미래를 미리 건너뛰어 둔 것은 살아 있어야 한다). */
+function pruneRecurSkip() {
+  const curYM = todayKST().slice(0, 7);
+  const before = recurSkip.length;
+  recurSkip = recurSkip.filter(k => {
+    const ym = String(k).split('|')[1] || '';
+    return !(/^\d{4}-\d{2}$/.test(ym) && ym < curYM);   // 형식이 이상하면 건드리지 않는다
+  });
+  const n = before - recurSkip.length;
+  if (n) saveRecurSkip();
+  return n;
+}
+
 /* 삭제된 cf 행들에서 '그 달은 만들지 마라' 를 기록한다. 반환: 새로 기록된 건수
    ⚠ **cfData 에서 지운 뒤** 불러야 한다. 같은 템플릿의 행이 그 달에 아직 남아 있으면
      (예: 10/09 를 지웠지만 날짜를 옮겨 둔 10/08 이 있는 경우) 건너뛸 이유가 없다 —
@@ -11442,6 +11459,7 @@ function shiftOffWeekend(ymd, mode) {
 }
 
 function generateRecurring(showToastMsg = true) {
+  pruneRecurSkip();           // 지난 달 기록 정리 — 템플릿이 없어도 돌도록 early return 앞에서
   if (!recurData.length) return 0;
   /* ⚠ 종전엔 new Date().toISOString() 이었다 — UTC 라 KST 00~09시에는 하루 전 날짜가 나와
      당월 생성 판정(rec.day >= todayDay)이 어긋날 수 있었다. todayKST() 로 바꿨다. */

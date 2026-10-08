@@ -37,16 +37,23 @@ const mk = (cf, skip, today) => {
       return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}-${String(t.getUTCDate()).padStart(2,'0')}`; },
     normalizeCFRow: (r) => r, getMidCat: () => '', getBigCat: () => '판매관리비',
     saveData: () => {}, showToast: () => {}, renderRecurSkipList: () => {},
+    saveRecurSkip: () => ({ error: null }),
     localStorage: { getItem: (k) => (k === 'recur_months' ? '3' : null), setItem: () => {} },
     document: { getElementById: () => null },
   };
   const fn = new Function(...Object.keys(env), `
     ${grab('recurDupExists')}
     ${grab('shiftOffWeekend')}
+    ${grab('pruneRecurSkip')}
     ${src.slice(src.indexOf('const recurSkipKey ='), src.indexOf('async function saveRecurSkip'))}
     ${grab('generateRecurring')}
-    return generateRecurring(false);`);
-  return fn(...Object.values(env));
+    const _added = generateRecurring(false);
+    return { added: _added, skip: recurSkip };`);
+  /* pruneRecurSkip 이 recurSkip 을 **재할당**하므로 바깥 배열은 안 바뀐다 — 돌려받아 옮겨 담는다.
+     (이걸 빼먹으면 '지난 달 정리' 가 통과한 것처럼 보인다) */
+  const out = fn(...Object.values(env));
+  skip.length = 0; for (const k of out.skip) skip.push(k);
+  return out.added;
 };
 const row = (date, desc, out, rid) => ({ _id: 'x' + date + desc, date, desc, in: 0, out,
   status: '지출 예정', recur_id: rid, type: '지출' });
@@ -87,6 +94,15 @@ cf = []; mk(cf, [], '2026-10-08');
 cf = cf.filter(r => !(r.date.startsWith('2026-10') && r.recur_id === 'rc_pay2'));
 mk(cf, ['rc_pay2|2026-10'], '2026-10-08');
 t('건너뛴 템플릿만 빠짐', cf.filter(r => r.date.startsWith('2026-10')).map(r => r.recur_id).sort(), ['rc_pay0', 'rc_pay1']);
+
+// ⑥ 지난 달 기록은 자동으로 치운다 / 이번 달·미래는 남긴다
+cf = [];
+const skip6 = ['rc_pay0|2026-08', 'rc_pay1|2026-09', 'rc_pay2|2026-10', 'rc_pay0|2026-12', '엉터리키'];
+mk(cf, skip6, '2026-10-08');
+t('지난 달 기록 정리 · 이번 달/미래/비정상 키는 유지',
+  skip6.slice().sort(), ['rc_pay0|2026-12', 'rc_pay2|2026-10', '엉터리키'].sort());
+t('  정리 뒤에도 이번 달 건너뛰기는 유효', cf.filter(r => r.date.startsWith('2026-10')).map(r => r.recur_id).sort(),
+  ['rc_pay0', 'rc_pay1']);
 
 console.log(`\n${fail ? '❌' : '✅'} ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);
