@@ -50,12 +50,18 @@ var EXCLUDE_TABS = ['인오가닉사업 전체현황', 'AR_preview'];
    ──────────────────────────────────────────────────────────────────────────── */
 var OVERVIEW_TAB = '인오가닉사업 전체현황';
 
-// 전체현황 헤더 이름 (norm_ 로 공백 무시 비교 — 실제 셀은 '구   분' 처럼 띄어져 있다)
+/* 전체현황 헤더 이름 (norm_ 로 공백 무시 비교 — 실제 셀은 '구   분' 처럼 띄어져 있다)
+   탭 헤더와 마찬가지로 **후보 목록**을 받는다(cfgNames_). 이름이 바뀌면 그 열을 못 찾고
+   조용히 0 이 되는데, 전체현황은 fromOverview 거래처의 유일한 출처라 더 위험하다.
+   ⚠ 2026-09-23: remaining 헤더가 '미회수액' → '현재 미회수액' 으로 바뀌어 있었다.
+     그래서 '숯 (보증금)'(예상·회수는 비고 미회수만 1억)이 미회수 0 으로 떨어졌다 —
+     2026-09-18 에 fromOverview 로 살려 둔 그 1억이 다시 사라진 것이다.
+     ※ '9월말 기준 미회수액' 열이 옆에 따로 있지만 norm_ 완전일치라 섞이지 않는다. */
 var OVERVIEW_COLS = {
   partner:   '구 분',
   expected:  '예상회수액',
-  collected: '현재 회수액',
-  remaining: '미회수액',
+  collected: ['현재 회수액', '회수액'],
+  remaining: ['현재 미회수액', '미회수액'],
   due:       '예상최종 회수일',
 };
 
@@ -114,21 +120,31 @@ var TAB_CONFIG = {
   '숯':             { expected: '양도금액(원화)',      collected: '수금액(원화)', remaining: '',       start: '송금일',   due: '',         collect: '수금일' },
   /* 2026-09 신설 '숯 (확장)' — 라오스 원물수입 건. 기존 '숯' 탭과 헤더가 완전히 다르다
      (연도/차수/라오스 송금일/BL양도금액…). 탭 이름의 공백까지 정확히 일치해야 매칭된다.
-     ⚠ 002~005 행은 금액이 비고 ETD/ETA 만 1900-01-02 같은 더미 날짜가 박힌 서식 행이라
-       expected=0·collected=0 으로 자동 제외된다(현재 실데이터는 001 한 건뿐). */
-  '숯 (확장)':       { expected: 'BL양도금액(한화)',    collected: 'BL양도 회수액', remaining: '',      start: '라오스 송금일', due: 'BL양도금액 입금 예정일', collect: 'BL양도금액 수취일' },
+     ⚠ 금액 없이 ETD/ETA 만 1900-01-02 같은 더미 날짜가 박힌 서식 행들이 표 아래에 붙어 있는데
+       expected=0·collected=0 으로 자동 제외된다.
+     ⚠ 2026-09-23: expected 헤더가 'BL양도금액(한화)' → 'BL양도금액' 으로 바뀌었다(시트 실측 확인).
+       expected 는 헤더 **행 자체를 찾는 기준**이라, 못 맞히면 이 탭이 통째로 0건이 되고
+       미회수 73,527,324 이 사라진다. 예전 이름도 후보로 남긴다(옛 사본 시트 대비).
+       ※ 'BL양도금액 입금 예정일'·'BL양도금액 수취일' 과는 안 겹친다 — mapCols_ 는 부분일치가
+         아니라 norm_ 완전일치라, 공백만 지운 'bl양도금액입금예정일' 은 별개 문자열이다. */
+  '숯 (확장)':       { expected: ['BL양도금액', 'BL양도금액(한화)'], collected: 'BL양도 회수액', remaining: '',      start: '라오스 송금일', due: 'BL양도금액 입금 예정일', collect: 'BL양도금액 수취일' },
   '로가온':         { expected: '금액',               collected: '회수금액',     remaining: '',       start: '날짜',     due: '회수예정일', collect: '회수일자' },
   '디앤비푸드':      { expected: '매출액',             collected: '현재 회수액',  remaining: '',       start: '귀속월',   due: '회수예정일', collect: '' },
-  /* 세진식품 (2026-09-04 사용자 확정) — 한 표에 성격이 다른 두 종류가 섞여 있다:
-       · 실제 채권 2건  : 송금 2026-04-29 / 05-22, 각 5억, 회수예상금액 5억
-       · 회수 예정 5건  : 송금날짜 칸에 **회수 예정일**(08-26 1억 · 09-30 2억 · 10-31 2억 ·
+  /* 세진식품 — 한 표에 성격이 다른 두 종류가 섞여 있다(2026-09-04 사용자 확정):
+       · 실제 채권 2건  : 송금 2026-04-29 / 05-22, 각 5억, 회수예상금액 5억, 회수일정 2026-12-20
+       · 회수 '예정' 5행: 송금날짜 칸에 **회수 예정일**(08-26 1억 · 09-30 2억 · 10-31 2억 ·
                           11-30 2억 · 12-31 3억)이 들어가고 '회수금액' 열에 예정액이 적혀 있다.
-     그래서 예정 스케줄이 이미 걷힌 돈으로 집계돼 회수액이 9억 부풀었다(지앤원과 같은 구조 문제).
-     → excludeFutureStart: 회수 예정일이 미래인 행 제외. 지난 08-26 건 1억만 회수로 잡힌다.
-     → remaining 매핑 제거(예상-회수 자동계산). 시트의 '미회수금액' 열이 1억 회수를 반영하지
-        않아 5억+5억=10억 으로 남아 있어서, 그 값을 쓰면 예상-회수(9억)와 어긋난다.
-        자동계산은 전체현황 시트(예상 10억 / 회수 1억 / 미회수 9억)와 3항목 모두 일치한다. */
-  '세진식품':       { expected: '회수예상금액',       collected: '회수금액',     remaining: '',       start: '송금날짜', due: '회수일정', collect: '', excludeFutureStart: true },
+                          회수예상금액·송금액·미회수금액은 전부 비어 있다.
+     ⚠⚠ 2026-10-02 사고 — excludeFutureStart 는 이 탭에서 **시한폭탄**이었다.
+       '예정일이 미래면 제외' 라서, 날짜가 지나는 순간 그 예정액이 자동으로 '회수 완료' 가 된다.
+       09-30 2억이 실제로는 안 들어왔는데 10-02 미리보기에서 회수 3억·미회수 7억으로 찍혔다
+       (대표님 확인). 그냥 두면 10-31·11-30·12-31 에 똑같이 터져 연말엔 미회수 0 이 된다.
+       → excludeFutureStart 제거. 날짜가 아니라 **행의 성격**으로 가른다(collectionScheduleTab).
+     ⚠ remaining 매핑 없음(예상-회수 자동계산). 시트의 '미회수금액' 열은 1억 회수를 반영하지
+       않아 5억+5억=10억으로 남아 있다 — 그 값을 쓰면 전체현황(9억)과 어긋난다.
+     ※ 운영 메모: 실제로 회수되면 **탭 합계 행의 '회수금액'** 을 갱신해야 반영된다.
+       이 탭에서 '걷힌 돈'이 적힌 칸은 거기뿐이고, 개별 행 회수금액은 전부 예정액이다. */
+  '세진식품':       { expected: '회수예상금액',       collected: '회수금액',     remaining: '',       start: '송금날짜', due: '회수일정', collect: '', collectionScheduleTab: true },
   '기타대여금':      { expected: '예상회수액',         collected: '회수액',       remaining: '',       start: '날짜',     due: '',         collect: '' },
 };
 
@@ -311,6 +327,45 @@ function isSummaryRow_(rowVals) {
  *    (단, 음수 예상 자체는 시트 원본 오류 — FIFO로 고쳐지지 않으니 별도 정정 필요).
  * 반환: { changed, moved }  moved = 회수액이 조정된 행 수
  */
+/* FIFO 배분 순서 — ①실제 회수일 있는 행 먼저(회수일 순) → ②나머지 오래된 송금일 순.
+   과입금 재배분과 '합계 행 회수액 배분'이 **같은 순서**를 써야 두 경로의 결과가 안 갈린다. */
+function fifoOrder_(records) {
+  var order = [];
+  for (var k = 0; k < records.length; k++) order.push(k);
+  order.sort(function (a, b) {
+    var ra = records[a], rb = records[b];
+    var ca = ra.collect_date ? String(ra.collect_date).trim() : '';
+    var cb = rb.collect_date ? String(rb.collect_date).trim() : '';
+    var hasA = ca !== '', hasB = cb !== '';
+    if (hasA !== hasB) return hasA ? -1 : 1;                 // 회수일 있는 행 먼저
+    if (hasA && hasB && ca !== cb) return ca < cb ? -1 : 1;  // 둘 다 있으면 회수일 순
+    var sa = ra.start || '9999-99-99', sb = rb.start || '9999-99-99';  // 나머지는 오래된 송금일 순
+    if (sa !== sb) return sa < sb ? -1 : 1;
+    return a - b;                                            // 동률은 원래 순서
+  });
+  return order;
+}
+
+/* 회수 총액 하나를 오래된 채권부터 예상액 상한까지 배분한다(collectionScheduleTab 전용).
+   남는 금액은 마지막 행에 얹어 음수 미회수로 남긴다 — 조용히 버리면 합계가 안 맞는다. */
+function allocateCollectedTotal_(records, total) {
+  var order = fifoOrder_(records), pool = Number(total) || 0, moved = 0;
+  for (var o = 0; o < order.length; o++) {
+    var rec = records[order[o]];
+    var cap = rec.expected > 0 ? rec.expected : 0;
+    var alloc = Math.min(pool, cap); if (alloc < 0) alloc = 0;
+    if (alloc !== (rec.collected || 0)) moved++;
+    rec.collected = alloc; pool -= alloc;
+    if (rec.remaining !== undefined) rec.remaining = rec.expected - alloc;
+  }
+  if (pool > 1 && order.length) {
+    var last = records[order[order.length - 1]];
+    last.collected += pool;
+    if (last.remaining !== undefined) last.remaining = last.expected - last.collected;
+  }
+  return moved;
+}
+
 function allocateFifoIfOvercollected_(records) {
   if (!records || !records.length) return { changed: false, moved: 0 };
   var TOL = 1; // 부동소수 오차 무시
@@ -329,19 +384,7 @@ function allocateFifoIfOvercollected_(records) {
   // 3) 2단 정렬: ①실제 회수일(collect_date) 있는 행 우선(회수일 순) → ②나머지 오래된 송금일 순
   //    회수일 찍힌 행 = 실제로 걷힌 것이므로 먼저 정산, 그 뒤 남은 회수액을 오래된 채권부터.
   //    (회수일 열 없는 탭은 전부 회수일 '' → 자동으로 ②오래된 순만 = 현행과 동일)
-  var order = [];
-  for (var k = 0; k < records.length; k++) order.push(k);
-  order.sort(function (a, b) {
-    var ra = records[a], rb = records[b];
-    var ca = ra.collect_date ? String(ra.collect_date).trim() : '';
-    var cb = rb.collect_date ? String(rb.collect_date).trim() : '';
-    var hasA = ca !== '', hasB = cb !== '';
-    if (hasA !== hasB) return hasA ? -1 : 1;                 // 회수일 있는 행 먼저
-    if (hasA && hasB && ca !== cb) return ca < cb ? -1 : 1;  // 둘 다 있으면 회수일 순
-    var sa = ra.start || '9999-99-99', sb = rb.start || '9999-99-99';  // 나머지는 오래된 송금일 순
-    if (sa !== sb) return sa < sb ? -1 : 1;
-    return a - b;                                            // 동률은 원래 순서
-  });
+  var order = fifoOrder_(records);
 
   // 4) FIFO 배분 (예상 상한까지)
   var pool = totalCollected;
@@ -420,6 +463,7 @@ function parseTab_(sh, cfg) {
   var anomalies = [];
   var cand = [];
   var tableCount = 1, block = 0, blockFirst = true, futureRows = 0;
+  var planRows = 0, summaryCollected = null;   // collectionScheduleTab 전용
   var TODAY = today_();
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
@@ -452,6 +496,12 @@ function parseTab_(sh, cfg) {
       }
     }
     if (expected === 0 && collected === 0) continue; // 빈 행 제외
+
+    /* ── (옵트인) 회수 예정 스케줄 행 제외 — 세진식품 ──────────────────────
+       예상회수액이 0인데 회수금액만 적힌 행 = **아직 안 들어온 회수 예정액**이다.
+       채권도 아니고 회수 실적도 아니므로 양쪽 다에서 뺀다. 실제 회수 총액은
+       아래에서 탭 합계 행의 회수금액으로 따로 집어넣는다. */
+    if (cfg.collectionScheduleTab && expected === 0) { planRows++; continue; }
 
     /* ── 안전가드 ③ — 한 행 금액이 상식 범위를 넘으면 파싱 오류다 ──
        전체 채권이 300억대인데 1조를 넘는 행이 나왔다면 열이 밀려 날짜·번호를 금액으로
@@ -539,7 +589,12 @@ function parseTab_(sh, cfg) {
       var isNextTotal = c.dateless && c.nextHdr;
       var isDropRow  = c.first || Math.abs(2 * c.expected - (blockExp[c.block] || 0)) <= 2
                        || noEvidence || isNextTotal || c.isSubtotal;
-      if (isDropRow) { skippedTotalRows++; if (isNextTotal) totalRowsDropped++; continue; }
+      if (isDropRow) {
+        /* 버리기 직전에 합계 행의 회수금액을 집어둔다 — 이 탭에서 '실제로 걷힌 돈'이
+           적힌 유일한 칸이다(세진식품 1억). 개별 행의 회수금액은 전부 예정액이다. */
+        if (cfg.collectionScheduleTab && summaryCollected === null && c.collected > 0) summaryCollected = c.collected;
+        skippedTotalRows++; if (isNextTotal) totalRowsDropped++; continue;
+      }
     }
     var startStr = c.hasStart && hasStartCol ? fmtDate_(c.row[cm.start]) : (hasStartCol ? lastStart : '');
     if (c.hasStart && hasStartCol) lastStart = startStr;
@@ -562,6 +617,18 @@ function parseTab_(sh, cfg) {
     records.push(rec);
   }
 
+  /* (옵트인) 합계 행 회수액을 오래된 채권부터 배분 — collectionScheduleTab.
+     개별 행 회수금액은 전부 예정액이라 버리고, 합계 행 값만 실적으로 인정한다.
+     ⚠ 합계 행을 못 찾으면 0 으로 두고 경고한다. 임의로 추정하면 안 걷힌 돈이 회수로 잡힌다. */
+  var planMsg = '';
+  if (cfg.collectionScheduleTab) {
+    var moved = allocateCollectedTotal_(records, summaryCollected || 0);
+    planMsg = ' 📅회수예정 ' + planRows + '행 제외(아직 미회수)' +
+      (summaryCollected === null
+        ? ' ⚠합계 행 회수금액을 못 찾아 회수 0 으로 둠'
+        : ' ⚙합계 행 회수 ' + Math.round(summaryCollected).toLocaleString() + ' 을 ' + moved + '행에 배분');
+  }
+
   // 과입금 감지 시 오래된 채권부터 예상액 상한으로 회수액 FIFO 재배분 (감지 안 되면 원본 그대로)
   var fifo = allocateFifoIfOvercollected_(records);
 
@@ -578,7 +645,7 @@ function parseTab_(sh, cfg) {
           ', 매핑: ' + foundCols.join(',') + ')' +
           (totalRowsDropped ? ' 🧮총계 행 ' + totalRowsDropped + '개 제외' : '') +
           (subtotalDropped ? ' ➗소계 행 ' + subtotalDropped + '개 제외' : '') +
-          (futureRows ? ' ⏭미래 지출 ' + futureRows + '행 제외(아직 채권 아님)' : '') +
+          (futureRows ? ' ⏭미래 지출 ' + futureRows + '행 제외(아직 채권 아님)' : '') + planMsg +
           (fifo.changed ? ' ⚙과입금 FIFO 재배분(' + fifo.moved + '행 조정)' : '') +
           (anomalies.length ? ' ⛔비정상 금액 ' + anomalies.length + '행' : '')
   };
@@ -599,7 +666,7 @@ function findOverviewCfg_(label) {
    전용 탭이 없는 거래처(fromOverview)를 1건짜리 레코드로 만들고,
    지도에 없는 새 구분이 금액을 달고 나타나면 경고를 모은다. */
 function parseOverview_() {
-  var out = { records: [], report: [], warn: [], anomalies: [] };
+  var out = { records: [], report: [], warn: [], anomalies: [], rows: {} };
   var sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
   var sh = null;
   for (var i = 0; i < sheets.length; i++) {
@@ -619,8 +686,20 @@ function parseOverview_() {
     if (rowNorm.indexOf(norm_(OVERVIEW_COLS.expected)) < 0) continue;
     hdr = r; cm = {};
     Object.keys(OVERVIEW_COLS).forEach(function (k) {
-      var ci = rowNorm.indexOf(norm_(OVERVIEW_COLS[k]));
-      if (ci >= 0) cm[k] = ci;
+      var names = cfgNames_(OVERVIEW_COLS[k]);
+      for (var c = 0; c < names.length; c++) {
+        var ci = rowNorm.indexOf(norm_(names[c]));
+        if (ci >= 0) { cm[k] = ci; break; }
+      }
+    });
+    /* ⚠ 못 찾은 금액 열을 반드시 알린다 — 이게 없어서 '현재 미회수액' 개명이
+       2026-09-23 까지 안 보였다(숯 (보증금) 1억이 조용히 0). due 는 지금 시트에
+       대응 열이 없는 게 정상이라 뺀다. */
+    ['collected', 'remaining'].forEach(function (k) {
+      if (cm[k] === undefined) {
+        out.warn.push('전체현황 헤더 "' + cfgNames_(OVERVIEW_COLS[k]).join('/') + '"(' + k +
+                      ') 을 못 찾았습니다 — 이 열은 0 으로 읽힙니다. 헤더 이름이 바뀌었는지 확인하세요.');
+      }
     });
   }
   if (hdr < 0) {
@@ -645,6 +724,10 @@ function parseOverview_() {
 
     var cfg = findOverviewCfg_(label);
     if (cfg) seen[n] = true;
+    /* 대조(안전가드 ⑤)용으로 전 구분의 숫자를 내보낸다 — 전용 탭에서 읽는 거래처도 포함.
+       아래 분기들이 continue 로 빠지기 전에 담아야 한다. */
+    out.rows[n] = { label: label, expected: expected, collected: collected,
+                    remaining: (remRaw !== '' && remRaw != null) ? remaining : (expected - collected) };
 
     if (!cfg) {
       if (hasMoney) {
@@ -740,9 +823,52 @@ function parseAll_() {
   report = report.concat(ov.report);
   if (ov.anomalies.length) anomalies = anomalies.concat(ov.anomalies);
 
+  /* ── 안전가드 ⑤: 거래처별 전체현황 대조 (2026-10-02) ───────────────────────
+     이 스크립트가 틀리는 방식은 늘 '합계는 그럴듯한데 한 거래처가 조용히 어긋남' 이다.
+     최근 세 건 모두 대표님이 눈으로 찾아냈다:
+       · 숯 (보증금)  1억   — 전체현황 헤더 개명으로 미회수가 0 (2026-09-23)
+       · 세진식품     2억   — 회수 예정일이 지나자 자동으로 회수 처리 (2026-10-02)
+       · CNA         2만   — 표 아래 빈 줄 건너 떨어진 유령 셀 (2026-10-02)
+     전체현황은 사람이 유지하는 '정답' 이므로, 거래처마다 예상·미회수를 맞대보고
+     어긋나면 알린다. 합계만 보면 서로 상쇄돼 안 보인다 — 반드시 거래처 단위로 본다. */
+  var byPartner = {};
+  for (var ri = 0; ri < records.length; ri++) {
+    var pr = records[ri], pk = norm_(pr.partner);
+    var e = byPartner[pk] || (byPartner[pk] = { n: 0, expected: 0, remaining: 0 });
+    e.n++; e.expected += pr.expected; e.remaining += recRemaining_(pr);
+  }
+  var TOL = 1;                                  // 원 단위 반올림·부동소수 오차만 허용
+  var mismatch = [];
+  Object.keys(OVERVIEW_ROWS).forEach(function (label) {
+    var ovRow = ov.rows[norm_(label)];
+    if (!ovRow) return;                         // 전체현황에서 그 구분을 못 찾았으면 ④가 따로 알린다
+    var cfgO = OVERVIEW_ROWS[label];
+    if (cfgO.placeholder) return;               // 자리 행 — 금액이 생기면 ④가 경고한다
+    var key = norm_(cfgO.tab || label);
+    var got = byPartner[key] || { n: 0, expected: 0, remaining: 0 };
+    var dE = got.expected - ovRow.expected, dR = got.remaining - ovRow.remaining;
+    if (Math.abs(dE) > TOL || Math.abs(dR) > TOL) {
+      mismatch.push({ label: label, n: got.n,
+                      sheetE: ovRow.expected, gotE: got.expected, dE: dE,
+                      sheetR: ovRow.remaining, gotR: got.remaining, dR: dR });
+    }
+  });
+
   return { records: records, report: report, skipped: skipped, fifoTabs: fifoTabs,
-           anomalies: anomalies, overviewWarn: ov.warn };
+           anomalies: anomalies, overviewWarn: ov.warn, mismatch: mismatch };
 }
+
+/* 안전가드 ⑤ 안내문 — 미리보기·동기화에서 같이 쓴다 */
+function mismatchText_(ms) {
+  var won = function (n) { return Math.round(n).toLocaleString(); };
+  var sign = function (n) { return (n >= 0 ? '+' : '') + won(n); };
+  return ms.map(function (m) {
+    return '   · ' + m.label + ' (' + m.n + '건)\n' +
+           '       예상   시트 ' + won(m.sheetE) + '  ↔  파싱 ' + won(m.gotE) + '   ' + sign(m.dE) + '\n' +
+           '       미회수 시트 ' + won(m.sheetR) + '  ↔  파싱 ' + won(m.gotR) + '   ' + sign(m.dR);
+  }).join('\n');
+}
+
 
 /* 비정상 금액(안전가드 ③) 안내문 — 미리보기·동기화 중단 메시지에서 같이 쓴다 */
 function anomalyText_(anoms) {
@@ -785,6 +911,11 @@ function previewSync() {
   var ovMsg = out.overviewWarn && out.overviewWarn.length
     ? '⚠ 전체현황 점검\n' + out.overviewWarn.map(function (w) { return '   · ' + w; }).join('\n') + '\n\n'
     : '';
+  /* 안전가드 ⑤ — 전체현황과 거래처별로 안 맞는 것. 합계만 보면 상쇄돼 안 보인다. */
+  var msMsg = out.mismatch && out.mismatch.length
+    ? '⚠ 전체현황과 안 맞는 거래처 ' + out.mismatch.length + '곳\n' + mismatchText_(out.mismatch) +
+      '\n   → 시트 쪽 유령 행(표 아래 빈 줄 건너 떨어진 셀)이나 헤더 이름 변경을 먼저 보세요.\n\n'
+    : '';
   var fifoMsg = out.fifoTabs && out.fifoTabs.length
     ? '⚙ 과입금 감지 → FIFO 재배분된 탭: ' + out.fifoTabs.join(', ') +
       '\n   회수액을 오래된 채권부터 예상액 상한으로 재분배(총액 불변). AR_preview에서 행별 확인하세요.\n\n'
@@ -795,7 +926,8 @@ function previewSync() {
       '\n   → 해당 탭에 열 구조가 다른 표가 섞여 있거나 헤더 이름이 바뀐 것입니다.\n\n'
     : '';
   ui.alert(
-    anomMsg + warn + ovMsg + fifoMsg +
+    anomMsg + warn + ovMsg + msMsg + fifoMsg +
+    (out.mismatch && out.mismatch.length ? '' : '✅ 전체현황 거래처별 대조 통과\n\n') +
     '미리보기 (대시보드 변경 없음)\n\n' +
     '총 ' + out.records.length + '건\n예상회수 합계: ' + Math.round(totalE).toLocaleString() + '\n회수 합계: ' + Math.round(totalC).toLocaleString() +
     '\n미회수 합계: ' + Math.round(totalR).toLocaleString() +
@@ -846,6 +978,20 @@ function pushToDashboard() {
       '  또는 전용 탭을 만들고 TAB_CONFIG 에 추가\n\n그래도 이대로 진행할까요?',
       ui.ButtonSet.YES_NO);
     if (okOv !== ui.Button.YES) return;
+  }
+
+  /* ── 안전가드 ⑤: 거래처별 전체현황 대조 ──
+     중단까지는 안 한다 — 시트 쪽이 아직 안 맞는 중일 수도 있어서. 대신 숫자를 보여주고 묻는다.
+     합계가 맞아도 거래처별로는 어긋날 수 있으니(상쇄) 이 가드가 ②·③과 별도로 필요하다. */
+  if (out.mismatch && out.mismatch.length) {
+    var okMs = ui.alert('⚠ 전체현황과 안 맞는 거래처 ' + out.mismatch.length + '곳 (데이터 보호)\n\n' +
+      mismatchText_(out.mismatch) + '\n\n' +
+      '전체현황은 사람이 유지하는 기준값입니다. 어긋난 채로 올리면 대시보드·주간메일이\n' +
+      '시트와 다른 숫자를 내보냅니다.\n' +
+      '· 시트 쪽 유령 행(표 아래 빈 줄 건너 떨어진 셀)인지 확인\n' +
+      '· 헤더 이름이 바뀌었는지 확인\n\n그래도 이대로 진행할까요?',
+      ui.ButtonSet.YES_NO);
+    if (okMs !== ui.Button.YES) return;
   }
 
   // ── 안전가드 ②: 직전 성공 대비 건수 급감 방지 (매핑 실패로 인한 누락 차단) ──
