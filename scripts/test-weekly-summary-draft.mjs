@@ -105,11 +105,10 @@ const meLine = t => t.split('\n').find(l => l.startsWith('월말('));
 const flLine = t => t.split('\n').find(l => l.includes('안전선'));
 /* 잔고는 축약하지 않는다 — 1,953,862,270 이 "20억" 으로 묻히던 것을 고친 자리다 */
 ok('잔고는 원 단위 서술형', meLine(below) === '월말(10/31) 예상 잔고는 1,200,000,000원입니다.', meLine(below));
-ok('안전선 저촉 시 일수를 말한다',
-   flLine(below) === '안전선 1,500,000,000원을 밑도는 날이 8주 중 12일 있습니다(최저 11/14 900,000,000원).', flLine(below));
-ok('저촉 없으면 유지한다고 말한다', (flLine(above) || '').startsWith('8주 내내 안전선 1,500,000,000원 위를'), flLine(above));
-ok('안전선 미설정이면 잔고 문장만',
-   !!meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })) && !flLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })));
+/* 안전선은 차트가 이미 보여준다 — 요약에 또 쓰지 않는다(2026-10-23).
+   ctx 에 재료가 들어와도 문장이 생기면 안 된다. 되살리려면 의도적으로 할 것. */
+ok('안전선 재료를 넣어도 문장이 없다', !flLine(below) && !flLine(above), flLine(below) || flLine(above));
+ok('전망은 월말 잔고 한 문장', below.split('\n').filter(l => l.startsWith('월말(')).length === 1);
 ok('불릿이 아니라 문장이다', !(meLine(below) || '').startsWith('·'), meLine(below));
 
 /* ── ⑤ 매출채권 문장은 나오지 않는다 ─────────────────────
@@ -189,7 +188,7 @@ if (process.argv.includes('--live')) {
     // 잔고 궤적은 initCashEff()/FX_ADJ 가 필요해 화면에서만 채워진다 — 여기서는 생략된다
   };
   console.log('\n═══ 실데이터 초안 (' + wStart + ' ~ ' + wEnd + ') ═══');
-  console.log('※ 월말 잔고/안전선 줄은 화면에서만 나온다(기초현금·환산조정이 필요)\n');
+  console.log('※ 월말 잔고 문장은 화면에서만 나온다(기초현금·환산조정이 필요)\n');
   console.log(build.build(ctx));
 }
 /* process.exit() 로 끊으면 --live 의 fetch 핸들이 정리되기 전에 죽어

@@ -9654,19 +9654,18 @@ function renderWeeklyReport() {
      뽑으면 천대표(부산영업) 4천만원대 소액이 줄을 다 먹는다(실측). */
 
   /* 잔고 궤적 — 차트와 **같은 함수**를 쓴다. 요약이 그래프와 다른 숫자를 말하면 안 된다. */
-  let monthEndDate = null, monthEndCash = null, lowCash = null, lowDate = null;
-  let floorLine = 0, floorBelow = 0;
+  /* 월말 예상 잔고만 뽑는다. 안전선 미달·최저점은 요약에 쓰지 않는다 — 차트가 이미
+     보여주기 때문이다(2026-10-23). 되살리려면 여기서 dlFloor() 와 함께
+     floorBelow(= v < floor 인 날 수) · lowCash/lowDate(= 최저점)를 같이 모으면 된다. */
+  let monthEndDate = null, monthEndCash = null;
   try {
     const S = computeWeeklyCashSeries(wStart, cfData, initCashEff(), FX_ADJ, todayKST(),
                                       WKRPT_HORIZON_DAYS, fxAdjAt(addDays(wStart, -1)));
-    floorLine    = dlFloor();
     monthEndDate = monthEnd(wEnd);
     S.dates.forEach((d, i) => {
+      if (d !== monthEndDate) return;
       const v = (S.projVals[i] !== null && S.projVals[i] !== undefined) ? S.projVals[i] : S.actVals[i];
-      if (v === null || v === undefined) return;
-      if (d === monthEndDate) monthEndCash = v;
-      if (lowCash === null || v < lowCash) { lowCash = v; lowDate = d; }
-      if (floorLine > 0 && v < floorLine) floorBelow++;
+      if (v !== null && v !== undefined) monthEndCash = v;
     });
   } catch (e) { console.warn('[wkrpt-summary] 잔고 궤적 생략', e); }
 
@@ -9679,7 +9678,7 @@ function renderWeeklyReport() {
     topOut: wkTopByDesc(outRows, 'out', 3),
     topIn:  wkTopByDesc(inRows,  'in',  3),
     nwStart, nwEnd, nwPlanIn, nwPlanOut, nwBig,
-    monthEndDate, monthEndCash, lowCash, lowDate, floorLine, floorBelow,
+    monthEndDate, monthEndCash,
   });
 
 }
@@ -9899,14 +9898,13 @@ function buildDefaultWeeklySummaryText(ctx) {
        1,953,862,270원이 "20억" 으로 찍혀 46백만이 묻혔다(1e9 이상은 정수 반올림).
        잔고는 흐름이 아니라 **수준**이라 자릿수가 그대로 보여야 판단이 된다.
        위 불릿들은 흐름(입출금)이라 축약으로 둔다 — 둘의 성격이 다르다. */
+  /* ⚠ 안전선 저촉 문장은 넣지 않는다(2026-10-23 요청). 바로 위 궤적 차트가 같은 것을
+     이미 보여준다 — 안전선 라인·미달 구간 음영·최저점 빨간 점. 글로 또 쓰면 중복이다.
+     되살릴 거면 ctx 에 floorLine/floorBelow/lowCash/lowDate 를 다시 넘겨야 한다
+     (dlFloor() 와 궤적 series 에서 뽑으면 된다 — 아래 ctx 계산부 주석 참고). */
   const outlook = [];
   if (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) {
     outlook.push(`월말(${wkMD(ctx.monthEndDate)}) 예상 잔고는 ${fmt(ctx.monthEndCash)}원입니다.`);
-    if (ctx.floorLine > 0 && ctx.lowDate) {
-      outlook.push(ctx.floorBelow > 0
-        ? `안전선 ${fmt(ctx.floorLine)}원을 밑도는 날이 8주 중 ${ctx.floorBelow}일 있습니다(최저 ${wkMD(ctx.lowDate)} ${fmt(ctx.lowCash)}원).`
-        : `8주 내내 안전선 ${fmt(ctx.floorLine)}원 위를 유지합니다(최저 ${wkMD(ctx.lowDate)} ${fmt(ctx.lowCash)}원).`);
-    }
   }
 
   return [...thisWeek,
