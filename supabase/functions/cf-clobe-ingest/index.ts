@@ -364,10 +364,13 @@ Deno.serve(async (req) => {
       /* meta: true → 기본 키, meta: ["a","b"] → 그 키들. cat_data 는 RLS 때문에 publishable
          키로 못 읽어서 확인할 때마다 Edge 를 고쳐 배포해야 했다(settings·bank_snapshot·
          daily_settings…). 키 목록을 받게 해서 그 반복을 끝낸다. 읽기 전용이다. */
+      /* 2026-10-23: 키 화이트리스트에 하이픈을 허용한다. 주간 요약은 키가
+         weekly_summary_2026-10-19 처럼 날짜를 달고 있어 종전 패턴에 걸려 읽히지 않았다.
+         PostgREST 의 key=in.(...) 에 들어가는 값이라 쉼표·괄호·따옴표·점은 계속 막는다. */
       const META_DEFAULT = ["settings", "bank_snapshot"];
       const metaKeys = inspect.meta === true ? META_DEFAULT
         : (Array.isArray(inspect.meta)
-            ? (inspect.meta as unknown[]).map((v) => str(v)).filter((k) => /^[a-zA-Z0-9_]+$/.test(k)).slice(0, 20)
+            ? (inspect.meta as unknown[]).map((v) => str(v)).filter((k) => /^[a-zA-Z0-9_-]+$/.test(k)).slice(0, 20)
             : []);
       const wantMeta = metaKeys.length > 0;
       /* ar: true → ar_data 를 읽기 전용으로 함께 돌려준다.
