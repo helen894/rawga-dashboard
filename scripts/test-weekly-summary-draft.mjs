@@ -68,7 +68,7 @@ ok('같은 거래처는 합산 후 정렬', JSON.stringify(top) === JSON.stringi
 const bare = build.build({ wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 0, wOut: 0, wNet: 0 });
 ok('재료가 하나도 없어도 생성됨', typeof bare === 'string' && bare.includes('■ 이번 주 10/19~10/25'));
 ok('빈 데이터면 선택 줄은 안 나온다',
-   !bare.includes('주요 출금') && !bare.includes('■ 차주') && !bare.includes('매출채권') && !bare.includes('월말 '));
+   !bare.includes('주요 출금') && !bare.includes('■ 차주') && !bare.includes('매출채권') && !bare.includes('월말('));
 ok('구분선은 항상 있다', bare.trim().endsWith(build.DIV));
 ok('undefined/NaN 문구 없음', !/undefined|NaN|null/.test(bare), bare);
 
@@ -89,7 +89,10 @@ ok('차주 큰 건은 한 줄에 하나',
    L.filter(l => l.startsWith('· 10/31 ')).length === 2, L.filter(l => l.startsWith('· 10/31 ')).join(' | '));
 ok('들여쓰기(선행 공백) 없음 — 메일에서 뭉개진다', L.every(l => !/^\s/.test(l)), L.find(l => /^\s/.test(l)));
 ok('입금에 + 부호', L.some(l => l.includes('천대표 (수산) +10억')), L.find(l => l.includes('천대표')));
-ok('원 단위 병기 없음', !/\d,\d{3},\d{3}원/.test(full), full.split('\n').find(l => /\d,\d{3},\d{3}원/.test(l)));
+/* 불릿(흐름)에는 원 단위가 없어야 한다. 전망 문장(잔고)은 일부러 원 단위다 — 성격이 다르다. */
+ok('불릿 줄에는 원 단위 병기 없음',
+   L.filter(l => l.startsWith('· ')).every(l => !/\d,\d{3},\d{3}원/.test(l)),
+   L.filter(l => l.startsWith('· ')).find(l => /\d,\d{3},\d{3}원/.test(l)));
 ok('대분류 소수 한 자리 유지', full.includes('세종시 -3.3백만'), L.find(l => l.startsWith('· 대분류')));
 
 /* ── ④ 안전선 두 갈래 ───────────────────────────────────── */
@@ -98,13 +101,16 @@ const base = { wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 1, wOut: 1, wNet: 
                lowCash: 900000000, floorLine: 1500000000 };
 const below = build.build({ ...base, floorBelow: 12 });
 const above = build.build({ ...base, floorBelow: 0 });
-const meLine = t => t.split('\n').find(l => l.startsWith('· 월말 '));
-ok('안전선 저촉 시 일수를 말한다', below.includes('안전선 15억 미달 12일'), meLine(below));
-ok('저촉 없으면 유지한다고 말한다', above.includes('안전선 15억 유지'), meLine(above));
-ok('안전선 미설정이면 잔고만',
-   /^· 월말 10\/31 예상 잔고 12억$/.test(meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })) || ''),
-   meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })));
-ok('차주 없고 잔고만 있으면 전망 블록', build.build({ ...base, floorBelow: 0 }).includes('■ 전망'));
+const meLine = t => t.split('\n').find(l => l.startsWith('월말('));
+const flLine = t => t.split('\n').find(l => l.includes('안전선'));
+/* 잔고는 축약하지 않는다 — 1,953,862,270 이 "20억" 으로 묻히던 것을 고친 자리다 */
+ok('잔고는 원 단위 서술형', meLine(below) === '월말(10/31) 예상 잔고는 1,200,000,000원입니다.', meLine(below));
+ok('안전선 저촉 시 일수를 말한다',
+   flLine(below) === '안전선 1,500,000,000원을 밑도는 날이 8주 중 12일 있습니다(최저 11/14 900,000,000원).', flLine(below));
+ok('저촉 없으면 유지한다고 말한다', (flLine(above) || '').startsWith('8주 내내 안전선 1,500,000,000원 위를'), flLine(above));
+ok('안전선 미설정이면 잔고 문장만',
+   !!meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })) && !flLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })));
+ok('불릿이 아니라 문장이다', !(meLine(below) || '').startsWith('·'), meLine(below));
 
 /* ── ⑤ 매출채권 문장은 나오지 않는다 ─────────────────────
    매출채권은 전량 인오가닉이고 그 서술은 사람이 직접 한다(2026-10-23 결정).
@@ -118,7 +124,7 @@ ok('채권 재료를 넣어도 매출채권 줄이 없다', !arTxt.includes('매
    arTxt.split('\n').find(l => l.includes('매출채권')));
 ok('옛 건수·비율 문장도 없다',
    !/신규 \d+건, 회수 \d+건/.test(arTxt) && !/위험 등급 채권 비중/.test(arTxt));
-ok('채권을 빼도 나머지 줄은 그대로', arTxt.includes('· 월말 10/31 예상 잔고 12억') && arTxt.trim().endsWith(build.DIV));
+ok('채권을 빼도 나머지 줄은 그대로', arTxt.includes('월말(10/31) 예상 잔고는') && arTxt.trim().endsWith(build.DIV));
 
 console.log('');
 console.log(fail ? `실패 ${fail}건 / 통과 ${pass}건` : `전부 통과 (${pass}건)`);

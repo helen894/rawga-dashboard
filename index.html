@@ -9894,17 +9894,25 @@ function buildDefaultWeeklySummaryText(ctx) {
     // 큰 건은 한 줄에 하나 — 금액을 세로로 비교할 수 있어야 눈에 들어온다
     for (const r of (ctx.nwBig || [])) ahead.push(bullet(`${wkMD(r.date)} ${r.desc} ${wkAmtS(r.amt)}`));
   }
+  /* ── 전망: 월말 잔고·안전선 ───────────────────────────
+     ⚠ 2026-10-23: 여기만 **서술형 + 원 단위**로 둔다(요청). 축약이 잔고에는 너무 거칠다 —
+       1,953,862,270원이 "20억" 으로 찍혀 46백만이 묻혔다(1e9 이상은 정수 반올림).
+       잔고는 흐름이 아니라 **수준**이라 자릿수가 그대로 보여야 판단이 된다.
+       위 불릿들은 흐름(입출금)이라 축약으로 둔다 — 둘의 성격이 다르다. */
+  const outlook = [];
   if (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) {
-    if (!ahead.length) ahead.push('■ 전망');
-    const tail = (ctx.floorLine > 0 && ctx.lowDate)
-      ? (ctx.floorBelow > 0
-          ? ` · 안전선 ${wkAmt(ctx.floorLine)} 미달 ${ctx.floorBelow}일(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`
-          : ` · 안전선 ${wkAmt(ctx.floorLine)} 유지(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`)
-      : '';
-    ahead.push(bullet(`월말 ${wkMD(ctx.monthEndDate)} 예상 잔고 ${wkAmt(ctx.monthEndCash)}${tail}`));
+    outlook.push(`월말(${wkMD(ctx.monthEndDate)}) 예상 잔고는 ${fmt(ctx.monthEndCash)}원입니다.`);
+    if (ctx.floorLine > 0 && ctx.lowDate) {
+      outlook.push(ctx.floorBelow > 0
+        ? `안전선 ${fmt(ctx.floorLine)}원을 밑도는 날이 8주 중 ${ctx.floorBelow}일 있습니다(최저 ${wkMD(ctx.lowDate)} ${fmt(ctx.lowCash)}원).`
+        : `8주 내내 안전선 ${fmt(ctx.floorLine)}원 위를 유지합니다(최저 ${wkMD(ctx.lowDate)} ${fmt(ctx.lowCash)}원).`);
+    }
   }
 
-  return [...thisWeek, ...(ahead.length ? ['', ...ahead] : []), '', WK_SUMMARY_DIVIDER].join('\n');
+  return [...thisWeek,
+          ...(ahead.length   ? ['', ...ahead]   : []),
+          ...(outlook.length ? ['', ...outlook] : []),
+          '', WK_SUMMARY_DIVIDER].join('\n');
 }
 function renderWeeklySummaryEditor(ctx) {
   _wkSummaryCtx = ctx;
