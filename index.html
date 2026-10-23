@@ -9626,11 +9626,79 @@ function renderWeeklyReport() {
     `지연 총 ${delayedTotal}건(보통 ${delayedNormal}건(${delayedNrRate}%) · 위험 ${delayedDanger}건(${delayedDrRate}%))`;
 
   // ── 주간 입출금 및 매출채권 요약 ─────────────────────────
+  /* ── 주간 요약 초안 재료 (2026-10-23) ───────────────────────────────────
+     최근 13주 수기 요약을 읽어 보니, 사람이 덧붙이는 내용은 늘 세 가지였다:
+       ⑴ 이번 주에 무엇이 움직였나 — 거래처 이름과 금액
+       ⑵ 다음 주·월말 전망 — 날짜·거래처·금액
+       ⑶ 해석과 대응 — "~하겠습니다"
+     ⑴⑵ 는 전부 이미 계산돼 있는데 ctx 로 안 넘기고 있었다. 넘겨서 초안이
+     숫자·이름·날짜까지 채워지게 한다. ⑶ 은 데이터에서 안 나오므로 사람 몫이다. */
+  const { nwStart, nwEnd } = getWeekRange(reportBaseDate);
+  const nwCF = cfData.filter(r => r.date >= nwStart && r.date <= nwEnd && !isInterAccount(r));
+  const nwPlanIn  = nwCF.filter(r => r.status === '입금 예정').reduce((s, r) => s + (r.in  || 0), 0);
+  const nwPlanOut = nwCF.filter(r => r.status === '지출 예정').reduce((s, r) => s + (r.out || 0), 0);
+  /* 큰 건만 — 1천만 미만까지 넣으면 문장이 길어져 결국 사람이 지운다(종전 채권 문장의 전철) */
+  const nwBig = nwCF
+    .filter(r => r.status === '입금 예정' || r.status === '지출 예정')
+    .map(r => ({ date: r.date, desc: String(r.desc || '').trim() || '(적요 없음)',
+                 amt: (Number(r.in) || 0) - (Number(r.out) || 0) }))
+    .filter(r => Math.abs(r.amt) >= 10000000)
+    .sort((a, b) => Math.abs(b.amt) - Math.abs(a.amt)).slice(0, 4)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  /* 채권 — 건수·비율이 아니라 거래처·금액·예정일. 수기 요약이 쓰는 형식이다
+     ("팬텀 4억, 세진 1억, 핀다 4.3억이 사실상 확정"). */
+  const arOpen = (Array.isArray(arData) ? arData : [])
+    .map(a => ({ partner: a.partner, due_date: a.due_date,
+                 rem: Number(a.remaining ?? ((a.expected || 0) - (a.collected || 0))) || 0 }))
+    .filter(a => a.rem > 0);
+  const ar4wEnd   = addDays(wEnd, 28);
+  /* 날짜순 상위 5건으로 뽑으면 같은 거래처 소액이 줄을 다 먹는다(실측: 천대표(부산영업)
+     4천만원대 3건이 앞을 차지). 수기 요약은 거래처 단위로 큰 것부터 쓴다("팬텀 4억,
+     세진 1억, 핀다 4.3억"). 그래서 거래처로 묶고 금액 큰 순으로 간다. 날짜는 가장 이른 예정일. */
+  const arSoonMap = new Map();
+  for (const a of arOpen) {
+    if (!a.due_date || a.due_date <= wEnd || a.due_date > ar4wEnd) continue;
+    const e = arSoonMap.get(a.partner) || { partner: a.partner, rem: 0, due_date: a.due_date, n: 0 };
+    e.rem += a.rem; e.n++;
+    if (a.due_date < e.due_date) e.due_date = a.due_date;
+    arSoonMap.set(a.partner, e);
+  }
+  const arDueSoon = [...arSoonMap.values()].sort((a, b) => b.rem - a.rem).slice(0, 5);
+  const arLate = arOpen.filter(a => a.due_date && a.due_date <= wEnd);
+  const arNone = arOpen.filter(a => !a.due_date);
+  const arSum  = arr => arr.reduce((t, a) => t + a.rem, 0);
+
+  /* 잔고 궤적 — 차트와 **같은 함수**를 쓴다. 요약이 그래프와 다른 숫자를 말하면 안 된다. */
+  let monthEndDate = null, monthEndCash = null, lowCash = null, lowDate = null;
+  let floorLine = 0, floorBelow = 0;
+  try {
+    const S = computeWeeklyCashSeries(wStart, cfData, initCashEff(), FX_ADJ, todayKST(),
+                                      WKRPT_HORIZON_DAYS, fxAdjAt(addDays(wStart, -1)));
+    floorLine    = dlFloor();
+    monthEndDate = monthEnd(wEnd);
+    S.dates.forEach((d, i) => {
+      const v = (S.projVals[i] !== null && S.projVals[i] !== undefined) ? S.projVals[i] : S.actVals[i];
+      if (v === null || v === undefined) return;
+      if (d === monthEndDate) monthEndCash = v;
+      if (lowCash === null || v < lowCash) { lowCash = v; lowDate = d; }
+      if (floorLine > 0 && v < floorLine) floorBelow++;
+    });
+  } catch (e) { console.warn('[wkrpt-summary] 잔고 궤적 생략', e); }
+
   // ── 주간 요약 에디터 ──────────────────────────────────
   renderWeeklySummaryEditor({
     wStart, wEnd, wIn, wOut, wNet, bigCatNetItems,
     wNewARCount: wNewAR.length, wColCount: wColCF.length,
     delayedTotal, delayedNormal, delayedDanger, delayedNrRate, delayedDrRate,
+    // ↓ 2026-10-23 추가 — 초안을 숫자·이름·날짜까지 채우기 위한 재료
+    topOut: wkTopByDesc(outRows, 'out', 3),
+    topIn:  wkTopByDesc(inRows,  'in',  3),
+    nwStart, nwEnd, nwPlanIn, nwPlanOut, nwBig,
+    arRemTotal: remTotal, arDueSoon,
+    arLateAmt: arSum(arLate), arLateN: arLate.length,
+    arNoneAmt: arSum(arNone), arNoneN: arNone.length,
+    monthEndDate, monthEndCash, lowCash, lowDate, floorLine, floorBelow,
   });
 
 }
@@ -9768,19 +9836,97 @@ function formatWeeklySummaryUpdatedAt(iso) {
     return `마지막 수정일: ${s}`;
   } catch { return '마지막 수정일: —'; }
 }
+/* ── 주간 요약 자동 생성 ────────────────────────────────────────────────
+ * ⚠ 2026-10-23: 최근 13주 수기 요약을 전부 읽고 다시 설계했다.
+ *   관찰 ① 자동 2문장(입출금·대분류)은 13주 내내 그대로 두셨다 — 쓸모가 있다는 뜻.
+ *   관찰 ② 그런데 **매출채권 2문장은 13주 중 12주에서 지워졌다.** 남은 한 주는
+ *          거의 손대지 않은 주였다. "신규 0건, 회수 0건, 지연 94건, 위험 71%" 처럼
+ *          건수와 비율만 말해서 보고에 쓸 수가 없었던 것이다.
+ *          사람이 쓴 채권 문장은 전부 거래처·금액·시점이다
+ *          ("팬텀 4억, 세진 1억, 핀다 4.3억이 사실상 확정").
+ *   → 그래서 건수·비율 문장을 **거래처·금액·예정일** 문장으로 바꾼다.
+ * 목표는 '완성된 요약' 이 아니라 **숫자·이름·날짜가 다 채워진 초안** 이다.
+ * 원인 해석·보수성 판단·대응 방침은 데이터에서 나오지 않으므로 사람 몫으로 두고,
+ * 구분선으로 자리를 만들어 둔다. 문장을 더 늘리고 싶으면 먼저 "이 문장이 지워지지
+ * 않고 남을까" 를 물어볼 것 — 안 남을 문장은 매주 지우는 일만 만든다. */
+const WK_SUMMARY_DIVIDER = '— 이하 직접 작성 (원인 · 전망 · 대응) —';
+
+/* 금액 축약 — 수기 요약이 쓰는 표기에 맞춘다("4.5억", "142백만"). 작으면 생략. */
+function wkAbbr(n) {
+  const a = Math.abs(n);
+  if (a >= 1e8) return `${(n / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
+  if (a >= 1e7) return `${Math.round(n / 1e6)}백만`;
+  return null;
+}
+/* "91,216,274원(0.9억)" — 원 단위는 근거로 남기고 축약을 같이 보여준다 */
+function wkAmt(n) { const a = wkAbbr(n); return `${fmt(n)}원${a ? `(${a})` : ''}`; }
+const wkMD = d => d ? String(d).slice(5).replace('-', '/') : '';
+
+/* 적요(거래처) 기준으로 합산해 큰 것부터 n 개. 같은 거래처가 여러 건이면 합친다 —
+   수기 요약이 건별이 아니라 상대방 기준으로 쓰기 때문이다("세종설비 4.5억"). */
+function wkTopByDesc(rows, field, n) {
+  const m = new Map();
+  for (const r of (rows || [])) {
+    const k = String(r.desc || '').trim() || '(적요 없음)';
+    m.set(k, (m.get(k) || 0) + (Number(r[field]) || 0));
+  }
+  return [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
 function buildDefaultWeeklySummaryText(ctx) {
   // P1-8: 대분류별 순현금(입금−출금) — 값이 없는 주(전부 0)는 문장 생략
   const bigCatLine = ctx.bigCatNetItems && ctx.bigCatNetItems.length
     ? `대분류별 순현금은 ${ctx.bigCatNetItems.map(([cat, v]) => `${cat} ${v >= 0 ? '+' : ''}${fmt(v)}원`).join(' · ')}입니다.`
     : null;
+
+  // 이번 주에 무엇이 움직였나 — 거래처 이름과 금액
+  const o = (ctx.topOut || []).map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ');
+  const i = (ctx.topIn  || []).map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ');
+  const topLine = (o || i)
+    ? [o ? `주요 출금은 ${o}` : null, i ? `주요 입금은 ${i}` : null].filter(Boolean).join(', ') + '입니다.'
+    : null;
+
+  // 다음 주 전망 — 날짜·거래처·금액
+  const nwLine = ctx.nwStart ? (() => {
+    const head = `차주(${wkMD(ctx.nwStart)}~${wkMD(ctx.nwEnd)}) 예정은 입금 ${wkAmt(ctx.nwPlanIn || 0)} · 출금 ${wkAmt(ctx.nwPlanOut || 0)}`;
+    const big  = (ctx.nwBig || []).map(r => `${wkMD(r.date)} ${r.desc} ${r.amt >= 0 ? '+' : ''}${wkAmt(r.amt)}`).join(' · ');
+    return head + (big ? `이며, 큰 건은 ${big}입니다.` : '입니다.');
+  })() : null;
+
+  // 채권 — 거래처·금액·예정일
+  const arLine = ctx.arRemTotal ? (() => {
+    const soon = (ctx.arDueSoon || []).map(a =>
+      `${wkMD(a.due_date)} ${a.partner} ${wkAmt(a.rem)}${a.n > 1 ? ` ${a.n}건` : ''}`).join(' · ');
+    const tail = [
+      ctx.arLateN ? `예정일 경과 ${wkAmt(ctx.arLateAmt)}(${ctx.arLateN}건)` : null,
+      ctx.arNoneN ? `예정일 미정 ${wkAmt(ctx.arNoneAmt)}(${ctx.arNoneN}건)` : null,
+    ].filter(Boolean).join(' · ');
+    return `매출채권 미회수는 ${wkAmt(ctx.arRemTotal)}이며, `
+      + (soon ? `4주 내 회수 예정은 ${soon}입니다.` : '4주 내 회수 예정은 없습니다.')
+      + (tail ? ` ${tail}입니다.` : '');
+  })() : null;
+
+  // 월말 잔고와 안전선
+  const cashLine = (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) ? (() => {
+    const parts = [`월말(${wkMD(ctx.monthEndDate)}) 예상 잔고는 ${wkAmt(ctx.monthEndCash)}`];
+    if (ctx.floorLine > 0 && ctx.lowDate) {
+      parts.push(ctx.floorBelow > 0
+        ? `안전선 ${wkAmt(ctx.floorLine)}을 밑도는 날이 8주 중 ${ctx.floorBelow}일 있습니다(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`
+        : `8주 내내 안전선 ${wkAmt(ctx.floorLine)} 위를 유지합니다(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`);
+    }
+    return parts.join('이며, ') + (parts.length > 1 ? '.' : '입니다.');
+  })() : null;
+
   return [
-    `이번 주(${ctx.wStart} ~ ${ctx.wEnd})는 입금 ${fmt(ctx.wIn)}원, 출금 ${fmt(ctx.wOut)}원으로 순현금은 ${ctx.wNet >= 0 ? '+' : ''}${fmt(ctx.wNet)}원입니다.`,
+    `이번 주(${ctx.wStart} ~ ${ctx.wEnd})는 입금 ${wkAmt(ctx.wIn)}, 출금 ${wkAmt(ctx.wOut)}으로 순현금은 ${ctx.wNet >= 0 ? '+' : ''}${wkAmt(ctx.wNet)}입니다.`,
     bigCatLine,
-    `매출채권은 신규 ${ctx.wNewARCount}건, 회수 ${ctx.wColCount}건이며, 지연/미정 채권은 총 ${ctx.delayedTotal}건입니다.`,
-    ctx.delayedDrRate >= 50
-      ? `위험 등급 채권 비중이 ${ctx.delayedDrRate}%로 높아 회수 일정 점검이 필요합니다.`
-      : `위험 등급 채권 비중은 ${ctx.delayedDrRate}%입니다.`,
-  ].filter(Boolean).join('\n');
+    topLine,
+    nwLine,
+    arLine,
+    cashLine,
+    '',
+    WK_SUMMARY_DIVIDER,
+  ].filter(x => x !== null && x !== undefined).join('\n');
 }
 function renderWeeklySummaryEditor(ctx) {
   _wkSummaryCtx = ctx;
