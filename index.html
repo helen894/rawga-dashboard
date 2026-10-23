@@ -9479,10 +9479,10 @@ function renderWeeklyReport() {
    * ⚠ 여기 담기는 항목들의 합은 위 wNet 과 **반드시 같아야 한다.** 2026-09-18 대표님이
    * "첫 줄과 다음 줄 순현금이 다르다"고 지적했고 원인은 상위 4개만 넣던 `.slice(0, 4)` 였다
    * (그 주 생략분 인오가닉 4,558,700 + 매출 3,303,279 = 차이 7,861,979 과 정확히 일치).
-   * 그래서 ① 개수 제한을 없애고 ② 100만원 미만은 **개별 나열만** 빼고 '그 외 N개'로 합산하며
+   * 그래서 ① 개수 제한을 없애고 ② 100만원 미만은 **개별 나열만** 빼고 '기타' 한 항으로 합산하며
    * ③ 대분류 없는 행도 버리지 않고 '미분류'로 묶는다. 어느 경로에서도 금액을 버리지 않는다.
    * 검증: scripts/test-weekly-bigcat-sum.mjs */
-  const BIGCAT_MIN_WON = 1000000;          // 개별 나열 임계 — 미만은 '그 외'로 합산
+  const BIGCAT_MIN_WON = 1000000;          // 개별 나열 임계 — 미만은 '기타'로 합산(버리지 않는다)
   const bigCatNetMap = {};
   wCF.forEach(r => {
     if (isInterAccount(r)) return;
@@ -9497,7 +9497,11 @@ function renderWeeklyReport() {
   const bigCatMinorSum = bigCatMinor.reduce((s, [, v]) => s + v, 0);
   const bigCatNetItems = bigCatNetAll.filter(([, v]) => Math.abs(v) >= BIGCAT_MIN_WON);
   // 합이 0이면 문장에 넣어도 정보가 없고 합 일치도 그대로라 생략한다
-  if (bigCatMinorSum !== 0) bigCatNetItems.push([`그 외 ${bigCatMinor.length}개`, bigCatMinorSum]);
+  /* 라벨에 임계를 적어 둔다. '그 외' 만으로는 100만원도 안 되는 금액이 왜 문장에 있는지
+     읽는 사람이 알 수 없어 매번 오해를 샀다 (2026-10-23 '100만원 이하는 빼라고 했는데' 문의).
+     숫자는 BIGCAT_MIN_WON 에서 만들어 라벨과 임계가 따로 놀지 않게 한다. */
+  const bigCatMinorLabel = `기타(${Math.round(BIGCAT_MIN_WON / 10000).toLocaleString()}만 미만) ${bigCatMinor.length}개`;
+  if (bigCatMinorSum !== 0) bigCatNetItems.push([bigCatMinorLabel, bigCatMinorSum]);
 
   // 기말 잔액 계산 (INIT_CASH + 누적 실제 입출금)
   computeFxAdj();          // 주간 리포트 기말잔액도 현금 KPI 와 같은 기준으로 맞춘다

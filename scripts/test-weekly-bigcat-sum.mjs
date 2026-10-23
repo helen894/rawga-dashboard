@@ -17,7 +17,7 @@ const cut = (from, to, label) => {
   return html.slice(i, j + to.length);
 };
 const srcTotals = cut('  const wIn   = wCF.filter(', '  const wNet  = wIn - wOut;', '주간 합계');
-const srcBigCat = cut('  const BIGCAT_MIN_WON =', 'bigCatNetItems.push([`그 외 ${bigCatMinor.length}개`, bigCatMinorSum]);', '대분류 집계');
+const srcBigCat = cut('  const BIGCAT_MIN_WON =', 'bigCatNetItems.push([bigCatMinorLabel, bigCatMinorSum]);', '대분류 집계');
 if (/slice\(0,\s*\d+\)/.test(srcBigCat)) throw new Error('대분류 집계에 개수 제한(slice)이 남아 있다');
 
 /* 두 블록을 한 스코프에서 실행 — 본체(renderWeeklyReport)와 같은 조건 */
@@ -54,9 +54,9 @@ for (const [label, rows] of Object.entries(cases)) check(label.padEnd(22), rows)
 const noCat = run(cases['대분류 없는 행 포함'], isInter);
 t('대분류 없는 행이 「미분류」로 살아남음', noCat.items.some(([k]) => k === '미분류'), JSON.stringify(noCat.items));
 const minor = run(cases['전부 100만원 미만'], isInter);
-t('소액만 있으면 「그 외 N개」 한 항으로', minor.items.length === 1 && minor.items[0][0] === '그 외 2개', JSON.stringify(minor.items));
+t('소액만 있으면 「기타」 한 항으로', minor.items.length === 1 && minor.items[0][0] === '기타(100만 미만) 2개', JSON.stringify(minor.items));
 const zero = run(cases['소액이 정확히 상쇄(합 0)'], isInter);
-t('소액 합이 0이면 「그 외」 생략', !zero.items.some(([k]) => k.startsWith('그 외')), JSON.stringify(zero.items));
+t('소액 합이 0이면 「기타」 생략', !zero.items.some(([k]) => k.startsWith('기타(')), JSON.stringify(zero.items));
 const edge = run(cases['임계 정확히 100만원'], isInter);
 t('정확히 100만원은 개별 표시', edge.items.some(([k]) => k === '매출'), JSON.stringify(edge.items));
 
