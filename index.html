@@ -9646,28 +9646,12 @@ function renderWeeklyReport() {
     .sort((a, b) => Math.abs(b.amt) - Math.abs(a.amt)).slice(0, 4)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  /* 채권 — 건수·비율이 아니라 거래처·금액·예정일. 수기 요약이 쓰는 형식이다
-     ("팬텀 4억, 세진 1억, 핀다 4.3억이 사실상 확정"). */
-  const arOpen = (Array.isArray(arData) ? arData : [])
-    .map(a => ({ partner: a.partner, due_date: a.due_date,
-                 rem: Number(a.remaining ?? ((a.expected || 0) - (a.collected || 0))) || 0 }))
-    .filter(a => a.rem > 0);
-  const ar4wEnd   = addDays(wEnd, 28);
-  /* 날짜순 상위 5건으로 뽑으면 같은 거래처 소액이 줄을 다 먹는다(실측: 천대표(부산영업)
-     4천만원대 3건이 앞을 차지). 수기 요약은 거래처 단위로 큰 것부터 쓴다("팬텀 4억,
-     세진 1억, 핀다 4.3억"). 그래서 거래처로 묶고 금액 큰 순으로 간다. 날짜는 가장 이른 예정일. */
-  const arSoonMap = new Map();
-  for (const a of arOpen) {
-    if (!a.due_date || a.due_date <= wEnd || a.due_date > ar4wEnd) continue;
-    const e = arSoonMap.get(a.partner) || { partner: a.partner, rem: 0, due_date: a.due_date, n: 0 };
-    e.rem += a.rem; e.n++;
-    if (a.due_date < e.due_date) e.due_date = a.due_date;
-    arSoonMap.set(a.partner, e);
-  }
-  const arDueSoon = [...arSoonMap.values()].sort((a, b) => b.rem - a.rem).slice(0, 5);
-  const arLate = arOpen.filter(a => a.due_date && a.due_date <= wEnd);
-  const arNone = arOpen.filter(a => !a.due_date);
-  const arSum  = arr => arr.reduce((t, a) => t + a.rem, 0);
+  /* ⚠ 2026-10-23: 매출채권 문장은 **의도적으로 넣지 않는다.**
+     매출채권은 전량 인오가닉 사업 건이고(원천이 '인오가닉 사업 현황' 시트),
+     인오가닉은 대표님이 직접 서술하시는 영역이라 자동 문장이 중복만 만든다.
+     거래처·금액·예정일로 만들어 봤지만(한 번 구현했다) 그 이유로 뺐다.
+     되살릴 거면 ar_data 에서 거래처별로 묶어 금액 큰 순으로 — 날짜순 상위 N 건으로
+     뽑으면 천대표(부산영업) 4천만원대 소액이 줄을 다 먹는다(실측). */
 
   /* 잔고 궤적 — 차트와 **같은 함수**를 쓴다. 요약이 그래프와 다른 숫자를 말하면 안 된다. */
   let monthEndDate = null, monthEndCash = null, lowCash = null, lowDate = null;
@@ -9695,9 +9679,6 @@ function renderWeeklyReport() {
     topOut: wkTopByDesc(outRows, 'out', 3),
     topIn:  wkTopByDesc(inRows,  'in',  3),
     nwStart, nwEnd, nwPlanIn, nwPlanOut, nwBig,
-    arRemTotal: remTotal, arDueSoon,
-    arLateAmt: arSum(arLate), arLateN: arLate.length,
-    arNoneAmt: arSum(arNone), arNoneN: arNone.length,
     monthEndDate, monthEndCash, lowCash, lowDate, floorLine, floorBelow,
   });
 
@@ -9844,7 +9825,9 @@ function formatWeeklySummaryUpdatedAt(iso) {
  *          건수와 비율만 말해서 보고에 쓸 수가 없었던 것이다.
  *          사람이 쓴 채권 문장은 전부 거래처·금액·시점이다
  *          ("팬텀 4억, 세진 1억, 핀다 4.3억이 사실상 확정").
- *   → 그래서 건수·비율 문장을 **거래처·금액·예정일** 문장으로 바꾼다.
+ *   → 건수·비율 문장은 걷어냈다. 다만 **거래처·금액 문장으로 바꾸지도 않았다** —
+ *     매출채권은 전량 인오가닉이고 그 서술은 대표님이 직접 하시므로 중복이다
+ *     (2026-10-23 '인오가닉 내용은 제외' 요청, 매출채권 줄만 제거로 확정).
  * 목표는 '완성된 요약' 이 아니라 **숫자·이름·날짜가 다 채워진 초안** 이다.
  * 원인 해석·보수성 판단·대응 방침은 데이터에서 나오지 않으므로 사람 몫으로 두고,
  * 구분선으로 자리를 만들어 둔다. 문장을 더 늘리고 싶으면 먼저 "이 문장이 지워지지
@@ -9893,19 +9876,6 @@ function buildDefaultWeeklySummaryText(ctx) {
     return head + (big ? `이며, 큰 건은 ${big}입니다.` : '입니다.');
   })() : null;
 
-  // 채권 — 거래처·금액·예정일
-  const arLine = ctx.arRemTotal ? (() => {
-    const soon = (ctx.arDueSoon || []).map(a =>
-      `${wkMD(a.due_date)} ${a.partner} ${wkAmt(a.rem)}${a.n > 1 ? ` ${a.n}건` : ''}`).join(' · ');
-    const tail = [
-      ctx.arLateN ? `예정일 경과 ${wkAmt(ctx.arLateAmt)}(${ctx.arLateN}건)` : null,
-      ctx.arNoneN ? `예정일 미정 ${wkAmt(ctx.arNoneAmt)}(${ctx.arNoneN}건)` : null,
-    ].filter(Boolean).join(' · ');
-    return `매출채권 미회수는 ${wkAmt(ctx.arRemTotal)}이며, `
-      + (soon ? `4주 내 회수 예정은 ${soon}입니다.` : '4주 내 회수 예정은 없습니다.')
-      + (tail ? ` ${tail}입니다.` : '');
-  })() : null;
-
   // 월말 잔고와 안전선
   const cashLine = (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) ? (() => {
     const parts = [`월말(${wkMD(ctx.monthEndDate)}) 예상 잔고는 ${wkAmt(ctx.monthEndCash)}`];
@@ -9922,7 +9892,6 @@ function buildDefaultWeeklySummaryText(ctx) {
     bigCatLine,
     topLine,
     nwLine,
-    arLine,
     cashLine,
     '',
     WK_SUMMARY_DIVIDER,

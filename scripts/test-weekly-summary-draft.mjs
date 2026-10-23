@@ -79,22 +79,19 @@ ok('안전선 저촉 시 일수를 말한다', below.includes('밑도는 날이 
 ok('저촉 없으면 유지한다고 말한다', above.includes('내내 안전선'), above.split('\n').find(l => l.startsWith('월말')));
 ok('안전선 미설정이면 잔고만', build.build({ ...base, floorLine: 0, floorBelow: 0 }).includes('월말(10/31) 예상 잔고는'));
 
-/* ── ⑤ 채권 문장이 거래처·금액·예정일을 담는다 ──────────── */
+/* ── ⑤ 매출채권 문장은 나오지 않는다 ─────────────────────
+   매출채권은 전량 인오가닉이고 그 서술은 사람이 직접 한다(2026-10-23 결정).
+   ctx 에 채권 재료가 들어와도 문장이 만들어지면 안 된다 — 되살리려면 의도적으로 할 것. */
 const arTxt = build.build({
   ...base, floorBelow: 0, arRemTotal: 14498131625,
-  arDueSoon: [{ partner: '세진식품', rem: 50000000, due_date: '2026-10-26' },
-              { partner: '핀다', rem: 430000000, due_date: '2026-10-30' }],
+  arDueSoon: [{ partner: '세진식품', rem: 50000000, due_date: '2026-10-26' }],
   arLateAmt: 4482822048, arLateN: 41, arNoneAmt: 1602026555, arNoneN: 29,
-}).split('\n').find(l => l.startsWith('매출채권'));
-ok('채권: 날짜+거래처+금액', /10\/26 세진식품 50,000,000원\(50백만\)/.test(arTxt), arTxt);
-ok('채권: 여러 건이면 건수 표기', /천대표 .*3건/.test(build.build({
-  ...base, floorBelow: 0, arRemTotal: 1,
-  arDueSoon: [{ partner: '천대표', rem: 119500000, due_date: '2026-10-26', n: 3 }],
-}).split('\n').find(l => l.startsWith('매출채권'))));
-ok('채권: 경과·미정 금액', /예정일 경과 .*41건.*예정일 미정 .*29건/.test(arTxt), arTxt);
-ok('채권: 건수만 말하던 옛 문장 제거', !/신규 \d+건, 회수 \d+건/.test(arTxt) && !/위험 등급 채권 비중/.test(arTxt), arTxt);
-ok('4주 내 없으면 그렇다고 말한다',
-   build.build({ ...base, floorBelow: 0, arRemTotal: 100, arDueSoon: [] }).includes('4주 내 회수 예정은 없습니다'));
+});
+ok('채권 재료를 넣어도 매출채권 줄이 없다', !arTxt.includes('매출채권'),
+   arTxt.split('\n').find(l => l.includes('매출채권')));
+ok('옛 건수·비율 문장도 없다',
+   !/신규 \d+건, 회수 \d+건/.test(arTxt) && !/위험 등급 채권 비중/.test(arTxt));
+ok('채권을 빼도 나머지 줄은 그대로', arTxt.includes('월말(10/31) 예상 잔고는') && arTxt.trim().endsWith(build.DIV));
 
 console.log('');
 console.log(fail ? `실패 ${fail}건 / 통과 ${pass}건` : `전부 통과 (${pass}건)`);
@@ -155,19 +152,7 @@ if (process.argv.includes('--live')) {
       .map(r => ({ date: r.date, desc: String(r.desc || '').trim() || '(적요 없음)', amt: (r.in || 0) - (r.out || 0) }))
       .filter(r => Math.abs(r.amt) >= 1e7).sort((a, b) => Math.abs(b.amt) - Math.abs(a.amt)).slice(0, 4)
       .sort((a, b) => a.date.localeCompare(b.date)),
-    arRemTotal: sum(arOpen),
-    arDueSoon: (() => {
-      const m = new Map();
-      for (const a of arOpen) {
-        if (!a.due_date || a.due_date <= wEnd || a.due_date > ar4w) continue;
-        const e = m.get(a.partner) || { partner: a.partner, rem: 0, due_date: a.due_date, n: 0 };
-        e.rem += a.rem; e.n++;
-        if (a.due_date < e.due_date) e.due_date = a.due_date;
-        m.set(a.partner, e);
-      }
-      return [...m.values()].sort((x, y) => y.rem - x.rem).slice(0, 5);
-    })(),
-    arLateAmt: sum(late), arLateN: late.length, arNoneAmt: sum(none), arNoneN: none.length,
+    // 매출채권은 자동 문장에서 제외한다(인오가닉 — 사람이 직접 서술)
     // 잔고 궤적은 initCashEff()/FX_ADJ 가 필요해 화면에서만 채워진다 — 여기서는 생략된다
   };
   console.log('\n═══ 실데이터 초안 (' + wStart + ' ~ ' + wEnd + ') ═══');
