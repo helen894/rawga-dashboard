@@ -37,6 +37,7 @@ const build = new Function(`
   ${line(/const WK_SUMMARY_DIVIDER = [^;]+;/)}
   ${grab('wkAbbr')}
   ${grab('wkAmt')}
+  ${grab('wkAmtS')}
   ${line(/const wkMD = [^;]+;/)}
   ${grab('wkTopByDesc')}
   ${grab('buildDefaultWeeklySummaryText')}
@@ -52,7 +53,9 @@ const ok = (label, cond, extra) => {
 ok('축약 1억 이상', build.wkAbbr(450000000) === '4.5억', build.wkAbbr(450000000));
 ok('축약 10억 이상은 소수점 없이', build.wkAbbr(1500000000) === '15억', build.wkAbbr(1500000000));
 ok('축약 음수', build.wkAbbr(-35810945) === '-36백만', build.wkAbbr(-35810945));
-ok('축약 1천만 미만은 생략', build.wkAbbr(3300000) === null, String(build.wkAbbr(3300000)));
+/* 330만을 정수 반올림하면 "3백만" 이 돼 10% 가 날아간다 — 대분류 줄에 자주 들어오는 구간이다 */
+ok('1백만~1천만은 소수 한 자리', build.wkAbbr(3300000) === '3.3백만', String(build.wkAbbr(3300000)));
+ok('100만 미만은 원 단위로', build.wkAbbr(12159) === null, String(build.wkAbbr(12159)));
 
 /* ── ② 거래처 합산 ──────────────────────────────────────── */
 const top = build.wkTopByDesc([
@@ -63,11 +66,31 @@ ok('같은 거래처는 합산 후 정렬', JSON.stringify(top) === JSON.stringi
 
 /* ── ③ 빈 데이터에서 깨지지 않는다 ───────────────────────── */
 const bare = build.build({ wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 0, wOut: 0, wNet: 0 });
-ok('재료가 하나도 없어도 생성됨', typeof bare === 'string' && bare.includes('이번 주(2026-10-19'));
-ok('빈 데이터면 선택 문장은 안 나온다',
-   !bare.includes('주요 출금') && !bare.includes('차주(') && !bare.includes('매출채권 미회수') && !bare.includes('월말('));
+ok('재료가 하나도 없어도 생성됨', typeof bare === 'string' && bare.includes('■ 이번 주 10/19~10/25'));
+ok('빈 데이터면 선택 줄은 안 나온다',
+   !bare.includes('주요 출금') && !bare.includes('■ 차주') && !bare.includes('매출채권') && !bare.includes('월말 '));
 ok('구분선은 항상 있다', bare.trim().endsWith(build.DIV));
 ok('undefined/NaN 문구 없음', !/undefined|NaN|null/.test(bare), bare);
+
+/* ── ③-2 블록·불릿 구조 (메일에서 들여쓰기가 뭉개지므로 글자로만 계층) ── */
+const full = build.build({
+  wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 246689127, wOut: 282500072, wNet: -35810945,
+  bigCatNetItems: [['인오가닉', -72465844], ['세종시', -3300000]],
+  topOut: [['화경', 91216274]], topIn: [['세진식품(주)', 141216274]],
+  nwStart: '2026-10-26', nwEnd: '2026-11-01', nwPlanIn: 2232381954, nwPlanOut: 1015169895,
+  nwBig: [{ date: '2026-10-31', desc: '천대표 (수산)', amt: 1000000000 },
+          { date: '2026-10-31', desc: '세종 예비비', amt: -500000000 }],
+  monthEndDate: '2026-10-31', monthEndCash: 1200000000, lowDate: '2026-11-14',
+  lowCash: 900000000, floorLine: 1500000000, floorBelow: 12,
+});
+const L = full.split('\n');
+ok('블록 헤더 2개', L.filter(l => l.startsWith('■')).length === 2, L.filter(l => l.startsWith('■')).join(' | '));
+ok('차주 큰 건은 한 줄에 하나',
+   L.filter(l => l.startsWith('· 10/31 ')).length === 2, L.filter(l => l.startsWith('· 10/31 ')).join(' | '));
+ok('들여쓰기(선행 공백) 없음 — 메일에서 뭉개진다', L.every(l => !/^\s/.test(l)), L.find(l => /^\s/.test(l)));
+ok('입금에 + 부호', L.some(l => l.includes('천대표 (수산) +10억')), L.find(l => l.includes('천대표')));
+ok('원 단위 병기 없음', !/\d,\d{3},\d{3}원/.test(full), full.split('\n').find(l => /\d,\d{3},\d{3}원/.test(l)));
+ok('대분류 소수 한 자리 유지', full.includes('세종시 -3.3백만'), L.find(l => l.startsWith('· 대분류')));
 
 /* ── ④ 안전선 두 갈래 ───────────────────────────────────── */
 const base = { wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 1, wOut: 1, wNet: 0,
@@ -75,9 +98,13 @@ const base = { wStart: '2026-10-19', wEnd: '2026-10-25', wIn: 1, wOut: 1, wNet: 
                lowCash: 900000000, floorLine: 1500000000 };
 const below = build.build({ ...base, floorBelow: 12 });
 const above = build.build({ ...base, floorBelow: 0 });
-ok('안전선 저촉 시 일수를 말한다', below.includes('밑도는 날이 8주 중 12일'), below.split('\n').find(l => l.startsWith('월말')));
-ok('저촉 없으면 유지한다고 말한다', above.includes('내내 안전선'), above.split('\n').find(l => l.startsWith('월말')));
-ok('안전선 미설정이면 잔고만', build.build({ ...base, floorLine: 0, floorBelow: 0 }).includes('월말(10/31) 예상 잔고는'));
+const meLine = t => t.split('\n').find(l => l.startsWith('· 월말 '));
+ok('안전선 저촉 시 일수를 말한다', below.includes('안전선 15억 미달 12일'), meLine(below));
+ok('저촉 없으면 유지한다고 말한다', above.includes('안전선 15억 유지'), meLine(above));
+ok('안전선 미설정이면 잔고만',
+   /^· 월말 10\/31 예상 잔고 12억$/.test(meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })) || ''),
+   meLine(build.build({ ...base, floorLine: 0, floorBelow: 0 })));
+ok('차주 없고 잔고만 있으면 전망 블록', build.build({ ...base, floorBelow: 0 }).includes('■ 전망'));
 
 /* ── ⑤ 매출채권 문장은 나오지 않는다 ─────────────────────
    매출채권은 전량 인오가닉이고 그 서술은 사람이 직접 한다(2026-10-23 결정).
@@ -91,7 +118,7 @@ ok('채권 재료를 넣어도 매출채권 줄이 없다', !arTxt.includes('매
    arTxt.split('\n').find(l => l.includes('매출채권')));
 ok('옛 건수·비율 문장도 없다',
    !/신규 \d+건, 회수 \d+건/.test(arTxt) && !/위험 등급 채권 비중/.test(arTxt));
-ok('채권을 빼도 나머지 줄은 그대로', arTxt.includes('월말(10/31) 예상 잔고는') && arTxt.trim().endsWith(build.DIV));
+ok('채권을 빼도 나머지 줄은 그대로', arTxt.includes('· 월말 10/31 예상 잔고 12억') && arTxt.trim().endsWith(build.DIV));
 
 console.log('');
 console.log(fail ? `실패 ${fail}건 / 통과 ${pass}건` : `전부 통과 (${pass}건)`);

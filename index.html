@@ -9834,15 +9834,24 @@ function formatWeeklySummaryUpdatedAt(iso) {
  * 않고 남을까" 를 물어볼 것 — 안 남을 문장은 매주 지우는 일만 만든다. */
 const WK_SUMMARY_DIVIDER = '— 이하 직접 작성 (원인 · 전망 · 대응) —';
 
-/* 금액 축약 — 수기 요약이 쓰는 표기에 맞춘다("4.5억", "142백만"). 작으면 생략. */
+/* 금액 축약 — 수기 요약이 쓰는 표기에 맞춘다("4.5억", "142백만").
+   100만 미만만 원 단위로 떨어진다(그 아래는 축약해 봐야 0 이 되어 뜻이 없다).
+   ⚠ 1백만~1천만 구간은 소수 한 자리를 쓴다. 정수로 반올림하면 330만이 "3백만" 이 돼
+     10% 가 날아간다 — 대분류 줄에 그 구간이 자주 들어온다(세종시 -3,300,000). */
 function wkAbbr(n) {
   const a = Math.abs(n);
   if (a >= 1e8) return `${(n / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
   if (a >= 1e7) return `${Math.round(n / 1e6)}백만`;
+  if (a >= 1e6) return `${(n / 1e6).toFixed(1)}백만`;
   return null;
 }
-/* "91,216,274원(0.9억)" — 원 단위는 근거로 남기고 축약을 같이 보여준다 */
-function wkAmt(n) { const a = wkAbbr(n); return `${fmt(n)}원${a ? `(${a})` : ''}`; }
+/* 금액 표기 — **축약만** 쓴다("91백만"). 1백만 미만만 원 단위로 떨어진다.
+   ⚠ 2026-10-23: 종전엔 "91,216,274원(91백만)" 처럼 병기했는데, 대분류 줄이 183자가 돼
+     화면에서 서너 줄로 접혔다. 블록으로 나눈 효과가 거기서 깨진다(가독성 저하 지적).
+     1원 단위가 필요하면 아래 입출금 표를 본다 — 요약은 읽고 판단하는 용도다. */
+function wkAmt(n) { return wkAbbr(n) || `${fmt(n)}원`; }
+/* 부호를 명시해야 방향이 보이는 값(순현금·대분류 순액·예정 큰 건)에 쓴다 */
+function wkAmtS(n) { return (n >= 0 ? '+' : '') + wkAmt(n); }
 const wkMD = d => d ? String(d).slice(5).replace('-', '/') : '';
 
 /* 적요(거래처) 기준으로 합산해 큰 것부터 n 개. 같은 거래처가 여러 건이면 합친다 —
@@ -9856,46 +9865,46 @@ function wkTopByDesc(rows, field, n) {
   return [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 
+/* ⚠ 서술형 한 문장에 항목을 7개씩 넣으니 읽기 어렵다는 지적(2026-10-23).
+     '이번 주 / 차주' 두 블록으로 나누고 항목마다 한 줄씩 준다.
+   ⚠⚠ **들여쓰기로 계층을 만들지 말 것.** 이 텍스트는 주간 메일에도 그대로 실리는데
+     escapeHtml 후 \n 만 <br> 로 바뀌고 white-space:pre 가 아니다 — 선행 공백은
+     HTML 에서 뭉개져 사라진다. 계층은 '■' 와 '·' 같은 글자로만 표현한다. */
 function buildDefaultWeeklySummaryText(ctx) {
-  // P1-8: 대분류별 순현금(입금−출금) — 값이 없는 주(전부 0)는 문장 생략
-  const bigCatLine = ctx.bigCatNetItems && ctx.bigCatNetItems.length
-    ? `대분류별 순현금은 ${ctx.bigCatNetItems.map(([cat, v]) => `${cat} ${v >= 0 ? '+' : ''}${fmt(v)}원`).join(' · ')}입니다.`
-    : null;
+  const bullet = s => '· ' + s;
 
-  // 이번 주에 무엇이 움직였나 — 거래처 이름과 금액
-  const o = (ctx.topOut || []).map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ');
-  const i = (ctx.topIn  || []).map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ');
-  const topLine = (o || i)
-    ? [o ? `주요 출금은 ${o}` : null, i ? `주요 입금은 ${i}` : null].filter(Boolean).join(', ') + '입니다.'
-    : null;
+  // ── 이번 주 ──────────────────────────────────────────
+  const thisWeek = [
+    `■ 이번 주 ${wkMD(ctx.wStart)}~${wkMD(ctx.wEnd)}`,
+    bullet(`입금 ${wkAmt(ctx.wIn)} · 출금 ${wkAmt(ctx.wOut)} · 순현금 ${wkAmtS(ctx.wNet)}`),
+    // P1-8: 대분류별 순현금(입금−출금). 항목 합 ≡ 위 순현금 (test-weekly-bigcat-sum)
+    (ctx.bigCatNetItems && ctx.bigCatNetItems.length)
+      ? bullet(`대분류 ${ctx.bigCatNetItems.map(([cat, v]) => `${cat} ${wkAmtS(v)}`).join(' · ')}`) : null,
+    (ctx.topOut && ctx.topOut.length)
+      ? bullet(`주요 출금 ${ctx.topOut.map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ')}`) : null,
+    (ctx.topIn && ctx.topIn.length)
+      ? bullet(`주요 입금 ${ctx.topIn.map(([d, v]) => `${d} ${wkAmt(v)}`).join(' · ')}`) : null,
+  ].filter(Boolean);
 
-  // 다음 주 전망 — 날짜·거래처·금액
-  const nwLine = ctx.nwStart ? (() => {
-    const head = `차주(${wkMD(ctx.nwStart)}~${wkMD(ctx.nwEnd)}) 예정은 입금 ${wkAmt(ctx.nwPlanIn || 0)} · 출금 ${wkAmt(ctx.nwPlanOut || 0)}`;
-    const big  = (ctx.nwBig || []).map(r => `${wkMD(r.date)} ${r.desc} ${r.amt >= 0 ? '+' : ''}${wkAmt(r.amt)}`).join(' · ');
-    return head + (big ? `이며, 큰 건은 ${big}입니다.` : '입니다.');
-  })() : null;
+  // ── 차주·전망 ────────────────────────────────────────
+  const ahead = [];
+  if (ctx.nwStart) {
+    ahead.push(`■ 차주 ${wkMD(ctx.nwStart)}~${wkMD(ctx.nwEnd)}`);
+    ahead.push(bullet(`예정 입금 ${wkAmt(ctx.nwPlanIn || 0)} · 출금 ${wkAmt(ctx.nwPlanOut || 0)}`));
+    // 큰 건은 한 줄에 하나 — 금액을 세로로 비교할 수 있어야 눈에 들어온다
+    for (const r of (ctx.nwBig || [])) ahead.push(bullet(`${wkMD(r.date)} ${r.desc} ${wkAmtS(r.amt)}`));
+  }
+  if (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) {
+    if (!ahead.length) ahead.push('■ 전망');
+    const tail = (ctx.floorLine > 0 && ctx.lowDate)
+      ? (ctx.floorBelow > 0
+          ? ` · 안전선 ${wkAmt(ctx.floorLine)} 미달 ${ctx.floorBelow}일(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`
+          : ` · 안전선 ${wkAmt(ctx.floorLine)} 유지(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`)
+      : '';
+    ahead.push(bullet(`월말 ${wkMD(ctx.monthEndDate)} 예상 잔고 ${wkAmt(ctx.monthEndCash)}${tail}`));
+  }
 
-  // 월말 잔고와 안전선
-  const cashLine = (ctx.monthEndCash !== null && ctx.monthEndCash !== undefined) ? (() => {
-    const parts = [`월말(${wkMD(ctx.monthEndDate)}) 예상 잔고는 ${wkAmt(ctx.monthEndCash)}`];
-    if (ctx.floorLine > 0 && ctx.lowDate) {
-      parts.push(ctx.floorBelow > 0
-        ? `안전선 ${wkAmt(ctx.floorLine)}을 밑도는 날이 8주 중 ${ctx.floorBelow}일 있습니다(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`
-        : `8주 내내 안전선 ${wkAmt(ctx.floorLine)} 위를 유지합니다(최저 ${wkMD(ctx.lowDate)} ${wkAmt(ctx.lowCash)})`);
-    }
-    return parts.join('이며, ') + (parts.length > 1 ? '.' : '입니다.');
-  })() : null;
-
-  return [
-    `이번 주(${ctx.wStart} ~ ${ctx.wEnd})는 입금 ${wkAmt(ctx.wIn)}, 출금 ${wkAmt(ctx.wOut)}으로 순현금은 ${ctx.wNet >= 0 ? '+' : ''}${wkAmt(ctx.wNet)}입니다.`,
-    bigCatLine,
-    topLine,
-    nwLine,
-    cashLine,
-    '',
-    WK_SUMMARY_DIVIDER,
-  ].filter(x => x !== null && x !== undefined).join('\n');
+  return [...thisWeek, ...(ahead.length ? ['', ...ahead] : []), '', WK_SUMMARY_DIVIDER].join('\n');
 }
 function renderWeeklySummaryEditor(ctx) {
   _wkSummaryCtx = ctx;
