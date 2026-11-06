@@ -12694,9 +12694,13 @@ function generateLoanPlanned(showToastMsg = true){
   for (const l of loanData) {
     const acct = String(l.account || '').trim();
     const day  = parseInt(l.intDay, 10);
-    const mi   = loanMonthlyInterest(l);          // { amt, est }
-    const amt  = Math.round(mi.amt || 0);
-    if (!acct || !(day >= 1 && day <= 31) || amt <= 0) continue;   // 식별·일자·금액 셋 다 있어야 한다
+    if (!acct || !(day >= 1 && day <= 31)) continue;        // 식별·일자는 있어야 한다
+    if (loanNum(l.balance) <= 0 || loanNum(l.rate) <= 0) continue;
+    /* 상환 중인 균등상환 건은 원금분도 같이 나간다(2026-11-06). 월상환액 칸이 '원금분' 이다.
+       ⚠ 달이 갈수록 잔액이 원금분만큼 줄어 이자도 줄어든다 — 그걸 반영하려고 off 로 체감시킨다.
+         안 하면 3개월치가 전부 이번 달 잔액 기준이라 뒤로 갈수록 과대 계상된다. */
+    const amortive = loanIsAmort(l) && !loanInGrace(l);
+    const princ    = amortive ? loanNum(l.monthly) : 0;    // 원금분(미입력이면 0 → 이자만)
 
     const offsets = [];
     if (day >= todayDay) offsets.push(0);                  // 이번 달 출금일이 아직 안 지났으면 포함
@@ -12716,18 +12720,25 @@ function generateLoanPlanned(showToastMsg = true){
       // 중복 방지 — 같은 대출(loan_id) 의 같은 날짜 행이 이미 있으면 건너뛴다(상태 무관)
       if (cfData.some(r => r.loan_id === acct && r.date === date)) continue;
 
+      /* 그 달 잔액으로 그 달 일수만큼 — 원금분이 쌓인 만큼 잔액을 빼고 계산한다 */
+      const balAt = Math.max(0, loanNum(l.balance) - princ * off);
+      const itr   = balAt * loanNum(l.rate) / 100 * loanDaysInMonth(date.slice(0, 7)) / 365;
+      const amt   = Math.round(itr + Math.min(princ, balAt));
+      if (amt <= 0) continue;
+
       _cfIdCounter++;
       cfData.push(normalizeCFRow({
         _id: 'cf_' + _cfIdCounter + '_' + Math.random().toString(36).slice(2,9),
         date,
-        desc: loanPlanDesc(l),
+        desc: loanPlanDesc(l) + (princ > 0 ? ' 원리금' : ''),
         in: 0, out: amt, amount: -amt,
         type: '지출', status: '지출 예정',
         mid_cat: '이자비용', big_cat: getBigCat('이자비용'),
         loan_id: acct,          // 소멸 로직이 쓸 출처 태그
-        /* true = 잔액×금리로 계산한 값(intAmount 미기재). false 라도 확정액은 아니다 —
-           실측 intAmount 를 썼을 뿐이고 실제 이자는 그 달 일수에 따라 매달 달라진다. */
-        loan_est: !!mi.est,
+        /* 늘 true — 계산값이라는 뜻. 일수식이라 실측과 원 단위까지 맞는 경우가 많지만,
+           잔액·금리가 최신이어야 맞는 값이라 '확정' 이라고 부르지 않는다. */
+        loan_est: true,
+        loan_princ: Math.round(Math.min(princ, balAt)) || 0,   // 원금분(0이면 이자만)
       }));
       added++;
     }
@@ -13030,12 +13041,43 @@ async function saveLoanData(){
   }
 }
 
-/* 월이자 — 실측값(intAmount)이 있으면 그걸 쓰고, 없으면 잔액×금리÷12 로 추정.
-   은행에서 실제 빠져나간 금액을 적어두면 예정 생성이 추정이 아니라 확정이 된다. */
-function loanMonthlyInterest(L){
-  const v = loanNum(L.intAmount);
-  if (v > 0) return { amt: v, est: false };
-  return { amt: loanNum(L.balance) * loanNum(L.rate) / 100 / 12, est: true };
+/* ═══ 월이자 — 일수식 (잔액 × 금리 × 그 달 일수 ÷ 365) ════════════════════
+ * ⚠⚠ 2026-11-06 전환. 종전엔 `÷12` 로 추정하고 실측값(intAmount)이 있으면 그걸 우선했다.
+ *   그래서 **잔액·금리를 고쳐도 월이자가 안 따라갔다**(대표님 지적). 대출 10건 전부
+ *   intAmount 가 채워져 있어 사실상 계산식이 죽어 있었다.
+ *
+ *   ÷12 는 한 달을 30.417일로 고정한다. 은행은 일할로 계산하므로 30일 달은 -1.4%,
+ *   31일 달은 +1.9% 가 구조적으로 어긋난다. 이걸 "공식으로는 못 맞추는 오차" 로 잘못
+ *   읽었는데, **일수식으로 바꾸니 10건 중 9건이 입력된 실측값과 원 단위까지 일치했다**
+ *   (-1.4% = 30일달, +1.9% = 31일달이었을 뿐). 나머지 1건은 잔액이 낡은 것이었다.
+ *
+ * ⚠ intAmount 는 이제 **계산을 덮지 않는다**. 덮으면 낡은 값이 계속 이겨서 전환한 의미가
+ *   없다(국민 98927 이 잔액 9억 시절 월이자 2,557,321 을 23.6억이 된 뒤에도 쓰고 있었다).
+ *   값은 지우지 않고 남겨 두고, 계산값과 벌어지면 loanBalanceCheck 가 경고로 띄운다.
+ *
+ * @param ym 'YYYY-MM' — 그 달 일수를 쓴다. 생략하면 이번 달.
+ */
+function loanDaysInMonth(ym){
+  const [y, m] = String(ym).split('-').map(Number);
+  if (!y || !m) return 30;
+  return new Date(y, m, 0).getDate();
+}
+function loanInterestFor(L, ym){
+  const bal = loanNum(L.balance), rate = loanNum(L.rate);
+  if (bal <= 0 || rate <= 0) return 0;
+  return bal * rate / 100 * loanDaysInMonth(ym || todayKST().slice(0, 7)) / 365;
+}
+/* est 는 늘 true 다 — 계산값이라는 뜻. 표의 '추정' 배지가 이 값을 본다.
+   ⚠ 호출부 호환을 위해 { amt, est } 모양을 유지한다. */
+function loanMonthlyInterest(L, ym){
+  return { amt: loanInterestFor(L, ym), est: true };
+}
+
+/* 거치 중인가 — 잔액이 원금 이상이면 원금을 한 푼도 안 갚은 상태다.
+   표의 '거치 추정' 배지와 같은 판정이다(거치기간 필드가 따로 없어 데이터로 유추한다). */
+function loanInGrace(L){
+  const p = loanNum(L.principal), b = loanNum(L.balance);
+  return p > 0 && b >= p;
 }
 
 /* 원금을 나눠 갚는 상환방식 — 이 건들은 매월 '이자' 가 아니라 '원리금' 이 나간다.
@@ -13043,35 +13085,89 @@ function loanMonthlyInterest(L){
 const LOAN_AMORT = ['원리금균등', '원금분할'];
 function loanIsAmort(L){ return LOAN_AMORT.includes(String(L && L.repay || '')); }
 
-/* 매월 실제로 나가는 돈. 균등상환이면 월상환액(원금+이자), 아니면 월이자.
-   ⚠ 월상환액은 **입력값만** 쓴다(2026-09-15 사용자 결정). 계산으로 채우지 않는 이유:
-     거치기간/상환개시일 필드가 없어 공식이 안 맞는다. 실측 1건(우리 기술보증 1,940,000)으로
-     검증하니 잔액÷잔여기간은 +11.0%, 원금÷전체기간은 -34.8% 어긋났다. 역산하면 잔여 37개월이
-     나오는데 만기까지는 33개월이다 — 거치기간이 빠진 만큼이다.
-     그리고 현재 원리금균등 4건 중 3건은 잔액 = 원금이라 **아직 원금을 한 푼도 안 갚았다**.
-     계산값을 넣으면 안 나가는 돈이 매월 나가는 것처럼 보인다.
-   미입력이면 월이자로 대체하되 summary.amortMissing 으로 개수를 올려 화면에 밝힌다 —
-   조용히 과소 계상되면 자금 계획이 틀어진다. */
-function loanMonthlyOut(L){
-  if(loanIsAmort(L)){
-    const m = loanNum(L.monthly);
-    if(m > 0) return { amt:m, kind:'상환', partial:false };
-    return { amt: loanMonthlyInterest(L).amt, kind:'이자', partial:true };  // 원금분 누락 상태
+/* 매월 실제로 나가는 돈.
+ * ⚠⚠ 2026-11-06 정정 — **월상환액 칸은 '원금분' 이다**(대표님 확인). 종전엔 이 값을
+ *   '원금+이자 총액' 으로 보고 그대로 썼는데, 그러면 이자만큼 적게 잡힌다:
+ *     우리 ...018644 월상환액 1,940,000 · 실제 출금 2,110,731 · 차 170,731(= 이자)
+ *   그래서 **원금분 + 그 달 이자** 로 더한다. 1,940,000 + 180,809 = 2,120,809 로
+ *   실제와 0.5% 안에 들어온다(70,000,000 ÷ 36개월 = 1,944,444 와도 맞는다).
+ * ⚠ 거치 중이면 원금분을 더하지 않는다 — 잔액 = 원금이라 아직 한 푼도 안 갚았다.
+ *   현재 원리금균등 4건 중 3건(합 9억)이 거치 중이다. 넣으면 안 나가는 돈이 나가는 것처럼 된다.
+ * ⚠ 월상환액 미입력이면 이자만 잡고 summary.amortMissing 으로 개수를 올려 화면에 밝힌다 —
+ *   조용히 과소 계상되면 자금 계획이 틀어진다.
+ */
+function loanMonthlyOut(L, ym){
+  const itr = loanInterestFor(L, ym);
+  if(loanIsAmort(L) && !loanInGrace(L)){
+    const m = loanNum(L.monthly);                       // 원금분
+    if(m > 0) return { amt: m + itr, kind:'원리금', partial:false, principal:m, interest:itr };
+    return { amt: itr, kind:'이자', partial:true, principal:0, interest:itr };  // 원금분 누락 상태
   }
-  return { amt: loanMonthlyInterest(L).amt, kind:'이자', partial:false };
+  return { amt: itr, kind:'이자', partial:false, principal:0, interest:itr };
+}
+
+/* ═══ ① 실제 출금으로 잔액 역산 검증 (2026-11-06) ══════════════════════════
+ * 잔액·금리를 고쳐도 아무도 안 알려주면 틀어진 채로 몇 달이 간다. 실제로 국민 98927 은
+ * 잔액이 9억 → 16.8억 → 23.6억으로 늘었는데 월이자가 8월 값(2,557,321)에 멈춰 있었고,
+ * 10월 실제 출금은 4,632,755 였다 — 궤적에서 월 200~400만원이 빠져 있었다.
+ * 그래서 **실제 출금과 계산값을 매달 자동으로 맞대본다.**
+ *
+ * ⚠ 적요로 대출을 특정할 수 있는 건만 검사한다. 은행이 적요에 계좌번호를 실어 준다:
+ *     국민 `81011604598927`      → 계좌 810116-04-598927 전체
+ *     기업 `이자-32-00033 …`     → 계좌 487-060219-32-00033 의 뒤 7자리
+ *   우리/중진공은 적요가 '중진공대출' 로 4건 공통이라 **특정이 안 된다 → 검사하지 않는다.**
+ *   억지로 금액·날짜로 추측하면 엉뚱한 대출에 경고가 붙어 아무도 안 믿게 된다.
+ * ⚠ 숫자 덩어리는 7자리 이상만 본다 — 짧으면 '다음납입예정일-20261027' 같은 날짜와 엉킨다. */
+function loanTail7(L){ return String(L && L.account || '').replace(/\D/g, '').slice(-7); }
+function loanActualOut(L){
+  const tail = loanTail7(L);
+  if (tail.length < 7) return null;
+  /* ⚠ 적요의 하이픈을 먼저 걷어낸다 — 기업은행은 `이자-32-00033` 처럼 끊어 보내서
+     연속 숫자로 찾으면 '32' 와 '00033' 으로 갈려 못 잡는다(첫 구현에서 2건 놓쳤다). */
+  const others = (Array.isArray(loanData) ? loanData : [])
+    .filter(x => x !== L).map(loanTail7).filter(t => t.length === 7);
+  let best = null;
+  for (const r of cfData) {
+    if (r.status !== '실제 지출' || !(r.out > 0) || !r.date) continue;
+    if (r.mid_cat !== '이자비용') continue;          // 원금 상환·실행 행이 섞이면 역산이 망가진다
+    const d = String(r.desc || '').replace(/\D/g, '');
+    if (!d.includes(tail)) continue;
+    if (others.some(t => d.includes(t))) continue;  // 두 대출이 함께 걸리면 애매 → 건너뛴다
+    if (!best || r.date > best.date) best = { date: r.date, amt: Number(r.out) || 0, desc: String(r.desc || '') };
+  }
+  return best;
+}
+/* 반환: null(검사 불가) | { ok, actual, expected, gapPct, impliedBal, date }
+   gapPct 는 실제 대비 계산값이 얼마나 벗어났는지(+면 실제가 더 많이 나갔다). */
+const LOAN_GAP_TOL = 0.10;      // 10% — 일수차·수수료는 넘지 않고, 잔액 오류는 확실히 넘는다
+function loanBalanceCheck(L){
+  const a = loanActualOut(L);
+  if (!a) return null;
+  const ym = a.date.slice(0, 7);
+  const mo = loanMonthlyOut(L, ym);
+  const expected = mo.amt;
+  if (!(expected > 0)) return null;
+  const gapPct = a.amt / expected - 1;
+  /* 역산 잔액 — 실제 출금에서 원금분을 빼고 이자만 남겨 잔액을 되돌린다 */
+  const rate = loanNum(L.rate), days = loanDaysInMonth(ym);
+  const itrOnly = Math.max(0, a.amt - (mo.principal || 0));
+  const impliedBal = rate > 0 ? itrOnly * 365 / (rate / 100 * days) : 0;
+  return { ok: Math.abs(gapPct) < LOAN_GAP_TOL, actual: a.amt, expected, gapPct,
+           impliedBal, date: a.date };
 }
 
 function loanSummary(){
   let bal=0, mi=0, miCalc=0, maxRate=0, maxRateBank='', minRate=null, immN=0, immSum=0, nextDue=null, nextDday=null;
-  let fixedOut=0, amortN=0, amortMissing=0;
+  let fixedOut=0, amortN=0, amortMissing=0, balWarn=0;
   for(const L of loanData){
+    try { const bc = loanBalanceCheck(L); if (bc && !bc.ok) balWarn++; } catch(e){}
     const b=loanNum(L.balance), r=loanNum(L.rate);
     bal+=b;
     const mo=loanMonthlyOut(L);
     fixedOut += mo.amt;
     if(loanIsAmort(L)){ amortN++; if(mo.partial) amortMissing++; }
-    miCalc += b*r/100/12;                 // 금리 기준 — 평균금리 계산용
-    mi     += loanMonthlyInterest(L).amt; // 실측 우선 — 실제 나갈 돈
+    miCalc += b*r/100/12;                 // 금리 기준 — 평균금리 계산용(연 환산이라 ÷12 그대로)
+    mi     += loanMonthlyInterest(L).amt; // 일수식 계산 — 이자분만
     if(r>maxRate){ maxRate=r; maxRateBank=(L.bank||'')+' '+(L.product||''); }
     if(r>0 && (minRate===null || r<minRate)) minRate=r;
     const dd=loanDday(L.dueDate);
@@ -13131,6 +13227,7 @@ function renderLoanTab(){
       tbody.innerHTML = html`${idx.map(i=>{
         const L=loanData[i];
         const mi=loanMonthlyInterest(L);
+        const bc=(()=>{ try { return loanBalanceCheck(L); } catch(e){ return null; } })();
         return html`<tr>
           <td>${L.bank||'—'}</td>
           <td style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px">${L.account||미입력('color:var(--text3);font-family:inherit')}</td>
@@ -13139,7 +13236,12 @@ function renderLoanTab(){
           <td>${L.dueDate||'—'}${loanDdayBadge(L.dueDate)}</td>
           <td class="num">${loanNum(L.balance)?loanWon(L.balance):'—'}</td>
           <td class="num">${loanNum(L.rate)?loanNum(L.rate).toFixed(3)+'%':'—'}</td>
-          <td class="num">${mi.amt?loanWon(mi.amt):'—'}${mi.amt&&mi.est?html`<span style="font-weight:400;color:var(--text3);font-size:10.5px;margin-left:3px" title="잔액×금리÷12 로 추정한 값입니다. 실제 출금액을 입력하면 그 값이 우선합니다">추정</span>`:''}</td>
+          ${/* 월이자 — 잔액×금리×그 달 일수÷365. 실제 출금과 크게 벌어지면 배지로 알린다.
+               ⚠ 배지가 늘 떠 있으면 아무도 안 본다. 그래서 '계산값' 이라는 표시는 조용히 두고,
+                 **어긋난 건만** 색을 준다(2026-11-06). */''}
+          <td class="num">${mi.amt?loanWon(mi.amt):'—'}${!mi.amt?'':bc&&!bc.ok
+            ? html`<span style="font-weight:600;color:var(--red);font-size:10.5px;margin-left:4px" title="${`실제 출금 ${loanWon(bc.actual)} (${bc.date}) 과 계산값 ${loanWon(bc.expected)} 이 ${Math.round(Math.abs(bc.gapPct)*100)}% 차이납니다. 실제 출금이 맞다면 잔액은 약 ${loanWon(bc.impliedBal)} 입니다 — 잔액·금리를 확인해 주세요.`}">⚠ 확인</span>`
+            : html`<span style="font-weight:400;color:var(--text3);font-size:10.5px;margin-left:3px" title="${bc?`잔액×금리×그 달 일수÷365 로 계산한 값입니다. 최근 실제 출금 ${loanWon(bc.actual)} (${bc.date}) 과 ${Math.round(Math.abs(bc.gapPct)*100)}% 이내로 맞습니다.`:'잔액×금리×그 달 일수÷365 로 계산한 값입니다. 적요에 계좌번호가 없어 실제 출금과 자동 대조는 못 합니다.'}">계산</span>`}</td>
           ${/* 월상환액 — 균등상환 건만. 입력값이 없으면 채우지 않는다(위 loanMonthlyOut 주석 참고).
                잔액 >= 원금이면 원금을 아직 안 갚은 상태라 '거치 추정' 을 덧붙인다 — 어디까지나
                데이터에서 읽은 추정이고 거치기간 필드가 따로 없다. */''}
