@@ -404,6 +404,12 @@ Deno.serve(async (req) => {
         /* fx_usd — 외화 환산손익(FX_ADJ) 장부가에 들어가는 행 표시. 이게 없으면 환산손익을
            화면 밖에서 검증할 수 없다(2026-08-22, 태깅 누락 조사 때 필요해져 추가). */
         fx_usd: r.fx_usd ? true : false,
+        /* loan_id(대출계좌) · card_bill_id(카드 청구) — 자동생성 예정 행의 출처 태그.
+           ⚠ 2026-11-06: loan_id 가 빠져 있어 대출 이자 예정 행이 전부 'loan_id 없음' 으로
+             보였고, "예정 행이 아예 없다" 고 잘못 읽었다(적요로 다시 찾아 바로잡음).
+             화면·저장 데이터는 멀쩡하고 조회 응답에만 없던 것이라 더 헷갈린다.
+             recur_id 는 이미 있으니 세 출처 태그를 나란히 둔다. */
+        loan_id: str(r.loan_id), card_bill_id: str(r.card_bill_id),
       }));
 
       let arRows: unknown[] | undefined;
