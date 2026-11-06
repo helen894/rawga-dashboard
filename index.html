@@ -12633,6 +12633,50 @@ document.addEventListener('click', async (e) => {
     : '건너뛰기를 해제했습니다 (그 달이 이미 지났거나 재료가 없어 생성되지 않았습니다)', 'green');
 });
 
+/* 이자 출금일을 바꾸면 이미 만들어 둔 **미래 예정 행**을 새 날짜로 옮긴다.
+ *
+ * ⚠⚠ 왜 필요한가 (2026-11-06) — generateLoanPlanned 의 중복 판정이 loan_id+date 라,
+ *   출금일만 바꾸면 옛 날짜 행은 그대로 남고 새 날짜에 하나가 더 생겨 **그 달 이자가
+ *   두 번 잡힌다.** 대출 예정은 당월+2개월치만 미리 만들어서 겹치는 달이 없으면 조용히
+ *   넘어가는데, 겹치는 순간 현금 궤적이 월 수백만원씩 틀어진다.
+ *
+ * ⚠⚠ 왜 '옛 설정이 만들었을 바로 그 날짜' 에 있는 행만 옮기는가
+ *   "그 달 예정 행을 무조건 새 날짜로" 옮기면, 은행이 실제로 다른 날 가져가서 **사람이
+ *   손으로 옮겨 둔 행**까지 끌고 와 버린다. 옛 자리에 그대로 앉아 있다 = 아무도 안 건드렸다
+ *   는 뜻이므로, 그 행만 옮긴다. 손으로 옮긴 행은 옛 자리에 없어 자동으로 보호된다.
+ *
+ * ⚠ 실제 거래 행('지출 예정' 이 아닌 것)과 지난 날짜는 절대 안 건드린다.
+ * 반환: { moved, skipped[] }
+ */
+function moveLoanPlanDates(acct, oldDay, newDay){
+  const out = { moved: 0, skipped: [] };
+  acct = String(acct || '').trim();
+  if (!acct) return out;
+  if (!(oldDay >= 1 && oldDay <= 31) || !(newDay >= 1 && newDay <= 31) || oldDay === newDay) return out;
+  const today = todayKST();
+  const at = (ym, day) => {
+    const [y, m] = ym.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return loanShiftToBizDay(`${ym}-${String(Math.min(day, last)).padStart(2, '0')}`);
+  };
+  const mine = cfData.filter(r => r.loan_id === acct && r.status === '지출 예정' && r.date >= today);
+  const months = [...new Set(mine.map(r => r.date.slice(0, 7)))].sort();
+  for (const ym of months) {
+    const from = at(ym, oldDay), to = at(ym, newDay);
+    if (from === to) continue;                       // 주말 보정으로 결국 같은 날이면 할 일 없음
+    const row = mine.find(r => r.date === from);
+    if (!row) continue;                              // 옛 자리에 없다 = 사람이 옮겼다 → 보호
+    if (to < today) { out.skipped.push(`${ym}: 새 날짜 ${to} 가 이미 지남`); continue; }
+    if (cfData.some(r => r !== row && r.loan_id === acct && r.date === to)) {
+      out.skipped.push(`${ym}: ${to} 에 이미 행이 있음`); continue;
+    }
+    row.date = to;
+    out.moved++;
+  }
+  if (out.moved) { cfData.sort((a,b) => a.date.localeCompare(b.date)); saveData(); }
+  return out;
+}
+
 function generateLoanPlanned(showToastMsg = true){
   prunePlanSkip();            // 지난 달 기록 정리 — 대출이 없어도 돌도록 early return 앞에서
   if (!_loanLoaded || !Array.isArray(loanData) || !loanData.length) return 0;
@@ -13182,11 +13226,32 @@ async function saveLoanModal(){
   });
   if(!obj.bank && !obj.product){ alert('금융기관 또는 상품명을 입력하세요.'); return; }
   const backup=structuredClone(loanData);
+  /* ⚠ closeLoanModal() 이 _loanEditIdx 를 지우므로, 수정 전 값은 **그 전에** 붙잡아 둔다 */
+  const _wasEdit = _loanEditIdx!=null;
+  const _prev    = _wasEdit ? backup[_loanEditIdx] : null;
   if(_loanEditIdx!=null) loanData[_loanEditIdx]=obj; else loanData.push(obj);
   closeLoanModal();
   const { error } = await saveLoanData();
   if(error){ loanData=backup; alert('저장 실패: '+(error.message||error)); }
-  else logAudit('data_modify', `대출 ${_loanEditIdx!=null?'수정':'추가'}: ${obj.bank||''} ${obj.product||''} / 잔액 ${loanWon(obj.balance)} / 만기 ${obj.dueDate||'-'}`);
+  else {
+    logAudit('data_modify', `대출 ${_wasEdit?'수정':'추가'}: ${obj.bank||''} ${obj.product||''} / 잔액 ${loanWon(obj.balance)} / 만기 ${obj.dueDate||'-'}`);
+    if (_prev) {
+      const acctOld = String(_prev.account||'').trim(), acctNew = String(obj.account||'').trim();
+      const dOld = parseInt(_prev.intDay, 10), dNew = parseInt(obj.intDay, 10);
+      if (acctOld && acctOld === acctNew && dOld !== dNew) {
+        /* 출금일이 바뀌었다 — 옛 날짜에 그대로 있는 미래 예정 행을 새 날짜로 옮긴다.
+           안 옮기면 생성기가 새 날짜에 하나 더 만들어 그 달 이자가 두 번 잡힌다. */
+        const mv = moveLoanPlanDates(acctNew, dOld, dNew);
+        if (mv.moved) showToast(`🏦 이자 출금일 ${dOld}일 → ${dNew}일 · 예정 ${mv.moved}건을 새 날짜로 옮겼습니다.`, 'green');
+        if (mv.skipped.length) showToast(`⚠ 못 옮긴 달 — ${mv.skipped.join(' / ')} (직접 확인해 주세요)`, 'amber');
+      } else if (acctOld && acctNew && acctOld !== acctNew) {
+        /* 계좌번호가 바뀌면 기존 예정 행의 loan_id 가 옛 번호에 묶인 채 남는다.
+           조용히 고아가 되면 중복으로 쌓이므로 알리기라도 한다. */
+        const orphan = cfData.filter(r => r.loan_id === acctOld && r.status === '지출 예정' && r.date >= todayKST()).length;
+        if (orphan) showToast(`⚠ 계좌번호가 바뀌어 기존 예정 ${orphan}건이 옛 번호(${acctOld})에 묶여 있습니다 — 직접 지워 주세요.`, 'amber');
+      }
+    }
+  }
   renderLoanTab();
 }
 async function deleteLoan(idx){
