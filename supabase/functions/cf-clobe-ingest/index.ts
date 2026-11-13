@@ -17,6 +17,9 @@
  *
  * 모드 (하나만 골라 보낸다)
  *   • 적재 { secret, action:"push", rows:[...] }                       — 종전과 동일
+ *   • 검증 적재 { secret, action:"ingest", pages, fxAccounts, fxRef, … } — 클로브 원본을 받아
+ *     clobe-validate.mjs 로 검증한 뒤 통과분만 push. 검증 실패면 아무것도 쓰지 않고 422.
+ *     PC 없이 도는 경로(클라우드 루틴 → Drive → Apps Script → 여기)가 쓰는 입구다.
  *   • 조회 { secret, inspect:{ clobeIds?, from?, to?, desc?, unclassifiedOnly?, meta? } }
  *     meta: true → settings·bank_snapshot / meta: ["키",…] → 그 cat_data 키들(읽기 전용)
  *   • 수정 { secret, patch:[{ clobe_id | _id, mid_cat?, big_cat?, tx_at?, set_clobe_id? }], midToBig?:{중분류:대분류} }
@@ -226,6 +229,12 @@ async function mergeMidToBig(add: Record<string, string>): Promise<{ added: stri
     await new Promise((r) => setTimeout(r, 200 * attempt));
   }
 }
+
+/* ⚠⚠ 검증은 **로컬 스크립트와 같은 파일**을 쓴다. 사본을 만들지 말 것 —
+   이 저장소는 메일 HTML 을 두 벌로 둔 탓에 숫자가 갈리는 사고를 반복해서 겪었고,
+   검증은 그보다 더 갈리면 안 되는 곳이다. 규칙을 고칠 일이 있으면 그 모듈만 고친다.
+   (scripts/clobe-cf-ingest.mjs 도 같은 파일을 import 한다) */
+import { validateClobe } from "./clobe-validate.mjs";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -749,8 +758,48 @@ Deno.serve(async (req) => {
     }
   }
 
+  /* ── 검증 포함 적재 (2026-11-13) ──────────────────────────────────────────
+   *  { secret, action:"ingest", pages, fxAccounts, fxRef, fxRefAsOf, allowToday, allowLargeCancel }
+   *
+   *  왜 생겼나: 클로브는 API 가 없어 MCP 커넥터(=Claude)로만 읽을 수 있다. PC 가 꺼져도
+   *  적재가 돌게 하려면 Claude 클라우드 루틴이 읽어 Drive 에 떨구고, Apps Script 가 그걸
+   *  여기로 넘기는 구조여야 한다. 그 경로에는 로컬 node 스크립트가 없으므로 **검증이
+   *  서버에 있어야 한다.** push 는 검증 없이 행을 받으므로 그대로 쓰면 가드가 통째로 빠진다.
+   *
+   *  ⚠ 검증에 걸리면 **아무것도 쓰지 않고** 422 로 사유를 돌려준다. 호출부(Apps Script)는
+   *    그 파일을 성공 처리하지 말고 남겨 둬야 사람이 보고 판단할 수 있다.
+   *  ⚠ today 는 서버의 Asia/Seoul 날짜를 쓴다 — 모듈은 런타임 시계를 읽지 않는 계약이고,
+   *    호출부가 넘긴 날짜를 믿으면 클라이언트 시계 오차가 '오늘자 제외' 를 무너뜨린다.
+   *    (실제로 클라우드 시험에서 에이전트가 시각을 9시간 틀리게 추정한 적이 있다) */
+  let ingestMeta: Record<string, unknown> | null = null;
+  if (body?.action === "ingest") {
+    let v;
+    try {
+      v = validateClobe({
+        pages: body.pages,
+        fxAccounts: body.fxAccounts || {},
+        fxRef: Number(body.fxRef) || 0,
+        fxRefAsOf: body.fxRefAsOf ? String(body.fxRefAsOf) : null,
+        today: todaySeoul(),
+        allowToday: !!body.allowToday,
+        allowLargeCancel: !!body.allowLargeCancel,
+      });
+    } catch (e) {
+      return json({ ok: false, action: "ingest", error: `검증 중 오류: ${(e as Error).message}` }, 500);
+    }
+    if (v.abort) {
+      return json({
+        ok: false, action: "ingest", aborted: true,
+        code: v.abort.code, error: v.abort.message, detail: v.abort.detail,
+        warnings: v.warnings, report: v.report,
+      }, 422);
+    }
+    ingestMeta = { report: v.report, warnings: v.warnings, notes: v.notes };
+    body = { ...body, action: "push", rows: v.rows };
+  }
+
   if (body?.action !== "push") {
-    return json({ ok: false, error: "unknown action (push / inspect / patch / split / setMeta / setRecur / dropPlanned)" }, 400);
+    return json({ ok: false, error: "unknown action (push / ingest / inspect / patch / split / setMeta / setRecur / dropPlanned)" }, 400);
   }
   const rows = Array.isArray(body.rows) ? body.rows : [];
 
@@ -903,6 +952,9 @@ Deno.serve(async (req) => {
 
     return json({
       ok: true, added, skipped, refreshed, timeFilled, total,
+      /* ingest 로 들어왔으면 검증 결과를 함께 돌려준다 — 호출부가 요약·슬랙에 남겨
+         사람이 "무엇을 보고 통과시켰는지" 를 사후에 확인할 수 있어야 한다. */
+      ...(ingestMeta ? { ingest: ingestMeta } : {}),
       ...(catNote ? { cat_sync: catNote } : {}),
       /* 갱신된 적요를 그대로 실어 보낸다 — 스케줄 태스크가 요약·슬랙에 남겨
        * 사람이 "무엇이 어떻게 바뀌었는지" 를 사후에 알아볼 수 있게 한다. */
