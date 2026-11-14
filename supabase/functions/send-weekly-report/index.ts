@@ -1239,6 +1239,20 @@ serve(async (req: Request) => {
   const { data: settingsRow } = await supa
     .from('cat_data').select('data').eq('key', 'weekly_email_settings').single();
   const emailSettings = (settingsRow?.data as Record<string, unknown>) || {};
+
+  /* 자동 발송 스위치 — 화면의 '자동 발송 ON/OFF' 가 실제로 듣게 한다 (2026-11-15).
+     종전엔 이 값을 cat_data 에 저장만 하고 **아무도 읽지 않았다.** 꺼도 cron 이 그대로 보냈고,
+     화면 배지는 OFF 인데 메일은 계속 나가는 상태였다(사용자가 발견).
+     ⚠ 끄면 **auto 실발송만** 멈춘다. 즉시·테스트·dry-run 은 사람이 직접 누른 것이라 그대로 보낸다.
+     ⚠ 값이 없으면(옛 설정·필드 누락) **보낸다** — fail-open. 설정 한 줄이 비었다고 주간 보고가
+       조용히 끊기는 쪽이 더 위험하다. 명시적으로 false 일 때만 멈춘다. */
+  if (isActualAutoSend && emailSettings.enabled === false) {
+    return json({
+      ok: true, skipped: true, reason: 'auto_send_disabled',
+      message: '자동 발송이 꺼져 있어 보내지 않았습니다 (관리자 탭 → 주간 메일 발송 설정).',
+    });
+  }
+
   let   recipients: string[] = recipientOverride
     || (emailSettings.recipients as string[])
     || [];
