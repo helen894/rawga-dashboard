@@ -435,6 +435,18 @@
   .recon-more > summary:hover { color: var(--text); }
   .recon-more > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
 
+  /* 안전선 접기 (2026-11-14) — 평소엔 값만 보이고, 고칠 때만 펼친다.
+     ⚠ 접힌 줄에서도 **현재 값은 보여야 한다**: 이 값으로 궤적 하회 경고가 뜨고 주간 메일의
+       안전선 눈금이 그려지는데, 기준이 안 보이면 경고를 해석할 수 없다. */
+  .floor-fold { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; }
+  .floor-fold > summary { cursor: pointer; padding: 11px 16px; font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; list-style: none; }
+  .floor-fold > summary::-webkit-details-marker { display: none; }
+  .floor-fold > summary::before { content: '▸'; font-size: 9px; color: var(--text3); }
+  .floor-fold[open] > summary::before { content: '▾'; }
+  .floor-fold > summary:hover { color: var(--text); }
+  .floor-fold > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
+  .floor-fold .ff-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 16px 13px; }
+
   /* 주간 요약 (textarea 에디터) */
   .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
   .weekly-summary-updated { font-size: 11px; color: var(--text3); }
@@ -1162,12 +1174,19 @@
          모두 dlFloor() 로 이 값을 읽는다. 쓰는 곳이 주간이라 주간으로 옮겼다.
        ⚠ id 는 'dlrpt-floor' 그대로 둔다 — dlFloor()·saveDailySettings() 가 이 id 로 찾는다.
          이름이 일간 흔적처럼 보여도 바꾸지 말 것(바꾸려면 두 함수와 함께). -->
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:11px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px">
-    <label for="dlrpt-floor" style="font-size:12px;color:var(--text2)">안전선(최소 유지현금)</label>
-    <input type="number" id="dlrpt-floor" step="100000000" placeholder="예: 1500000000"
-           style="width:170px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;font-family:var(--mono)">
-    <span style="font-size:11px;color:var(--text3)">궤적 하회 판정에 쓰입니다 · 바꾸면 바로 저장됩니다</span>
-  </div>
+  <details class="floor-fold">
+    <summary>
+      안전선(최소 유지현금)
+      <b id="wkrpt-floor-label" style="color:var(--text);font-family:var(--mono);font-size:12.5px">—</b>
+      <span style="font-size:11px;color:var(--text3)">궤적 하회 판정 · 주간 메일의 안전선 눈금에도 쓰입니다</span>
+    </summary>
+    <div class="ff-body">
+      <label for="dlrpt-floor" style="font-size:12px;color:var(--text2)">원 단위</label>
+      <input type="number" id="dlrpt-floor" step="100000000" placeholder="예: 1500000000"
+             style="width:170px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;font-family:var(--mono)">
+      <span style="font-size:11px;color:var(--text3)">바꾸면 바로 저장되고, 다음 발송 메일에 그대로 반영됩니다</span>
+    </div>
+  </details>
 
   <!-- KPI 카드 4개 -->
   <div class="kpi-grid" style="margin-bottom:20px">
@@ -9358,6 +9377,9 @@ function renderWeeklyReport() {
      ⚠ **비어 있을 때만** 채운다 — 사람이 입력 중인 값을 덮으면 안 된다. */
   const _flEl = document.getElementById('dlrpt-floor');
   if (_flEl && _flEl.value === '') _flEl.value = String(dlFloor());
+  /* 접힌 줄에도 현재 값을 띄운다 — 펼치지 않아도 기준이 보여야 경고를 해석할 수 있다 */
+  const _flLab = document.getElementById('wkrpt-floor-label');
+  if (_flLab) _flLab.textContent = (dlFloor() / 1e8).toFixed(1) + '억';
 
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
