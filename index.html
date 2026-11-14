@@ -2746,15 +2746,18 @@
         <span id="email-action-status-admin" style="font-size:12px;color:var(--text2)"></span>
       </div>
 
-      <!-- ⑦ cron webhook 정보 -->
-      <div style="margin-top:16px;padding:12px 14px;background:var(--bg3);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.8">
-        <strong>🔗 외부 cron webhook URL (cron-job.org 등에 등록)</strong>
-        <code style="display:block;margin:5px 0;padding:6px 8px;background:var(--card);border-radius:4px;font-size:11px;word-break:break-all;user-select:all">
-          https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/send-weekly-report
-        </code>
-        Method: <code style="background:var(--card);padding:1px 5px;border-radius:3px">POST</code>
-        &nbsp;·&nbsp; Header: <code style="background:var(--card);padding:1px 5px;border-radius:3px">X-Cron-Secret: [CRON_SECRET 환경변수 값]</code>
-        &nbsp;·&nbsp; Body: <code style="background:var(--card);padding:1px 5px;border-radius:3px">{"send_type":"auto"}</code>
+      <!-- ⑦ cron 연결 — 화면에 띄우지 않는다 (2026-11-15 사용자 지정)
+           종전엔 엔드포인트 URL·헤더 이름·요청 본문을 그대로 표시했다. 시크릿 값 자체는
+           플레이스홀더였지만, 호출 방법 일습이 화면에 있으면 어깨너머·스크린샷으로 새어 나간다.
+           ⚠ 다만 이건 **화면 위생**이지 비밀 유지가 아니다 — 엔드포인트는 이 파일(index.html)의
+             다른 곳에 이미 박혀 공개 배포되고 있다. 실제 방어는 그대로다:
+               · 게이트웨이 verify_jwt=true (키 없는 호출은 401)
+               · auto 실발송은 X-Cron-Secret === CRON_SECRET 일치 요구
+             그러니 여기서 지웠다고 cron 설정을 바꿀 필요는 없다. 재등록이 필요하면 Supabase
+             대시보드 → Edge Functions 에서 주소를, 시크릿은 Project Settings 에서 확인할 것. -->
+      <div style="margin-top:16px;padding:11px 14px;background:var(--bg3);border-radius:8px;font-size:11px;color:var(--text2);line-height:1.7">
+        🔗 <strong>자동 발송 트리거</strong> — 외부 cron 이 Edge Function 을 호출합니다.
+        <span style="color:var(--text3)">엔드포인트·시크릿은 화면에 표시하지 않습니다. 재등록이 필요하면 Supabase 대시보드에서 확인하세요.</span>
       </div>
     </div>
   </div>
