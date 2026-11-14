@@ -9351,6 +9351,14 @@ function renderAssetMixChart() {
 }
 
 function renderWeeklyReport() {
+  /* 안전선 입력칸에 현재 값을 채워 둔다 (2026-11-14). 종전엔 일간 패널의 renderDailyReport 가
+     이 일을 했는데 그 패널을 걷어내면서 같이 빠졌고, 칸이 비어 보여 **지금 설정이 얼마인지
+     알 수 없게** 됐다. dlFloor() 는 빈 칸이면 서버·로컬 저장값으로 떨어지므로 동작은 멀쩡했지만,
+     보이지 않는 기준으로 하회 경고가 뜨는 건 신뢰를 깎는다.
+     ⚠ **비어 있을 때만** 채운다 — 사람이 입력 중인 값을 덮으면 안 된다. */
+  const _flEl = document.getElementById('dlrpt-floor');
+  if (_flEl && _flEl.value === '') _flEl.value = String(dlFloor());
+
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
   try { renderWeeklyCashChart(wStart); } catch (e) { console.warn('[wkrpt-cash]', e); }
