@@ -715,7 +715,36 @@ function buildWeeklyReportHTML(
 
   /* CF 집계 */
   const wCF  = cfArr.filter(r => (r.date as string) >= wStart && (r.date as string) <= wEnd);
-  const isInterAccount = (r: Record<string, unknown>) => ((r.mid_cat as string) || '').trim() === '계좌간이체'; // [계좌간이체 제외]
+  /* 계좌간이체(내부 자금이동) — **짝이 맞는 쌍만** 민다 (2026-11-14 변경).
+     종전엔 전부 뺀다. 그러면 그 주 계좌간이체가 입·출 비대칭일 때 그 차액만큼
+     '전주 기말 + 입금 − 출금 = 금주 기말' 이 깨졌다(2026-11-10 기업부설연구소 이체 5,000,000
+     — 받는 계좌가 추적 범위 밖이라 짝이 보이지 않는다). 짝만 빼면 같은 금액을 양쪽에서
+     빼므로 항등식이 반드시 성립한다. 짝 없는 건은 추적 범위 밖으로 실제로 나간 돈이라
+     보통 입출금으로 센다.
+     ⚠ index.html 의 interAccountNetted_ 와 **같은 규칙**이어야 한다 — 갈리면 미리보기와
+       메일이 다른 금액을 말한다. 검증: scripts/test-weekly-email-parity.mjs */
+  const interAccountNetted = (rows: Record<string, unknown>[]) => {
+    const ins  = new Map<number, Record<string, unknown>[]>();
+    const outs = new Map<number, Record<string, unknown>[]>();
+    for (const r of rows) {
+      if (((r.mid_cat as string) || '').trim() !== '계좌간이체') continue;
+      if (r.status === '실제 입금' && ((r.in as number) || 0) > 0) {
+        const a = r.in as number;  if (!ins.has(a))  ins.set(a, []);  ins.get(a)!.push(r);
+      } else if (r.status === '실제 지출' && ((r.out as number) || 0) > 0) {
+        const a = r.out as number; if (!outs.has(a)) outs.set(a, []); outs.get(a)!.push(r);
+      }
+    }
+    const ex = new Set<Record<string, unknown>>();
+    for (const [amt, list] of ins) {
+      const o = outs.get(amt);
+      if (!o) continue;
+      const n = Math.min(list.length, o.length);
+      for (let i = 0; i < n; i++) { ex.add(list[i]); ex.add(o[i]); }
+    }
+    return ex;
+  };
+  const wInterEx = interAccountNetted(wCF);
+  const isInterAccount = (r: Record<string, unknown>) => wInterEx.has(r); // [계좌간이체 — 짝 맞는 쌍만 상계]
   const wIn  = wCF.filter(r => r.status === '실제 입금' && !isInterAccount(r)).reduce((s, r) => s + ((r.in  as number) || 0), 0); // [계좌간이체 제외]
   const wOut = wCF.filter(r => r.status === '실제 지출' && !isInterAccount(r)).reduce((s, r) => s + ((r.out as number) || 0), 0); // [계좌간이체 제외]
   const wNet = wIn - wOut;

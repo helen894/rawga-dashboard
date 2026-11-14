@@ -13,11 +13,13 @@ const pick = (marker, endMarker) => {
   return html.slice(i, j);
 };
 
+/* ── 공통 규칙 — 계좌간이체는 '짝 맞는 쌍만' 상계한다(2026-11-14 변경) ── */
+const srcInter  = pick('const isInterAccountRow_ =', ';\n') + ';\n'
+                + pick('function interAccountNetted_(rows) {', '  return ex;\n}') + '  return ex;\n}';
 /* ── 리포팅 월간 리포트 쪽 (renderMonthlyReport) ── */
-const srcInter  = pick('const isInterAccount_ =', ';\n') + ';';
-const srcMnrpt  = pick('const actualInRows = cfData', 'const prevOutRows');
+const srcMnrpt  = pick('const mRows  = cfData.filter', 'const prevOutRows');
 /* ── 입출금 내역 탭 쪽 (renderCFTable 둘째 줄) ── */
-const srcCftab  = pick('const _inter = r =>', 'const interNet');
+const srcCftab  = pick('const _interEx = interAccountNetted_(cfFiltered);', 'const interNet');
 if (!/rptIn/.test(srcCftab) || !/rptOut/.test(srcCftab)) throw new Error('입출금탭 rptIn/rptOut 추출 실패');
 
 const PK = 'sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
@@ -50,12 +52,14 @@ const uniq = new Map(); for (const r of rows) uniq.set(r._id, r);
 const cfAll = [...uniq.values()];
 
 /* 월간 리포트 경로 — mStart~mEnd 로 자체 필터 */
-const runMnrpt = new Function('cfData', 'mStart', 'mEnd',
+/* 새 월간 코드는 전월 구간(pmRows)도 함께 계산하므로 pmStart·pmEnd 를 받아야 한다 */
+const runMnrpt = new Function('cfData', 'mStart', 'mEnd', 'pmStart', 'pmEnd',
   srcInter + srcMnrpt + `
   return { inS: actualInRows.reduce((s,r)=>s+(r.in||0),0),
            outS: actualOutRows.reduce((s,r)=>s+(r.out||0),0) };`);
 /* 입출금 탭 경로 — cfFiltered(기간 필터 결과)를 받는다 */
-const runCftab = new Function('cfFiltered', srcCftab + `
+/* 입출금 탭 쪽도 같은 공통 규칙(srcInter)을 깔고 돌린다 — 그래야 '같은 규칙인가'를 본다 */
+const runCftab = new Function('cfFiltered', srcInter + srcCftab + `
   return { inS: rptIn, outS: rptOut };`);
 
 let pass = 0, fail = 0;
@@ -63,7 +67,10 @@ console.log('월       월간리포트 입금        입출금탭 입금       �
 for (let m = 1; m <= 8; m++) {
   const k = `2026-${String(m).padStart(2, '0')}`;
   const mStart = `${k}-01`, mEnd = `${k}-${String(new Date(Date.UTC(2026, m, 0)).getUTCDate()).padStart(2, '0')}`;
-  const A = runMnrpt(cfAll, mStart, mEnd);
+  const pk = m === 1 ? '2025-12' : `2026-${String(m - 1).padStart(2, '0')}`;
+  const pmStart = `${pk}-01`;
+  const pmEnd   = `${pk}-${String(new Date(Date.UTC(m === 1 ? 2025 : 2026, m === 1 ? 12 : m - 1, 0)).getUTCDate()).padStart(2, '0')}`;
+  const A = runMnrpt(cfAll, mStart, mEnd, pmStart, pmEnd);
   const B = runCftab(cfAll.filter(r => r.date >= mStart && r.date <= mEnd));
   const ok = A.inS === B.inS && A.outS === B.outS;
   ok ? pass++ : fail++;
