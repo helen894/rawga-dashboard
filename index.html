@@ -4203,6 +4203,11 @@ async function loadDataFromSupabase() {
         if (row.key === 'weekly_email_settings' && row.data) {
           emailSettings = { ...emailSettings, ...row.data };
           localStorage.setItem('weekly_email_settings', JSON.stringify(emailSettings));
+          /* ⚠ 설정 UI 는 관리자 탭의 아코디언을 열 때만 그렸다(2026-11-15 분리 전에는 같은
+             패널 안이라 문제없었다). 이제 주간 탭의 배지·요약 줄이 여기 값을 쓰므로, 설정이
+             서버에서 도착하는 **이 시점에** 한 번 그려야 한다. 안 그리면 관리자 탭을 열기
+             전까지 주간 탭이 '—' 로 비어 보인다. */
+          try { renderEmailSettingsUI(); } catch (e) {}
         }
         if (row.key === 'report_base_date' && row.data) {
           reportBaseDate = row.data; // 리포팅 전용 기준일만 갱신 — refDate(입출금 기준)는 건드리지 않음
@@ -9410,6 +9415,9 @@ function renderWeeklyReport() {
   /* 접힌 줄에도 현재 값을 띄운다 — 펼치지 않아도 기준이 보여야 경고를 해석할 수 있다 */
   const _flLab = document.getElementById('wkrpt-floor-label');
   if (_flLab) _flLab.textContent = (dlFloor() / 1e8).toFixed(1) + '억';
+  /* 메일 발송 요약 줄(수신 N명 · 매주 금 22:30 · 자동 ON) — 설정은 관리자 탭에 있지만
+     '지금 누구에게 나가는지' 는 보내는 자리에서 보여야 한다(2026-11-15 분리). */
+  try { renderEmailSettingsUI(); } catch (e) {}
 
   // ── 기준일: reportBaseDate (이메일 발송 기준과 동일, refDate·입출금 탭과 분리) ──
   const { wStart, wEnd, pwStart, pwEnd } = getWeekRange(reportBaseDate);
