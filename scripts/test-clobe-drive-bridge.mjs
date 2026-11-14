@@ -33,7 +33,8 @@ const mkFolder = (name, files = []) => {
   return f;
 };
 
-function run(inboxFiles, fetchImpl) {
+function run(inboxFiles, fetchImpl, calls) {
+  const rec = (url, opts) => { if (calls) calls.push({ url, opts }); return fetchImpl(url, opts); };
   const inbox = mkFolder('대기', inboxFiles), done = mkFolder('완료'), hold = mkFolder('보류');
   const root = mkFolder('RAWGA-자동적재'); root._sub = { '대기': inbox, '완료': done, '보류': hold };
   const driveRoot = mkFolder('/'); driveRoot._sub = { 'RAWGA-자동적재': root };
@@ -42,7 +43,7 @@ function run(inboxFiles, fetchImpl) {
   const ctx = vm.createContext({
     DriveApp: { getRootFolder: () => driveRoot },
     MimeType: { PLAIN_TEXT: 'text/plain' },
-    UrlFetchApp: { fetch: fetchImpl },
+    UrlFetchApp: { fetch: rec },
     PropertiesService: { getScriptProperties: () => ({
       getProperty: (k) => (k === 'BANK_SYNC_SECRET' ? 'test-secret' : props[k] ?? null),
       setProperty: (k, v) => { props[k] = v; } }) },
@@ -117,6 +118,20 @@ const t = (name, got, want) => {
   t('BRIDGE_LAST_OK 기록', !!r.props.BRIDGE_LAST_OK, true);
   const r2 = run([mkFile('cf-20261113.json', okPayload)], () => resp(500, {}));
   t('실패만이면 LAST_OK 안 찍음', !!r2.props.BRIDGE_LAST_OK, false);
+}
+
+// ⑨ Edge 호출에 인증 헤더가 실리는가
+//    ⚠ 2026-11-14 실사고: 헤더가 없어 5개 파일 전부 HTTP 401 로 튀겼다. 이 함수는
+//      verify_jwt=true 라 게이트웨이가 키를 요구하는데, 테스트가 UrlFetchApp 을
+//      가짜로만 끼워 넣고 **무엇을 보내는지는 안 봐서** 못 잡았다.
+{
+  const calls = [];
+  run([mkFile('cf-20261113.json', okPayload)], () => resp(200, { ok: true, added: 1 }), calls);
+  const h = calls[0] && calls[0].opts && calls[0].opts.headers;
+  t('Edge 호출에 apikey 헤더', !!(h && h.apikey), true);
+  t('  Authorization: Bearer', !!(h && /^Bearer /.test(h.Authorization || '')), true);
+  t('  본문에 secret 포함', !!JSON.parse(calls[0].opts.payload).secret, true);
+  t('  action 은 ingest', JSON.parse(calls[0].opts.payload).action, 'ingest');
 }
 
 console.log(`\n${fail ? '❌' : '✅'} ${pass}/${pass + fail} 통과`);

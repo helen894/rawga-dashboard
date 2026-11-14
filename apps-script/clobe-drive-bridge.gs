@@ -30,6 +30,14 @@
  */
 
 var EDGE_URL   = 'https://invcrngnxzvmkgzxixvh.supabase.co/functions/v1/cf-clobe-ingest';
+/* ⚠⚠ 이 함수는 verify_jwt=true 로 배포돼 있어 **게이트웨이가 키를 요구한다.**
+   apikey / Authorization 헤더가 없으면 함수에 닿기도 전에 401 이 난다
+   (2026-11-14 실제로 당했다 — 5개 파일 전부 HTTP 401, 시크릿은 멀쩡했는데 요청이
+    Edge 까지 가지도 못했다. ar-sheet-sync.gs 를 본떠 쓰면서 그쪽은 다른 함수를
+    호출한다는 걸 놓쳤다).
+   아래 키는 index.html 에 이미 박혀 브라우저로 배포되는 **공개 publishable 키**라
+   비밀이 아니다. 실제 인증은 본문의 secret(=BANK_SYNC_SECRET) 이 한다. */
+var SUPA_PUBLISHABLE_KEY = 'sb_publishable_tHnMnc-2W0dTu3ACNUSlGw_7jxxK-75';
 var ROOT_FOLDER = 'RAWGA-자동적재';
 var DIR_IN   = '대기';     // 클라우드 루틴이 여기 떨군다
 var DIR_DONE = '완료';     // 적재 성공
@@ -143,6 +151,10 @@ function processFile_(file, d) {
     res = UrlFetchApp.fetch(EDGE_URL, {
       method: 'post',
       contentType: 'application/json',
+      headers: {
+        apikey: SUPA_PUBLISHABLE_KEY,
+        Authorization: 'Bearer ' + SUPA_PUBLISHABLE_KEY,
+      },
       payload: JSON.stringify({
         secret: getSecret_(),
         action: 'ingest',
