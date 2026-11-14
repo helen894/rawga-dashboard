@@ -446,6 +446,10 @@
   .floor-fold > summary:hover { color: var(--text); }
   .floor-fold > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
   .floor-fold .ff-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 16px 13px; }
+  /* ⚠ 자식에 display 를 직접 주면 <details> 의 닫힘 숨김이 덮인다 — 접어도 본문이 그대로
+     레이아웃에 남아 details 바깥으로 삐져나오고(클립만 됨), 무엇보다 **Tab 으로 입력칸에
+     닿는다.** 닫힘 상태를 명시적으로 숨겨야 한다. 실측: 접힘인데 본문 높이 44px 였다. */
+  .floor-fold:not([open]) .ff-body { display: none; }
 
   /* 주간 요약 (textarea 에디터) */
   .weekly-summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
