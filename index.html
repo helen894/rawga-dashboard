@@ -8738,19 +8738,37 @@ function renderMonthlyReport() {
   document.getElementById('mnrpt-in-count').textContent = `${actualInRows.length}건 · 내부 스크롤`;
   document.getElementById('mnrpt-out-count').textContent = `${actualOutRows.length}건 · 내부 스크롤`;
 
+  /* 영업성에서 뺄 '본업 아닌' 흐름 — 대분류·중분류로만 판정한다.
+     ⚠ 2026-11-15 수정: big_cat 조건이 '자금이동/제외' 를 찾았는데 실제 데이터의 대분류는
+       **'자금이동'·'자금거래'** 다. 2026년 표본 1,438행 중 '자금이동/제외' 는 **0건** —
+       이 조건은 한 번도 안 잡혔다. 중분류 목록이 대부분(135/142)을 가려 줘 드러나지 않았을 뿐,
+       자기앞수표발행처럼 목록에 없는 중분류는 영업성으로 새 나갔다. 대분류를 실제 값으로 고친다.
+       ('자금이동/제외' 는 MID_TO_BIG 의 매핑값이라 옛 행 호환으로 남겨 둔다) */
   const isExcluded = r => {
     const big = (r.big_cat || '').trim();
     const mid = (r.mid_cat || '').trim();
-    return big === '자금이동/제외' || big === '인오가닉' ||
+    return big === '자금이동' || big === '자금거래' || big === '자금이동/제외' || big === '인오가닉' ||
       ['대여금 수취','대여금 지급','대여금 상환','투자금','계좌간이체','법인카드 대금'].includes(mid);
   };
-  const isFinance = r => {
-    const txt = `${r.big_cat || ''} ${r.mid_cat || ''} ${r.desc || ''}`;
-    return r.big_cat === '금융비용' || /이자|금융|대출|차입|상환|수수료/.test(txt);
+  /* 금융비용 — **대분류만** 본다.
+     ⚠⚠ 2026-11-15 수정: 종전엔 `/이자|금융|대출|차입|상환|수수료/` 로 **적요까지** 훑었다.
+       '수수료' 하나 때문에 판매관리비의 지급수수료가 통째로 금융비용으로 셈됐다.
+       2026-11 실측: 판별식이 잡은 5,840만 중 **4,732만(81%)이 지급수수료**, 진짜 금융비용은 960만.
+       피해가 양방향이었다 —
+         ⑴ 없는 위험을 경고: 비중 16.2%(임계 10%) → 실제 2.7%. '위험' 이 '정상' 으로 바뀐다.
+         ⑵ **영업 적자를 작게 보이게**: 같은 행이 영업성 출금에서도 빠져 출금 6.08억 → 6.57억,
+            순현금 −2.47억 → −2.96억, 생산성 −68.4% → −82.0%. 이쪽이 더 위험하다.
+       적요 키워드로 회계 성격을 가르면 안 된다 — 분류는 mid_cat/big_cat 이 이미 갖고 있다. */
+  const isFinance = r => (r.big_cat || '').trim() === '금융비용';
+  /* 영업에서 뺄 재무·투자성 대분류 — 금융비용(비용) 외에 차입 실행·상환, 금융수익까지.
+     금융비용 지표에는 안 들어가고 '영업성' 판정에서만 빠진다. */
+  const isNonOperating = r => {
+    const big = (r.big_cat || '').trim();
+    return big === '금융비용' || big === '금융수익' || big === '차입' || big === '재무활동';
   };
 
-  const operatingIn = actualInRows.filter(r => !isExcluded(r) && !isFinance(r)).reduce((s, r) => s + (r.in || 0), 0);
-  const operatingOut = actualOutRows.filter(r => !isExcluded(r) && !isFinance(r)).reduce((s, r) => s + (r.out || 0), 0);
+  const operatingIn = actualInRows.filter(r => !isExcluded(r) && !isNonOperating(r)).reduce((s, r) => s + (r.in || 0), 0);
+  const operatingOut = actualOutRows.filter(r => !isExcluded(r) && !isNonOperating(r)).reduce((s, r) => s + (r.out || 0), 0);
   const operatingNet = operatingIn - operatingOut;
   const operatingProductivity = operatingIn ? operatingNet / operatingIn : 0;
   const financeCost = actualOutRows.filter(isFinance).reduce((s, r) => s + (r.out || 0), 0);
@@ -8770,8 +8788,14 @@ function renderMonthlyReport() {
   const arView = arData.map(a => ({ ...a, ...calcARStatusAndRisk(a, monthlyArBaseDate) }));
   const mNewAR = arView.filter(a => a.start >= mStart && a.start <= mEnd);
   const mNewAmt = mNewAR.reduce((s, a) => s + (a.expected || 0), 0);
-  const mColCF = cfData.filter(r => r.ar_applied === '완료' && r.ar_applied_date >= mStart && r.ar_applied_date <= mEnd);
-  const mColAmt = mColCF.reduce((s, r) => s + (r.in || 0), 0);
+  /* 월간 회수 — 시트 동기화의 **회수일(collect_date)** 기준 (2026-11-15 수정).
+     ⚠ 종전엔 cf_data 의 ar_applied(대시보드에서 손으로 CF↔AR 을 이은 건)만 셌다. 그 기능은
+       2026-06 이후 쓰이지 않았다 — 전체 2,751행 중 18건이고 **전부 5~6월**이다. 그래서 월간
+       회수가 **영구히 0** 이었고, 2026-11 실제 회수 5건 238,200,000 이 화면엔 '0 (0건)' 으로 떴다.
+       실제 회수는 구글 시트 동기화로 들어오므로 그쪽을 본다(AR 의 진실원천은 시트다).
+     ※ collected 는 그 행의 누적 회수액이다. 회수일이 그 달인 행만 세므로 월 귀속은 맞는다. */
+  const mColAR = arView.filter(a => a.collect_date && a.collect_date >= mStart && a.collect_date <= mEnd);
+  const mColAmt = mColAR.reduce((s, a) => s + (a.collected || 0), 0);
   const remAll = arView.filter(a => (a.remaining || 0) > 0);
   const remTotal = remAll.reduce((s, a) => s + (a.remaining || 0), 0);
   const highRisk = remAll.filter(a => a.riskLevel === '위험')
@@ -8804,7 +8828,12 @@ function renderMonthlyReport() {
   setDiagnosis(
     'finance',
     finState,
-    `금융비용 ${fmtM(financeCost)} · 영업성 입금 대비 ${fmtPct(financeCostRate)} · 영업 순현금 대비 ${fmtPct(financeBurden)} · 전월 대비 ${fmtPct(financeIncrease)}`,
+    /* ⚠ 영업 순현금이 0 이하면 비율이 정의되지 않아 종전엔 '—' 만 떴다. 정작 **적자일 때가
+       가장 중요한 국면**인데 거기서 빈칸이 됐다. 비율 대신 사실을 쓴다. */
+    `금융비용 ${fmtM(financeCost)} · 영업성 입금 대비 ${fmtPct(financeCostRate)} · ${
+      operatingNet > 0 ? `영업 순현금 대비 ${fmtPct(financeBurden)}`
+                       : `영업 순현금 적자(${fmtM(operatingNet)}) — 금융비용을 본업으로 못 덮음`
+    } · 전월 대비 ${fmtPct(financeIncrease)}`,
     finState === 'good' ? '금융비용 부담이 관리 가능한 범위입니다.' :
       finState === 'warn' ? '금융비용 증가가 영업 순현금흐름을 잠식하는지 추적이 필요합니다.' :
       '금융비용 부담이 높아 차입/이자 구조에 대한 의사결정이 필요합니다.'
@@ -8864,7 +8893,7 @@ function renderMonthlyReport() {
   const arPriority = highRisk.slice(0, 3).map(a => `${a.partner || '미지정'} ${fmtM(a.remaining || 0)} / ${a.basisDays || 0}일`).join(' · ');
   document.getElementById('mnrpt-ar-diagnosis').innerHTML =
     html`회수 우선: ${arPriority || '고위험 AR 없음'}<br>`
-    + html`월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColCF.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>`
+    + html`월간 신규 AR ${fmtM(mNewAmt)} (${mNewAR.length}건) / 월간 회수 ${fmtM(mColAmt)} (${mColAR.length}건) / 전체 미회수 ${fmtM(remTotal)} (${remAll.length}건)<br>`
     + html`자동 경고 메일 또는 담당자 후속 조치 대상 표시`;
 }
 
