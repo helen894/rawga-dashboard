@@ -523,6 +523,29 @@
   .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   .modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
   .modal-close { background: none; border: none; color: var(--text2); font-size: 20px; cursor: pointer; line-height: 1; padding: 4px 8px; border-radius: 6px; }
+
+  /* ===== 입출금 메모 · 대댓글 (2026-11-16) ===== */
+  .note-btn { background:none; border:none; cursor:pointer; padding:2px 6px; border-radius:5px; font-size:12px; line-height:1; color:var(--text3); }
+  .note-btn:hover { background:var(--bg3); color:var(--text); }
+  .note-btn.has { color:var(--blue); font-weight:700; }
+  .note-btn .n { font-size:10px; font-family:var(--mono); margin-left:2px; }
+  .note-thread { display:flex; flex-direction:column; gap:10px; max-height:46vh; overflow-y:auto; padding-right:4px; }
+  .note-item { background:var(--card2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; }
+  .note-item.reply { margin-left:22px; background:var(--bg2); }
+  .note-item.resolved { opacity:.55; }
+  .note-meta { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-bottom:5px; }
+  .note-meta .who { font-weight:700; color:var(--text); }
+  .note-body { font-size:12.5px; line-height:1.75; color:var(--text); white-space:pre-wrap; word-break:break-word; }
+  .note-body .mention { background:var(--blue2); color:var(--blue); border-radius:4px; padding:1px 4px; font-weight:600; }
+  .note-act { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text3); padding:1px 4px; border-radius:4px; }
+  .note-act:hover { color:var(--blue); background:var(--bg3); }
+  .note-compose { position:relative; margin-top:14px; }
+  .note-compose textarea { width:100%; min-height:70px; padding:9px 11px; border:1px solid var(--border2); border-radius:8px; background:var(--bg2); color:var(--text); font-size:12.5px; font-family:var(--font); resize:vertical; box-sizing:border-box; }
+  /* @자동완성 — textarea 바로 아래 띄운다 */
+  .note-ac { position:absolute; z-index:10; background:var(--card); border:1px solid var(--border2); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.14); min-width:190px; max-height:180px; overflow-y:auto; }
+  .note-ac div { padding:7px 11px; font-size:12px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; }
+  .note-ac div.on, .note-ac div:hover { background:var(--blue2); color:var(--blue); }
+  .note-ac .em { font-size:10.5px; color:var(--text3); }
   .modal-close:hover { background: var(--bg3); color: var(--text); }
   .drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.15s; }
   .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: rgba(49,72,64,0.05); }
@@ -1011,6 +1034,7 @@
           <th>상태</th>
           <th>중분류</th>
           <th>대분류</th>
+          <th title="메모 · 대댓글">메모</th>
           <th></th>
         </tr>
       </thead>
@@ -1923,6 +1947,31 @@
 </div>
 
 <!-- ======== CF EDIT MODAL ======== -->
+<!-- 입출금 메모 · 대댓글 (2026-11-16) -->
+<div class="modal-backdrop hidden" id="cf-notes-modal">
+  <div class="modal" style="width:620px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">메모</div>
+        <div id="cf-notes-subject" style="font-size:11.5px;color:var(--text2);margin-top:3px">—</div>
+      </div>
+      <button class="modal-close" onclick="closeNotesModal()">×</button>
+    </div>
+    <div class="note-thread" id="cf-notes-thread"></div>
+    <div class="note-compose">
+      <div id="cf-notes-replyto" style="display:none;font-size:11.5px;color:var(--blue);margin-bottom:6px"></div>
+      <textarea id="cf-notes-input" placeholder="메모를 입력하세요. @를 치면 담당자를 멘션할 수 있습니다."></textarea>
+      <div id="cf-notes-ac" class="note-ac" style="display:none"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap">
+        <button class="btn green" id="cf-notes-submit">등록</button>
+        <button class="btn" id="cf-notes-cancel-reply" style="display:none">답글 취소</button>
+        <span style="flex:1"></span>
+        <span id="cf-notes-status" style="font-size:11.5px;color:var(--text2)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="cf-edit-modal">
   <div class="modal" style="width:480px">
     <div class="modal-header">
@@ -2675,6 +2724,25 @@
     </table>
   </div>
   <div id="audit-log-count" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
+
+  <!-- ======== 담당자 명단 (2026-11-16) ========
+       메모 @멘션의 후보이자, **알림 메일을 보낼 수 있는 주소의 허용 목록**이다.
+       ⚠ note-notify Edge 가 이 명단 안에 있는 주소로만 보낸다 — 명단 밖은 조용히 버린다.
+         안 막으면 대시보드가 임의 주소로 메일을 쏘는 통로가 된다. -->
+  <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 20px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <span style="font-size:15px">👥</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text)">담당자 명단</span>
+      <span style="font-size:11px;color:var(--text3)">메모 @멘션 후보 · 알림 메일 허용 목록</span>
+    </div>
+    <div id="du-list" style="display:flex;flex-direction:column;gap:7px;margin-bottom:11px"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+      <input id="du-name" placeholder="이름" style="width:120px;padding:6px 9px;border:1px solid var(--border2);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px">
+      <input id="du-email" type="email" placeholder="이메일" style="width:230px;padding:6px 9px;border:1px solid var(--border2);border-radius:7px;background:var(--bg2);color:var(--text);font-size:12.5px;font-family:var(--mono)">
+      <button class="btn sm" id="du-add">+ 추가</button>
+      <span id="du-status" style="font-size:11.5px;color:var(--text2)"></span>
+    </div>
+  </div>
 
   <!-- ======== 주간 메일 발송 설정 (2026-11-15 주간 탭에서 이동) ========
        보고물이 아니라 운영 설정이라 감사 로그·계정과 같은 자리에 둔다.
@@ -6005,6 +6073,7 @@ function renderCFTable() {
       <td>${statusBadge}</td>
       <td style="color:var(--text2);font-size:11px">${r.mid_cat||'—'}</td>
       <td style="color:var(--text2);font-size:11px">${r.big_cat||'—'}</td>
+      <td style="text-align:center">${noteCellHTML(r._id)}</td>
       <td style="white-space:nowrap">
         <button class="btn sm cf-edit-btn" data-id="${r._id}" style="margin-right:4px">수정</button>
         <button class="btn sm red cf-del-btn" data-id="${r._id}">삭제</button>
@@ -6120,8 +6189,325 @@ function deleteCF(id) {
 document.getElementById('cf-tbody').addEventListener('click', e => {
   const delBtn  = e.target.closest('.cf-del-btn');
   const editBtn = e.target.closest('.cf-edit-btn');
+  const noteBtn = e.target.closest('.note-btn');
   if (delBtn)  deleteCF(delBtn.dataset.id);
   if (editBtn) openEditCF(editBtn.dataset.id);
+  if (noteBtn) openNotesModal(noteBtn.dataset.id);
+});
+
+/* ===================================================================
+   입출금 메모 · 대댓글 · @멘션                           (2026-11-16)
+   -------------------------------------------------------------------
+   ⚠ 메모는 cf_data 행 안에 넣지 않는다 — 적재 Edge 가 행을 갱신할 때 덮어쓴다
+     (법인카드에서 overwrite 가 귀속을 바꾼 사고를 이미 겪었다). 전용 테이블 cf_notes 를 쓴다.
+   ⚠ cat_data 키 하나에 몰아넣지도 않는다 — cat_data 는 키 단위 낙관적 잠금이라, 두 사람이
+     서로 다른 거래에 메모를 달아도 같은 키면 나중 저장이 거부된다. 댓글은 행 단위여야 한다.
+   ⚠ 멘션 알림 메일은 프런트가 직접 못 보낸다(SMTP 시크릿은 서버에만). note-notify Edge 를 거치고,
+     그 Edge 는 **담당자 명단에 있는 주소로만** 보낸다(관리자 탭에서 관리).
+   =================================================================== */
+let _notesLoaded = false;     // 입출금 탭 첫 진입 때만 읽는다
+let cfNotes = new Map();      // cf_id -> [note…] (원글·답글 섞임, created_at 오름차순)
+let dashboardUsers = [];      // [{name,email}] — @후보 + 알림 허용 목록
+let _notesCfId = null;        // 지금 열린 스레드의 cf_id
+let _notesReplyTo = null;     // 답글 대상 note id (null 이면 원글)
+
+/* ---- 담당자 명단 ---- */
+async function loadDashboardUsers() {
+  try {
+    if (!_supa) return;
+    const { data } = await _supa.from('cat_data').select('data').eq('key', 'dashboard_users').single();
+    if (Array.isArray(data?.data)) dashboardUsers = data.data;
+  } catch (e) { /* 없으면 빈 명단 — 멘션만 못 할 뿐 메모는 쓸 수 있다 */ }
+  renderDashboardUsers();
+}
+async function saveDashboardUsers() {
+  const st = document.getElementById('du-status');
+  try {
+    const { error } = await _supa.from('cat_data')
+      .upsert([{ key: 'dashboard_users', data: dashboardUsers }], { onConflict: 'key' });
+    if (error) throw error;
+    if (st) { st.textContent = '✓ 저장됨'; st.style.color = 'var(--green)'; setTimeout(() => { st.textContent = ''; }, 2500); }
+  } catch (e) {
+    if (st) { st.textContent = '저장 실패: ' + (e.message || e); st.style.color = 'var(--red)'; }
+  }
+}
+function renderDashboardUsers() {
+  const box = document.getElementById('du-list');
+  if (!box) return;
+  box.innerHTML = dashboardUsers.length
+    ? html`${dashboardUsers.map((u, i) => html`<div style="display:flex;align-items:center;gap:9px;font-size:12.5px">
+        <b style="min-width:90px;color:var(--text)">${u.name}</b>
+        <span style="color:var(--text2);font-family:var(--mono);flex:1">${u.email}</span>
+        <button class="btn sm red du-del" data-i="${i}" style="font-size:11px">삭제</button>
+      </div>`)}`
+    : html`<div style="font-size:12px;color:var(--text3)">등록된 담당자가 없습니다. 추가하면 메모에서 @로 멘션할 수 있습니다.</div>`;
+}
+document.getElementById('du-add')?.addEventListener('click', async () => {
+  const n = document.getElementById('du-name'), e = document.getElementById('du-email');
+  const name = (n.value || '').trim(), email = (e.value || '').trim().toLowerCase();
+  const st = document.getElementById('du-status');
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (st) { st.textContent = '이름과 올바른 이메일을 입력하세요.'; st.style.color = 'var(--red)'; }
+    return;
+  }
+  if (dashboardUsers.some(u => String(u.email).toLowerCase() === email)) {
+    if (st) { st.textContent = '이미 있는 이메일입니다.'; st.style.color = 'var(--red)'; }
+    return;
+  }
+  dashboardUsers.push({ name, email });
+  n.value = ''; e.value = '';
+  renderDashboardUsers();
+  await saveDashboardUsers();
+});
+document.getElementById('du-list')?.addEventListener('click', async e => {
+  const b = e.target.closest('.du-del');
+  if (!b) return;
+  dashboardUsers.splice(Number(b.dataset.i), 1);
+  renderDashboardUsers();
+  await saveDashboardUsers();
+});
+
+/* ---- 메모 로드 ---- */
+async function loadCfNotes() {
+  try {
+    if (!_supa) return;
+    const { data, error } = await _supa.from('cf_notes').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    const m = new Map();
+    for (const n of (data || [])) {
+      if (!m.has(n.cf_id)) m.set(n.cf_id, []);
+      m.get(n.cf_id).push(n);
+    }
+    cfNotes = m;
+  } catch (e) {
+    /* 테이블이 아직 없으면(마이그레이션 전) 조용히 넘어간다 — 메모 칸만 비어 보인다 */
+    console.warn('[notes] 로드 실패:', e?.message || e);
+  }
+}
+
+/* 표의 메모 칸 — 개수 배지. html`` 안에서 쓰이므로 html`` 로 돌려준다(이스케이프 유지) */
+function noteCellHTML(cfId) {
+  const list = cfNotes.get(cfId) || [];
+  const open = list.filter(n => !n.parent_id && !n.resolved_at).length;
+  if (!list.length) return html`<button class="note-btn" data-id="${cfId}" title="메모 추가">＋</button>`;
+  return html`<button class="note-btn has" data-id="${cfId}" title="메모 ${list.length}건${open ? ` · 미해결 ${open}` : ''}">💬<span class="n">${list.length}</span></button>`;
+}
+
+/* ---- 멘션 ---- */
+function parseMentions(text) {
+  const t = String(text || ''), out = new Set();
+  for (const u of dashboardUsers) {
+    const email = String(u.email || '').toLowerCase();
+    if (!email) continue;
+    const name  = String(u.name || '').trim();
+    const local = email.split('@')[0];
+    if ((name && t.includes('@' + name)) || (local && t.includes('@' + local))) out.add(email);
+  }
+  return [...out];
+}
+/* 본문에서 @이름을 강조. 정규식 통째 치환은 이스케이프가 꼬이므로 조각으로 자른다. */
+function renderNoteBody(text) {
+  const t = String(text || '');
+  const names = dashboardUsers.flatMap(u => [String(u.name || '').trim(), String(u.email || '').split('@')[0]])
+    .filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return t;
+  const parts = [];
+  let i = 0;
+  while (i < t.length) {
+    if (t[i] === '@') {
+      const hit = names.find(n => t.startsWith(n, i + 1));
+      if (hit) { parts.push(html`<span class="mention">@${hit}</span>`); i += hit.length + 1; continue; }
+    }
+    let j = t.indexOf('@', i + 1);
+    if (j < 0) j = t.length;
+    parts.push(t.slice(i, j));
+    i = j;
+  }
+  return html`${parts}`;
+}
+
+/* ---- 모달 ---- */
+function openNotesModal(cfId) {
+  const r = cfData.find(x => x._id === cfId);
+  _notesCfId = cfId; _notesReplyTo = null;
+  const subj = document.getElementById('cf-notes-subject');
+  if (subj) subj.textContent = r ? `${r.date} · ${r.desc || '(적요 없음)'} · ${r.in > 0 ? '+' : '-'}${fmt(r.in > 0 ? r.in : r.out)}` : cfId;
+  document.getElementById('cf-notes-input').value = '';
+  document.getElementById('cf-notes-status').textContent = '';
+  setReplyTo(null);
+  renderNotesThread();
+  document.getElementById('cf-notes-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('cf-notes-input')?.focus(), 50);
+}
+function closeNotesModal() {
+  document.getElementById('cf-notes-modal').classList.add('hidden');
+  hideMentionAC();
+  _notesCfId = null; _notesReplyTo = null;
+}
+function setReplyTo(id) {
+  _notesReplyTo = id;
+  const box = document.getElementById('cf-notes-replyto');
+  const btn = document.getElementById('cf-notes-cancel-reply');
+  if (!box || !btn) return;
+  if (!id) { box.style.display = 'none'; btn.style.display = 'none'; return; }
+  const n = (cfNotes.get(_notesCfId) || []).find(x => x.id === id);
+  box.textContent = `↳ ${(n?.author_email || '').split('@')[0]} 님의 메모에 답글`;
+  box.style.display = ''; btn.style.display = '';
+}
+function renderNotesThread() {
+  const box = document.getElementById('cf-notes-thread');
+  if (!box) return;
+  const all = cfNotes.get(_notesCfId) || [];
+  const roots = all.filter(n => !n.parent_id);
+  if (!roots.length) { box.innerHTML = html`<div style="font-size:12px;color:var(--text3);padding:10px 2px">아직 메모가 없습니다.</div>`; return; }
+  const who = e => (dashboardUsers.find(u => String(u.email).toLowerCase() === String(e).toLowerCase())?.name) || String(e || '').split('@')[0];
+  const when = t => { try { return new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  const item = (n, isReply) => html`<div class="note-item ${isReply ? 'reply' : ''}${n.resolved_at ? ' resolved' : ''}">
+    <div class="note-meta">
+      <span class="who">${who(n.author_email)}</span>
+      <span>${when(n.created_at)}</span>
+      ${n.resolved_at ? html`<span style="color:var(--green);font-weight:600">해결됨</span>` : ''}
+      <span style="flex:1"></span>
+      ${!isReply ? html`<button class="note-act" data-act="reply" data-id="${n.id}">답글</button>` : ''}
+      ${!isReply ? html`<button class="note-act" data-act="resolve" data-id="${n.id}">${n.resolved_at ? '되돌리기' : '해결'}</button>` : ''}
+      ${String(n.author_email).toLowerCase() === String(currentUserEmail || '').toLowerCase()
+        ? html`<button class="note-act" data-act="del" data-id="${n.id}" style="color:var(--red)">삭제</button>` : ''}
+    </div>
+    <div class="note-body">${renderNoteBody(n.body)}</div>
+  </div>`;
+  box.innerHTML = html`${roots.map(r => html`${item(r, false)}${all.filter(c => c.parent_id === r.id).map(c => item(c, true))}`)}`;
+}
+
+/* ---- 등록 / 삭제 / 해결 ---- */
+async function submitNote() {
+  const ta = document.getElementById('cf-notes-input');
+  const st = document.getElementById('cf-notes-status');
+  const body = (ta.value || '').trim();
+  if (!body) return;
+  if (!currentUserEmail) { st.textContent = '로그인이 필요합니다.'; st.style.color = 'var(--red)'; return; }
+  st.textContent = '등록 중...'; st.style.color = 'var(--text2)';
+  try {
+    const mentions = parseMentions(body);
+    const { data, error } = await _supa.from('cf_notes').insert([{
+      cf_id: _notesCfId, parent_id: _notesReplyTo, author_email: currentUserEmail, body, mentions,
+    }]).select('*').single();
+    if (error) throw error;
+    if (!cfNotes.has(_notesCfId)) cfNotes.set(_notesCfId, []);
+    cfNotes.get(_notesCfId).push(data);
+    ta.value = ''; setReplyTo(null); renderNotesThread(); renderCFTable();
+    logAudit('data_modify', `입출금 메모 작성: ${_notesCfId}`);
+    if (mentions.length) {
+      st.textContent = '등록됨 · 알림 보내는 중...';
+      const n = await notifyMention(data.id);
+      st.textContent = n > 0 ? `✓ 등록 · ${n}명에게 알림` : '✓ 등록 (알림 대상 없음)';
+    } else {
+      st.textContent = '✓ 등록됨';
+    }
+    st.style.color = 'var(--green)';
+    setTimeout(() => { st.textContent = ''; }, 4000);
+  } catch (e) {
+    st.textContent = '등록 실패: ' + (e.message || e); st.style.color = 'var(--red)';
+  }
+}
+/* 멘션 알림 — Edge 가 명단으로 거르고 중복(notified_at)도 막는다. 실패해도 메모는 이미 저장됐다. */
+async function notifyMention(noteId) {
+  try {
+    const r = await fetch(`${SUPA_URL}/functions/v1/note-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+      body: JSON.stringify({ noteId }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.warn('[notes] 알림 실패:', j); return 0; }
+    return Number(j.sent) || 0;
+  } catch (e) { console.warn('[notes] 알림 실패:', e); return 0; }
+}
+async function deleteNote(id) {
+  if (!confirm('이 메모를 삭제할까요? 답글이 있으면 함께 삭제됩니다.')) return;
+  try {
+    const { error } = await _supa.from('cf_notes').delete().eq('id', id);
+    if (error) throw error;
+    const list = (cfNotes.get(_notesCfId) || []).filter(n => n.id !== id && n.parent_id !== id);
+    cfNotes.set(_notesCfId, list);
+    renderNotesThread(); renderCFTable();
+    logAudit('data_modify', `입출금 메모 삭제: ${_notesCfId}`);
+  } catch (e) { showToast('삭제 실패: ' + (e.message || e), 'red'); }
+}
+async function toggleResolveNote(id) {
+  const n = (cfNotes.get(_notesCfId) || []).find(x => x.id === id);
+  if (!n) return;
+  const next = n.resolved_at ? { resolved_at: null, resolved_by: null }
+                             : { resolved_at: new Date().toISOString(), resolved_by: currentUserEmail };
+  try {
+    const { error } = await _supa.from('cf_notes').update(next).eq('id', id);
+    if (error) throw error;
+    Object.assign(n, next);
+    renderNotesThread(); renderCFTable();
+  } catch (e) { showToast('변경 실패: ' + (e.message || e), 'red'); }
+}
+
+document.getElementById('cf-notes-submit')?.addEventListener('click', submitNote);
+document.getElementById('cf-notes-cancel-reply')?.addEventListener('click', () => setReplyTo(null));
+document.getElementById('cf-notes-thread')?.addEventListener('click', e => {
+  const b = e.target.closest('.note-act');
+  if (!b) return;
+  if (b.dataset.act === 'reply')   { setReplyTo(b.dataset.id); document.getElementById('cf-notes-input').focus(); }
+  if (b.dataset.act === 'del')     deleteNote(b.dataset.id);
+  if (b.dataset.act === 'resolve') toggleResolveNote(b.dataset.id);
+});
+document.getElementById('cf-notes-modal')?.addEventListener('click', e => {
+  if (e.target.id === 'cf-notes-modal') closeNotesModal();
+});
+
+/* ---- @ 자동완성 ---- */
+let _acIdx = -1, _acItems = [];
+function hideMentionAC() { const el = document.getElementById('cf-notes-ac'); if (el) el.style.display = 'none'; _acIdx = -1; _acItems = []; }
+function mentionToken(ta) {
+  const upto = ta.value.slice(0, ta.selectionStart);
+  const m = upto.match(/@([^\s@]*)$/);
+  return m ? m[1] : null;
+}
+function showMentionAC(ta) {
+  const q = mentionToken(ta);
+  if (q === null) return hideMentionAC();
+  const ql = q.toLowerCase();
+  _acItems = dashboardUsers.filter(u =>
+    !ql || String(u.name || '').toLowerCase().includes(ql) || String(u.email || '').toLowerCase().includes(ql)).slice(0, 6);
+  const el = document.getElementById('cf-notes-ac');
+  if (!_acItems.length) return hideMentionAC();
+  _acIdx = 0;
+  el.innerHTML = html`${_acItems.map((u, i) => html`<div data-i="${i}" class="${i === 0 ? 'on' : ''}"><span>${u.name}</span><span class="em">${u.email}</span></div>`)}`;
+  el.style.display = ''; el.style.left = '8px'; el.style.top = (ta.offsetTop + ta.offsetHeight + 4) + 'px';
+}
+function applyMention(i) {
+  const ta = document.getElementById('cf-notes-input');
+  const u = _acItems[i]; if (!u || !ta) return;
+  const pos = ta.selectionStart;
+  const upto = ta.value.slice(0, pos).replace(/@([^\s@]*)$/, '@' + u.name + ' ');
+  ta.value = upto + ta.value.slice(pos);
+  ta.selectionStart = ta.selectionEnd = upto.length;
+  hideMentionAC(); ta.focus();
+}
+document.getElementById('cf-notes-input')?.addEventListener('input', e => showMentionAC(e.target));
+document.getElementById('cf-notes-input')?.addEventListener('keydown', e => {
+  const el = document.getElementById('cf-notes-ac');
+  const open = el && el.style.display !== 'none' && _acItems.length;
+  if (open) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      _acIdx = (_acIdx + (e.key === 'ArrowDown' ? 1 : -1) + _acItems.length) % _acItems.length;
+      [...el.children].forEach((c, i) => c.classList.toggle('on', i === _acIdx));
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); applyMention(_acIdx); return; }
+    if (e.key === 'Escape') { e.preventDefault(); hideMentionAC(); return; }
+  }
+  /* Ctrl/Cmd+Enter 로 등록 — 메모가 짧아 손이 마우스로 안 가게 */
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitNote(); }
+});
+document.getElementById('cf-notes-ac')?.addEventListener('click', e => {
+  const d = e.target.closest('[data-i]');
+  if (d) applyMention(Number(d.dataset.i));
 });
 
 /* ---- 인라인 수정 모달 ---- */
@@ -13327,7 +13713,17 @@ function activateTab(name, { push = true } = {}) {
   if (name === 'loan')           renderLoanTab();
   if (name === 'category')       setTimeout(() => renderCategoryTab(), 0);
   if (name === 'recurring')      renderRecurringTab();
-  if (name === 'admin')          renderAuditLog();
+  if (name === 'admin')          { renderAuditLog(); loadDashboardUsers(); }
+
+  /* 메모·담당자 명단 — 입출금 탭에 처음 들어갈 때 한 번만 읽는다(부팅을 늦추지 않게 지연 로드).
+     ⚠ 둘 다 실패해도 입출금 탭 자체는 그대로 떠야 한다 — 메모는 부가 기능이고,
+       마이그레이션 전이면 cf_notes 테이블이 아예 없다. loadCfNotes 가 그 경우를 삼킨다. */
+  if (name === 'cashflow' && !_notesLoaded) {
+    _notesLoaded = true;
+    Promise.all([loadCfNotes(), loadDashboardUsers()])
+      .then(() => { try { renderCFTable(); } catch (e) {} })
+      .catch(() => {});
+  }
 
   // 탭 전환 시 필터 초기화 — 입출금 내역
   if (name === 'cashflow') {
