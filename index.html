@@ -446,6 +446,22 @@
   .floor-fold > summary:hover { color: var(--text); }
   .floor-fold > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
   .floor-fold .ff-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 16px 13px; }
+
+  /* 감사 로그 접기 (2026-11-17) — 200행 표가 관리자 탭 위쪽을 다 차지해서 아래 설정들이 밀렸다.
+     접힌 줄에 **최근 기록 한 줄**을 남긴다: 뭔가 일어났는지는 펼치지 않고도 보여야 한다. */
+  .audit-fold { background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; }
+  .audit-fold > summary { cursor: pointer; padding: 13px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; list-style: none; }
+  .audit-fold > summary::-webkit-details-marker { display: none; }
+  .audit-fold > summary::before { content: '▸'; font-size: 10px; color: var(--text3); }
+  .audit-fold[open] > summary::before { content: '▾'; }
+  .audit-fold > summary:hover .af-title { color: var(--blue); }
+  .audit-fold > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 10px; }
+  .audit-fold .af-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .audit-fold .af-sum { font-size: 11.5px; color: var(--text2); }
+  .audit-fold .af-body { padding: 0 18px 16px; }
+  /* ⚠ details 자식에 display 를 주면 닫힘 숨김이 덮인다 — floor-fold 에서 실제로 당했다
+     (접었는데 본문이 레이아웃에 남아 Tab 으로 입력칸에 닿았다). 명시적으로 숨긴다. */
+  .audit-fold:not([open]) .af-body { display: none; }
   /* ⚠ 자식에 display 를 직접 주면 <details> 의 닫힘 숨김이 덮인다 — 접어도 본문이 그대로
      레이아웃에 남아 details 바깥으로 삐져나오고(클립만 됨), 무엇보다 **Tab 으로 입력칸에
      닿는다.** 닫힘 상태를 명시적으로 숨겨야 한다. 실측: 접힘인데 본문 높이 44px 였다. */
@@ -2686,10 +2702,15 @@
 
 <!-- ======== ADMIN TAB ======== -->
 <div class="panel" id="panel-admin">
+  <details class="audit-fold">
+    <summary>
+      <span class="af-title">감사 로그</span>
+      <span class="af-sum" id="audit-log-summary">—</span>
+    </summary>
+    <div class="af-body">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
-      <div style="font-size:16px;font-weight:700">감사 로그</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:2px">로그인·데이터 수정·엑셀 업로드/다운로드 활동 기록</div>
+      <div style="font-size:12px;color:var(--text2)">로그인·데이터 수정·엑셀 업로드/다운로드 활동 기록</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <select id="audit-filter-action" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:12px;font-family:var(--font);padding:6px 10px;border-radius:6px">
@@ -2724,6 +2745,8 @@
     </table>
   </div>
   <div id="audit-log-count" style="margin-top:8px;font-size:11px;color:var(--text3)"></div>
+    </div>
+  </details>
 
   <!-- ======== 담당자 명단 (2026-11-16) ========
        메모 @멘션의 후보이자, **알림 메일을 보낼 수 있는 주소의 허용 목록**이다.
@@ -4052,6 +4075,14 @@ function wireAuthHandlers() {
   }
 }
 
+/* 접힌 감사 로그 줄의 요약 문구 */
+function setAuditSummary(text, color) {
+  const el = document.getElementById('audit-log-summary');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = color || 'var(--text2)';
+}
+
 /* 감사 로그 렌더링 */
 async function renderAuditLog() {
   const tbody = document.getElementById('audit-log-tbody');
@@ -4066,11 +4097,13 @@ async function renderAuditLog() {
   if (error) {
     tbody.innerHTML = html`<tr><td colspan="5" style="text-align:center;color:var(--red);padding:18px">로그 조회 실패: ${error.message}<br><span style="color:var(--text3);font-size:11px">audit_log 테이블이 아직 생성되지 않았을 수 있습니다.</span></td></tr>`;
     if (countEl) countEl.textContent = '';
+    setAuditSummary('조회 실패', 'var(--red)');
     return;
   }
   if (!data || !data.length) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:18px">기록된 로그가 없습니다.</td></tr>`;
     if (countEl) countEl.textContent = '';
+    setAuditSummary('기록 없음');
     return;
   }
 
@@ -4084,6 +4117,15 @@ async function renderAuditLog() {
   };
   const fmtDt = iso => iso ? new Date(iso).toLocaleString('ko-KR', { timeZone:'Asia/Seoul', hour12:false }).slice(0,-3) : '—';
   const dash = html`<span style="color:var(--text3)">—</span>`;
+
+  /* 접힌 줄 — 펼치지 않고도 '최근에 뭔가 있었나' 를 알 수 있어야 한다.
+     목록이 200건 상한이라 '200건' 은 '200건 이상' 을 뜻한다. 그걸 숨기지 않는다. */
+  {
+    const top = data[0];
+    const when = fmtDt(top?.created_at);
+    const who  = String(top?.user_email || '').split('@')[0] || '—';
+    setAuditSummary(`최근 ${when} · ${who} · ${data.length >= 200 ? '200건+' : data.length + '건'}`);
+  }
 
   tbody.innerHTML = html`${data.map(row => {
     const [lbl, cls] = actionMeta[row.action] || [row.action, 'audit-logout'];
