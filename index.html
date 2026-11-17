@@ -573,7 +573,7 @@
   /* 접속 시 '안 읽은 메모' 팝업 */
   .unread-list { display:flex; flex-direction:column; gap:9px; max-height:50vh; overflow-y:auto; padding-right:4px; }
   .up-item { background:var(--card2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; }
-  .up-item.mention { border-color:var(--blue); background:var(--blue2); }
+  .up-item.ack { border-color:var(--blue); background:var(--blue2); }
   .up-head { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-bottom:4px; }
   .up-head .who { font-weight:700; color:var(--text); }
   .up-tag { background:var(--blue); color:#fff; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:700; }
@@ -1994,7 +1994,7 @@
     <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn" onclick="closeUnreadPopup()">나중에</button>
       <span style="flex:1"></span>
-      <span style="font-size:11px;color:var(--text3)">멘션된 메모는 <b>확인</b>을 눌러야 목록에서 빠집니다.</span>
+      <span style="font-size:11px;color:var(--text3)">멘션·답글은 <b>확인</b>을 눌러야 목록에서 빠집니다.</span>
     </div>
   </div>
 </div>
@@ -6437,6 +6437,25 @@ function isMentionedMe(n) {
   return !!me && (n?.mentions || []).some(e => String(e).toLowerCase() === me);
 }
 
+/* 내가 참여한 스레드에 달린 답글인가 — 원글을 썼거나, 그 스레드에 답글을 단 적이 있으면 참.
+   스레드는 2단(원글 + 답글들)이라 '같은 원글을 부모로 두는 글들 + 원글' 이 전부다.
+   Edge(note-notify)의 수신자 계산과 같은 규칙이어야 한다 — 메일은 왔는데 '확인' 이 안 뜨거나
+   그 반대가 되면 안 된다. */
+function isReplyToMyThread(n) {
+  const me = String(currentUserEmail || '').toLowerCase();
+  if (!me || !n?.parent_id) return false;
+  const list = cfNotes.get(n.cf_id) || [];
+  return list.some(x => x.id !== n.id
+    && (x.id === n.parent_id || x.parent_id === n.parent_id)
+    && String(x.author_email || '').toLowerCase() === me);
+}
+
+/* '나에게 온' 메모 — 멘션이거나, 내가 참여한 대화의 답글.
+   ⚠ 이 분류가 곧 **'확인' 을 눌러야 읽음** 이라는 뜻이다. 창을 여는 것만으론 안 빠진다. */
+function needsAck(n) {
+  return isMentionedMe(n) || isReplyToMyThread(n);
+}
+
 /* 내가 아직 안 본 메모 — 내가 쓴 것은 제외한다. 답글도 메모다. 최신순. */
 function unreadNotes() {
   const me = String(currentUserEmail || '').toLowerCase();
@@ -6446,7 +6465,9 @@ function unreadNotes() {
     for (const n of list) {
       if (String(n.author_email || '').toLowerCase() === me) continue;
       if (cfNoteReads.has(n.id)) continue;
-      out.push({ note: n, cfId, mention: isMentionedMe(n) });
+      const mention = isMentionedMe(n);
+      const reply   = isReplyToMyThread(n);
+      out.push({ note: n, cfId, mention, reply, ack: mention || reply });
     }
   }
   out.sort((a, b) => String(b.note.created_at || '').localeCompare(String(a.note.created_at || '')));
@@ -6519,7 +6540,7 @@ function openNotesModal(cfId, focusNoteId) {
      멘션된 메모는 '확인' 을 눌러야 빠진다(한 단계 더 둬서 놓치지 않게). */
   const me = String(currentUserEmail || '').toLowerCase();
   const auto = (cfNotes.get(cfId) || [])
-    .filter(n => String(n.author_email || '').toLowerCase() !== me && !isMentionedMe(n))
+    .filter(n => String(n.author_email || '').toLowerCase() !== me && !needsAck(n))
     .map(n => n.id);
   if (auto.length) markNotesRead(auto).then(() => {
     renderNotesThread();
@@ -6552,12 +6573,12 @@ function renderNotesThread() {
   const when = t => { try { return new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
   /* 나를 멘션한 미확인 메모 — 창을 열어 보는 것만으로는 안 빠지고 '확인' 을 눌러야 한다 */
   const me = String(currentUserEmail || '').toLowerCase();
-  const needAck = n => isMentionedMe(n) && !cfNoteReads.has(n.id) && String(n.author_email || '').toLowerCase() !== me;
+  const needAck = n => needsAck(n) && !cfNoteReads.has(n.id) && String(n.author_email || '').toLowerCase() !== me;
   const item = (n, isReply) => html`<div class="note-item ${isReply ? 'reply' : ''}${n.resolved_at ? ' resolved' : ''}${needAck(n) ? ' needack' : ''}${n.id === _notesFocusId ? ' focus' : ''}">
     <div class="note-meta">
       <span class="who">${who(n.author_email)}</span>
       <span>${when(n.created_at)}</span>
-      ${needAck(n) ? html`<span class="up-tag">나를 멘션</span>` : ''}
+      ${needAck(n) ? html`<span class="up-tag">${isMentionedMe(n) ? '나를 멘션' : '내 대화에 답글'}</span>` : ''}
       ${n.resolved_at ? html`<span style="color:var(--green);font-weight:600">해결됨</span>` : ''}
       <span style="flex:1"></span>
       ${needAck(n) ? html`<button class="note-act ack" data-act="ack" data-id="${n.id}">확인</button>` : ''}
@@ -6589,7 +6610,9 @@ async function submitNote() {
     cfNotes.get(_notesCfId).push(data);
     ta.value = ''; setReplyTo(null); renderNotesThread(); renderCFTable();
     logAudit('data_modify', `입출금 메모 작성: ${_notesCfId}`);
-    if (mentions.length) {
+    /* 답글이면 멘션이 없어도 알린다 — 받는 사람은 Edge 가 스레드 참여자로 계산한다.
+       ⚠ _notesReplyTo 는 바로 위 setReplyTo(null) 에서 이미 지워졌다. 저장된 행을 본다. */
+    if (mentions.length || data.parent_id) {
       st.textContent = '등록됨 · 알림 보내는 중...';
       const n = await notifyMention(data.id);
       st.textContent = n > 0 ? `✓ 등록 · ${n}명에게 알림` : '✓ 등록 (알림 대상 없음)';
@@ -6685,18 +6708,19 @@ function renderUnreadList() {
   const list = unreadNotes();
   if (!list.length) { closeUnreadPopup(); return false; }
   const mn = list.filter(u => u.mention).length;
-  if (sub) sub.textContent = `${list.length}건${mn ? ` · 나를 멘션 ${mn}건` : ''}`;
+  const rp = list.filter(u => !u.mention && u.reply).length;
+  if (sub) sub.textContent = `${list.length}건${mn ? ` · 나를 멘션 ${mn}건` : ''}${rp ? ` · 내 대화에 답글 ${rp}건` : ''}`;
   const who  = e => (dashboardUsers.find(u => String(u.email).toLowerCase() === String(e).toLowerCase())?.name) || String(e || '').split('@')[0];
   const when = t => { try { return new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-  box.innerHTML = html`${list.map(u => html`<div class="up-item${u.mention ? ' mention' : ''}">
+  box.innerHTML = html`${list.map(u => html`<div class="up-item${u.ack ? ' ack' : ''}">
     <div class="up-head">
-      ${u.mention ? html`<span class="up-tag">나를 멘션</span>` : ''}
+      ${u.ack ? html`<span class="up-tag">${u.mention ? '나를 멘션' : '내 대화에 답글'}</span>` : ''}
       <span class="who">${who(u.note.author_email)}</span>
       <span>${when(u.note.created_at)}</span>
       ${u.note.parent_id ? html`<span style="color:var(--text3)">답글</span>` : ''}
       <span style="flex:1"></span>
       <button class="btn sm up-act" data-act="open" data-note="${u.note.id}" data-cf="${u.cfId}">열기</button>
-      ${u.mention ? html`<button class="btn sm green up-act" data-act="ack" data-note="${u.note.id}">확인</button>` : ''}
+      ${u.ack ? html`<button class="btn sm green up-act" data-act="ack" data-note="${u.note.id}">확인</button>` : ''}
     </div>
     <div class="up-sub">${cfRowLabel(u.cfId)}</div>
     <div class="up-body">${renderNoteBody(u.note.body)}</div>
