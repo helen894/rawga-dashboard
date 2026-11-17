@@ -119,8 +119,11 @@ Deno.serve(async (req) => {
   const authorName = nameOf(author.toLowerCase());
   const bodyText   = String(note.body || "");
   const isReply    = !!note.parent_id;
+  /* 그 메모를 지목해 연다(입출금 탭 + 해당 거래 행 + 메모 창).
+     WARN 해시가 아니라 **쿼리**로 보낸다 — 구글 로그인 리디렉션이 해시를 토큰으로 덮어쓴다.
+       대시보드가 뜨자마자 이 값을 sessionStorage 로 옮겨 로그인 왕복을 견딘다. */
   const deepLink   = /^https?:\/\/.+/i.test(DASHBOARD_URL)
-    ? `${DASHBOARD_URL}${DASHBOARD_URL.includes("#") ? "" : "#cashflow"}`
+    ? `${DASHBOARD_URL.split("#")[0]}${DASHBOARD_URL.includes("?") ? "&" : "?"}note=${encodeURIComponent(noteId)}`
     : "";
 
   const subject = `[RAWGA 자금] ${authorName}님이 ${isReply ? "답글에서 " : ""}회원님을 언급했습니다`;

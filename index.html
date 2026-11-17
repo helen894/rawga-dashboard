@@ -562,6 +562,23 @@
   .note-ac div { padding:7px 11px; font-size:12px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; }
   .note-ac div.on, .note-ac div:hover { background:var(--blue2); color:var(--blue); }
   .note-ac .em { font-size:10.5px; color:var(--text3); }
+  /* 안 읽음 — 표 배지의 점, 스레드 안의 미확인 멘션 (2026-11-17) */
+  .note-btn .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:3px; vertical-align:top; }
+  .note-item.needack { border-color:var(--blue); }
+  .note-item.focus { box-shadow:0 0 0 2px var(--blue2); }
+  .note-act.ack { color:var(--blue); font-weight:700; }
+  /* 메일 링크로 들어온 거래 행 — 창을 닫아도 남아 있어야 이어서 손볼 수 있다 */
+  #cf-tbody tr.cf-row-focus > td { background:var(--blue2); }
+  #cf-tbody tr.cf-row-focus > td:first-child { box-shadow:inset 3px 0 0 var(--blue); }
+  /* 접속 시 '안 읽은 메모' 팝업 */
+  .unread-list { display:flex; flex-direction:column; gap:9px; max-height:50vh; overflow-y:auto; padding-right:4px; }
+  .up-item { background:var(--card2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; }
+  .up-item.mention { border-color:var(--blue); background:var(--blue2); }
+  .up-head { display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:11px; color:var(--text2); margin-bottom:4px; }
+  .up-head .who { font-weight:700; color:var(--text); }
+  .up-tag { background:var(--blue); color:#fff; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:700; }
+  .up-sub { font-size:11px; color:var(--text3); margin-bottom:6px; font-family:var(--mono); }
+  .up-body { font-size:12.5px; line-height:1.7; color:var(--text); white-space:pre-wrap; word-break:break-word; max-height:72px; overflow:hidden; }
   .modal-close:hover { background: var(--bg3); color: var(--text); }
   .drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.15s; }
   .drop-zone:hover, .drop-zone.drag-over { border-color: var(--blue); background: rgba(49,72,64,0.05); }
@@ -1964,6 +1981,24 @@
 
 <!-- ======== CF EDIT MODAL ======== -->
 <!-- 입출금 메모 · 대댓글 (2026-11-16) -->
+<div class="modal-backdrop hidden" id="unread-notes-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">확인하지 않은 메모</div>
+        <div id="unread-notes-sub" style="font-size:11.5px;color:var(--text2);margin-top:3px">—</div>
+      </div>
+      <button class="modal-close" onclick="closeUnreadPopup()">&times;</button>
+    </div>
+    <div class="unread-list" id="unread-notes-list"></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn" onclick="closeUnreadPopup()">나중에</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--text3)">멘션된 메모는 <b>확인</b>을 눌러야 목록에서 빠집니다.</span>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="cf-notes-modal">
   <div class="modal" style="width:620px">
     <div class="modal-header">
@@ -6112,7 +6147,7 @@ function renderCFTable() {
       : bal.kind === 'projected'
         ? html`<span style="color:var(--amber);font-family:var(--mono);border-bottom:1px dashed var(--amber);padding-bottom:1px" title="예정 거래 포함 — 확정 전 잠정 잔액">~${fmt(bal.val)}</span>`
         : html`<span style="font-family:var(--mono)">${fmt(bal.val)}</span>`;
-    return html`<tr>
+    return html`<tr data-row="${r._id}" class="${r._id === _focusedCfId ? 'cf-row-focus' : ''}">
       <td style="text-align:center">
         <input type="checkbox" class="cf-row-check" data-id="${r._id}" ${cfSelectedIds.has(r._id) ? 'checked' : ''} style="cursor:pointer">
       </td>
@@ -6262,6 +6297,33 @@ let cfNotes = new Map();      // cf_id -> [note…] (원글·답글 섞임, crea
 let dashboardUsers = [];      // [{name,email}] — @후보 + 알림 허용 목록
 let _notesCfId = null;        // 지금 열린 스레드의 cf_id
 let _notesReplyTo = null;     // 답글 대상 note id (null 이면 원글)
+let _notesFocusId = null;     // 메일 링크로 지목된 메모 (스레드에서 강조)
+let cfNoteReads = new Set();  // 내가 읽은 note id — 사람마다 다르므로 cf_note_reads 테이블
+let _focusedCfId = null;      // 표에서 강조 중인 거래 행 (딥링크 진입)
+let _pendingNoteId = null;    // 메일 링크로 열어야 할 메모
+
+/* 멘션 메일의 ?note=... 회수.
+   WARN 구글 로그인은 redirectTo 가 origin+pathname 이라 **쿼리도 해시도 통째로 버려진다**.
+     그래서 페이지가 뜨자마자 sessionStorage 로 옮겨 담는다(로그인 왕복은 같은 탭이라 살아남는다).
+     주소창도 바로 지운다 — 새로고침할 때마다 같은 메모가 또 열리면 성가시다.
+
+   WARN 이 줄은 initSupabase() 보다 **먼저** 돈다. Supabase 는 생성될 때 해시에서
+     #access_token=... 을 읽어 세션을 세우므로, 해시를 통째로 지우면 구글 로그인이 깨진다.
+     지금은 note 를 찾았을 때만 지우고 OAuth 복귀에는 note 가 없어 부딪히지 않지만,
+     한 글자만 바뀌어도 로그인이 조용히 망가지는 자리다 — 인증 해시는 명시적으로 남긴다. */
+(function stashPendingNote() {
+  try {
+    const q = new URLSearchParams(location.search).get('note');
+    const h = (location.hash.match(/[#&]note=([0-9a-fA-F-]{36})/) || [])[1];
+    const id = q || h;
+    if (id && /^[0-9a-fA-F-]{36}$/.test(id)) {
+      sessionStorage.setItem('rawga_pending_note', id);
+      const keepHash = /[#&](access_token|refresh_token|code|error)=/.test(location.hash) ? location.hash : '';
+      history.replaceState(null, '', location.origin + location.pathname + keepHash);
+    }
+    _pendingNoteId = sessionStorage.getItem('rawga_pending_note') || null;
+  } catch (e) { /* sessionStorage 가 막힌 환경이면 딥링크만 포기한다 */ }
+})();
 
 /* ---- 담당자 명단 ---- */
 async function loadDashboardUsers() {
@@ -6337,12 +6399,75 @@ async function loadCfNotes() {
   }
 }
 
+/* ---- 읽음 상태 (cf_note_reads) ----
+   cf_notes 에 컬럼을 더하지 않은 이유: 그 테이블의 UPDATE 는 **작성자 본인만** 허용이라
+   멘션을 받은 사람(작성자가 아닌 쪽)이 읽음을 기록할 수가 없다. 마이그레이션 주석 참고. */
+async function loadCfNoteReads() {
+  try {
+    if (!_supa || !currentUserEmail) return;
+    const { data, error } = await _supa.from('cf_note_reads').select('note_id').eq('user_email', currentUserEmail);
+    if (error) throw error;
+    cfNoteReads = new Set((data || []).map(r => r.note_id));
+  } catch (e) {
+    /* 마이그레이션 전이면 테이블이 없다 — 전부 '안 읽음'으로 보일 뿐, 화면은 돈다 */
+    console.warn('[notes] 읽음 상태 로드 실패:', e?.message || e);
+  }
+}
+
+/* WARN 저장에 실패해도 메모리에는 읽음으로 둔다. 다음 접속 때 서버에 없으니 다시 뜨는데,
+   그쪽이 '안 읽은 걸 읽었다고 영영 묻어버리는' 쪽보다 안전하다. */
+async function markNotesRead(ids) {
+  const fresh = [...new Set(ids || [])].filter(id => id && !cfNoteReads.has(id));
+  if (!fresh.length) return 0;
+  fresh.forEach(id => cfNoteReads.add(id));
+  try {
+    if (!_supa || !currentUserEmail) return fresh.length;
+    const { error } = await _supa.from('cf_note_reads').upsert(
+      fresh.map(id => ({ note_id: id, user_email: currentUserEmail })),
+      { onConflict: 'note_id,user_email', ignoreDuplicates: true });
+    if (error) throw error;
+  } catch (e) {
+    console.warn('[notes] 읽음 저장 실패:', e?.message || e);
+  }
+  return fresh.length;
+}
+
+function isMentionedMe(n) {
+  const me = String(currentUserEmail || '').toLowerCase();
+  return !!me && (n?.mentions || []).some(e => String(e).toLowerCase() === me);
+}
+
+/* 내가 아직 안 본 메모 — 내가 쓴 것은 제외한다. 답글도 메모다. 최신순. */
+function unreadNotes() {
+  const me = String(currentUserEmail || '').toLowerCase();
+  if (!me) return [];
+  const out = [];
+  for (const [cfId, list] of cfNotes) {
+    for (const n of list) {
+      if (String(n.author_email || '').toLowerCase() === me) continue;
+      if (cfNoteReads.has(n.id)) continue;
+      out.push({ note: n, cfId, mention: isMentionedMe(n) });
+    }
+  }
+  out.sort((a, b) => String(b.note.created_at || '').localeCompare(String(a.note.created_at || '')));
+  return out;
+}
+
+/* 거래 한 줄 요약 — 모달 제목과 팝업 목록이 같은 문구를 쓰도록 한 곳에 둔다 */
+function cfRowLabel(cfId) {
+  const r = cfData.find(x => x._id === cfId);
+  if (!r) return '(삭제된 거래)';
+  return `${r.date} · ${r.desc || '(적요 없음)'} · ${r.in > 0 ? '+' : '-'}${fmt(r.in > 0 ? r.in : r.out)}`;
+}
+
 /* 표의 메모 칸 — 개수 배지. html`` 안에서 쓰이므로 html`` 로 돌려준다(이스케이프 유지) */
 function noteCellHTML(cfId) {
   const list = cfNotes.get(cfId) || [];
   const open = list.filter(n => !n.parent_id && !n.resolved_at).length;
   if (!list.length) return html`<button class="note-btn" data-id="${cfId}" title="메모 추가">＋</button>`;
-  return html`<button class="note-btn has" data-id="${cfId}" title="메모 ${list.length}건${open ? ` · 미해결 ${open}` : ''}">💬<span class="n">${list.length}</span></button>`;
+  const me = String(currentUserEmail || '').toLowerCase();
+  const unread = list.filter(n => String(n.author_email || '').toLowerCase() !== me && !cfNoteReads.has(n.id)).length;
+  return html`<button class="note-btn has" data-id="${cfId}" title="메모 ${list.length}건${open ? ` · 미해결 ${open}` : ''}${unread ? ` · 안 읽음 ${unread}` : ''}">💬<span class="n">${list.length}</span>${unread ? html`<span class="dot"></span>` : ''}</button>`;
 }
 
 /* ---- 멘션 ---- */
@@ -6379,22 +6504,33 @@ function renderNoteBody(text) {
 }
 
 /* ---- 모달 ---- */
-function openNotesModal(cfId) {
-  const r = cfData.find(x => x._id === cfId);
-  _notesCfId = cfId; _notesReplyTo = null;
+function openNotesModal(cfId, focusNoteId) {
+  _notesCfId = cfId; _notesReplyTo = null; _notesFocusId = focusNoteId || null;
   const subj = document.getElementById('cf-notes-subject');
-  if (subj) subj.textContent = r ? `${r.date} · ${r.desc || '(적요 없음)'} · ${r.in > 0 ? '+' : '-'}${fmt(r.in > 0 ? r.in : r.out)}` : cfId;
+  if (subj) subj.textContent = cfRowLabel(cfId);
   document.getElementById('cf-notes-input').value = '';
   document.getElementById('cf-notes-status').textContent = '';
   setReplyTo(null);
   renderNotesThread();
   document.getElementById('cf-notes-modal').classList.remove('hidden');
   setTimeout(() => document.getElementById('cf-notes-input')?.focus(), 50);
+
+  /* 읽음 처리 — 나를 멘션하지 **않은** 메모는 창을 여는 것만으로 읽음이 된다.
+     멘션된 메모는 '확인' 을 눌러야 빠진다(한 단계 더 둬서 놓치지 않게). */
+  const me = String(currentUserEmail || '').toLowerCase();
+  const auto = (cfNotes.get(cfId) || [])
+    .filter(n => String(n.author_email || '').toLowerCase() !== me && !isMentionedMe(n))
+    .map(n => n.id);
+  if (auto.length) markNotesRead(auto).then(() => {
+    renderNotesThread();
+    try { renderCFTable(); } catch (e) {}
+    renderUnreadList();
+  });
 }
 function closeNotesModal() {
   document.getElementById('cf-notes-modal').classList.add('hidden');
   hideMentionAC();
-  _notesCfId = null; _notesReplyTo = null;
+  _notesCfId = null; _notesReplyTo = null; _notesFocusId = null;
 }
 function setReplyTo(id) {
   _notesReplyTo = id;
@@ -6414,12 +6550,17 @@ function renderNotesThread() {
   if (!roots.length) { box.innerHTML = html`<div style="font-size:12px;color:var(--text3);padding:10px 2px">아직 메모가 없습니다.</div>`; return; }
   const who = e => (dashboardUsers.find(u => String(u.email).toLowerCase() === String(e).toLowerCase())?.name) || String(e || '').split('@')[0];
   const when = t => { try { return new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-  const item = (n, isReply) => html`<div class="note-item ${isReply ? 'reply' : ''}${n.resolved_at ? ' resolved' : ''}">
+  /* 나를 멘션한 미확인 메모 — 창을 열어 보는 것만으로는 안 빠지고 '확인' 을 눌러야 한다 */
+  const me = String(currentUserEmail || '').toLowerCase();
+  const needAck = n => isMentionedMe(n) && !cfNoteReads.has(n.id) && String(n.author_email || '').toLowerCase() !== me;
+  const item = (n, isReply) => html`<div class="note-item ${isReply ? 'reply' : ''}${n.resolved_at ? ' resolved' : ''}${needAck(n) ? ' needack' : ''}${n.id === _notesFocusId ? ' focus' : ''}">
     <div class="note-meta">
       <span class="who">${who(n.author_email)}</span>
       <span>${when(n.created_at)}</span>
+      ${needAck(n) ? html`<span class="up-tag">나를 멘션</span>` : ''}
       ${n.resolved_at ? html`<span style="color:var(--green);font-weight:600">해결됨</span>` : ''}
       <span style="flex:1"></span>
+      ${needAck(n) ? html`<button class="note-act ack" data-act="ack" data-id="${n.id}">확인</button>` : ''}
       ${!isReply ? html`<button class="note-act" data-act="reply" data-id="${n.id}">답글</button>` : ''}
       ${!isReply ? html`<button class="note-act" data-act="resolve" data-id="${n.id}">${n.resolved_at ? '되돌리기' : '해결'}</button>` : ''}
       ${String(n.author_email).toLowerCase() === String(currentUserEmail || '').toLowerCase()
@@ -6506,7 +6647,142 @@ document.getElementById('cf-notes-thread')?.addEventListener('click', e => {
   if (b.dataset.act === 'reply')   { setReplyTo(b.dataset.id); document.getElementById('cf-notes-input').focus(); }
   if (b.dataset.act === 'del')     deleteNote(b.dataset.id);
   if (b.dataset.act === 'resolve') toggleResolveNote(b.dataset.id);
+  if (b.dataset.act === 'ack')     ackNote(b.dataset.id);
 });
+
+/* 멘션된 메모의 '확인' — 이걸 눌러야 읽음이 된다. 창을 열어 보는 것만으로는 안 빠진다. */
+async function ackNote(id) {
+  await markNotesRead([id]);
+  renderNotesThread();
+  try { renderCFTable(); } catch (e) {}
+  renderUnreadList();
+}
+
+/* =============================================
+   안 읽은 메모 팝업 (접속 시) — 2026-11-17
+   메일을 열었는지는 알 수 없다(추적 픽셀은 쓰지 않는다). 그래서 기준은
+   '메일을 봤는가' 가 아니라 **'대시보드에서 확인했는가'** 다.
+   ============================================= */
+let _unreadPopShown = false;   // 접속당 한 번만 띄운다
+
+function openUnreadPopup() {
+  if (_unreadPopShown) return false;
+  if (!renderUnreadList()) return false;
+  _unreadPopShown = true;
+  document.getElementById('unread-notes-modal')?.classList.remove('hidden');
+  return true;
+}
+function closeUnreadPopup() {
+  document.getElementById('unread-notes-modal')?.classList.add('hidden');
+}
+
+/* 목록을 다시 그린다. 남은 게 없으면 팝업을 닫고 false 를 돌려준다.
+   (확인/열기로 하나씩 빠지다가 0이 되면 알아서 사라지라고) */
+function renderUnreadList() {
+  const box = document.getElementById('unread-notes-list');
+  const sub = document.getElementById('unread-notes-sub');
+  if (!box) return false;
+  const list = unreadNotes();
+  if (!list.length) { closeUnreadPopup(); return false; }
+  const mn = list.filter(u => u.mention).length;
+  if (sub) sub.textContent = `${list.length}건${mn ? ` · 나를 멘션 ${mn}건` : ''}`;
+  const who  = e => (dashboardUsers.find(u => String(u.email).toLowerCase() === String(e).toLowerCase())?.name) || String(e || '').split('@')[0];
+  const when = t => { try { return new Date(t).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  box.innerHTML = html`${list.map(u => html`<div class="up-item${u.mention ? ' mention' : ''}">
+    <div class="up-head">
+      ${u.mention ? html`<span class="up-tag">나를 멘션</span>` : ''}
+      <span class="who">${who(u.note.author_email)}</span>
+      <span>${when(u.note.created_at)}</span>
+      ${u.note.parent_id ? html`<span style="color:var(--text3)">답글</span>` : ''}
+      <span style="flex:1"></span>
+      <button class="btn sm up-act" data-act="open" data-note="${u.note.id}" data-cf="${u.cfId}">열기</button>
+      ${u.mention ? html`<button class="btn sm green up-act" data-act="ack" data-note="${u.note.id}">확인</button>` : ''}
+    </div>
+    <div class="up-sub">${cfRowLabel(u.cfId)}</div>
+    <div class="up-body">${renderNoteBody(u.note.body)}</div>
+  </div>`)}`;
+  return true;
+}
+
+document.getElementById('unread-notes-list')?.addEventListener('click', e => {
+  const b = e.target.closest('.up-act');
+  if (!b) return;
+  if (b.dataset.act === 'ack') { ackNote(b.dataset.note); return; }
+  if (b.dataset.act === 'open') {
+    closeUnreadPopup();
+    focusCFRow(b.dataset.cf);
+    openNotesModal(b.dataset.cf, b.dataset.note);
+  }
+});
+document.getElementById('unread-notes-modal')?.addEventListener('click', e => {
+  if (e.target.id === 'unread-notes-modal') closeUnreadPopup();
+});
+
+/* 거래 행을 표에서 실제로 보이게 만든다.
+   WARN 날짜 범위 필터가 걸려 있으면 지난달 거래는 표에 아예 없다 — 범위부터 푼다.
+     그리고 그 행이 몇 페이지인지 계산해 그 페이지로 넘긴다(30건씩 끊기므로). */
+function focusCFRow(cfId) {
+  if (!cfId) return false;
+  activateTab('cashflow');                    // 분류 필터 초기화 + cfPage=1 + 렌더
+  const f = document.getElementById('cf-from');
+  const t = document.getElementById('cf-to');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  if (typeof cfUnassignedOnly !== 'undefined') { cfUnassignedOnly = ''; applyCFClassMode(); }
+  _focusedCfId = cfId;                        // renderCFTable 이 이 행에 cf-row-focus 를 붙인다
+  const rows = getFilteredCF();
+  const idx = rows.findIndex(r => r._id === cfId);
+  if (idx < 0) { renderCFTable(); return false; }
+  cfPage = Math.floor(idx / cfPerPage) + 1;
+  renderCFTable();
+  requestAnimationFrame(() => {
+    const tr = document.querySelector(`#cf-tbody tr[data-row="${cfId}"]`);
+    if (tr) tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+  return true;
+}
+
+/* 메일의 '대시보드에서 보기' 로 들어온 경우 — 그 메모 하나를 지목해 연다 */
+async function openNoteDeepLink(noteId) {
+  if (!noteId) return false;
+  if (!_notesLoaded) {
+    _notesLoaded = true;
+    await Promise.all([loadCfNotes(), loadDashboardUsers()]);
+  }
+  await loadCfNoteReads();
+  let cfId = null;
+  for (const [k, list] of cfNotes) {
+    if (list.some(x => x.id === noteId)) { cfId = k; break; }
+  }
+  if (!cfId) { showToast('메모를 찾을 수 없습니다 (삭제되었을 수 있습니다).', 'red'); return false; }
+  focusCFRow(cfId);
+  openNotesModal(cfId, noteId);
+  return true;
+}
+
+/* 부팅 끝에서 한 번 — 메일로 왔으면 그 메모를, 아니면 안 본 메모 팝업을.
+   둘을 동시에 띄우지 않는다(메일로 온 사람에게 팝업까지 겹치면 성가시다). */
+async function maybeOpenNotes() {
+  try {
+    if (!currentUserEmail) return;
+    if (_pendingNoteId) {
+      const id = _pendingNoteId;
+      _pendingNoteId = null;
+      try { sessionStorage.removeItem('rawga_pending_note'); } catch (e) {}
+      await openNoteDeepLink(id);
+      return;
+    }
+    if (!_notesLoaded) {
+      _notesLoaded = true;
+      await Promise.all([loadCfNotes(), loadDashboardUsers()]);
+      try { renderCFTable(); } catch (e) {}
+    }
+    await loadCfNoteReads();
+    openUnreadPopup();
+  } catch (e) {
+    console.warn('[notes] 초기 처리 실패:', e?.message || e);
+  }
+}
 document.getElementById('cf-notes-modal')?.addEventListener('click', e => {
   if (e.target.id === 'cf-notes-modal') closeNotesModal();
 });
@@ -13772,10 +14048,12 @@ function activateTab(name, { push = true } = {}) {
        마이그레이션 전이면 cf_notes 테이블이 아예 없다. loadCfNotes 가 그 경우를 삼킨다. */
   if (name === 'cashflow' && !_notesLoaded) {
     _notesLoaded = true;
-    Promise.all([loadCfNotes(), loadDashboardUsers()])
+    Promise.all([loadCfNotes(), loadDashboardUsers(), loadCfNoteReads()])
       .then(() => { try { renderCFTable(); } catch (e) {} })
       .catch(() => {});
   }
+  /* 딥링크로 강조해 둔 행은 입출금 탭을 떠나면 푼다 — 계속 칠해져 있으면 혼란스럽다 */
+  if (name !== 'cashflow') _focusedCfId = null;
 
   // 탭 전환 시 필터 초기화 — 입출금 내역
   if (name === 'cashflow') {
@@ -17116,6 +17394,10 @@ document.getElementById('cat-download-btn').addEventListener('click', () => {
     // 딥링크 처리 — Supabase 데이터 로드 완료 후 탭 전환 + renderWeeklyReport() 재실행
     // (조기 처리에서 skipRender=true 로 탭만 열었으므로, 여기서 데이터와 함께 전체 렌더)
     handleDeepLink();
+
+    /* 메모 — 메일 링크(?note=)면 그 메모를, 아니면 안 본 메모 팝업을.
+       await 하지 않는다: 메모는 부가 기능이고 Realtime 구독을 늦출 이유가 없다. */
+    maybeOpenNotes();
 
     // 5. Realtime 구독 시작
     subscribeRealtime();
