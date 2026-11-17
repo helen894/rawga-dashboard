@@ -4122,7 +4122,17 @@ async function renderAuditLog() {
      목록이 200건 상한이라 '200건' 은 '200건 이상' 을 뜻한다. 그걸 숨기지 않는다. */
   {
     const top = data[0];
-    const when = fmtDt(top?.created_at);
+    /* 표의 fmtDt 는 "2026. 11. 17. 9시 55분" 이라 한 줄 요약에는 길다 — "11/17 09:55" 로 줄인다.
+       ⚠ toLocaleString 결과를 문자열 치환으로 다듬지 말 것: ko-KR 은 "11. 17. 09:55" 라
+         마침표를 바꾸면 "11/ 17/ 09:55" 처럼 공백·슬래시가 남는다(실제로 그렇게 나왔다).
+         formatToParts 로 조각을 받아 직접 조립한다. hourCycle:'h23' 은 자정을 24시로 쓰는 걸 막는다. */
+    const when = top?.created_at ? (() => {
+      const p = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: '2-digit',
+        day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+        .formatToParts(new Date(top.created_at))
+        .reduce((a, x) => (a[x.type] = x.value, a), {});
+      return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+    })() : '—';
     const who  = String(top?.user_email || '').split('@')[0] || '—';
     setAuditSummary(`최근 ${when} · ${who} · ${data.length >= 200 ? '200건+' : data.length + '건'}`);
   }
