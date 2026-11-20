@@ -1,0 +1,5 @@
+# 훅은 /bin/sh 가 읽는다. core.autocrlf=true 인 윈도우에서 체크아웃될 때 CRLF 로
+# 바뀌면 셔뱅 줄 끝에 \r 이 붙어 `bad interpreter: /bin/sh^M` 으로 죽는다.
+# 더 나쁜 건 그때 git 이 "훅이 없다" 와 비슷하게 조용히 넘어가는 경우가 있다는 것 —
+# 검증이 안 도는데 도는 줄 알게 된다. LF 로 못 박는다.
+.githooks/** text eol=lf

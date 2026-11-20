@@ -1,0 +1,33 @@
+#!/bin/sh
+# 커밋 전에 검증 27건을 돌린다. 하나라도 실패하면 커밋을 막는다.
+#
+# 왜 있는가 (2026-11-20)
+#   러너(scripts/test-all.mjs)를 만들어도 사람이 기억해서 돌려야 하면 결국 안 돌린다.
+#   그래서 2026-11-20 에 4건이 최대 63일간 빨간 채였고, 그중 ar-header-map 은
+#   "헤더가 바뀌면 그 열을 조용히 0 으로 만든다" 를 잡으라고 만든 가드였다.
+#
+# 켜는 법 (클론마다 한 번):  git config core.hooksPath .githooks
+# 끄는 법:                   git config --unset core.hooksPath
+# 이번 한 번만 건너뛰기:      git commit --no-verify
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] ⚠ node 를 못 찾아 검증을 건너뜁니다." >&2
+  exit 0          # 환경 문제로 커밋을 막지는 않는다 — 막으면 --no-verify 가 습관이 된다
+fi
+
+# ⚠ 테스트는 **작업트리**를 읽는다(index.html 등). 스테이지에 안 올린 수정이 있으면
+#   지금 통과해도 커밋되는 내용이 통과한다는 뜻이 아니다. 조용히 넘기면 러너를 만든
+#   이유가 없어지므로 분명히 말한다. (여기서 stash 로 작업트리를 비우는 방법은 쓰지
+#   않는다 — 실패하거나 중단되면 작업이 날아간다. 경고가 더 안전하다.)
+if ! git diff --quiet; then
+  echo "[pre-commit] ⚠ 스테이지에 안 올린 수정이 있습니다 — 검증 대상은 작업트리 전체입니다."
+fi
+
+echo "[pre-commit] 검증을 돌립니다 (약 6초, 건너뛰려면 --no-verify)"
+node "$(git rev-parse --show-toplevel)/scripts/test-all.mjs" || {
+  echo ""
+  echo "[pre-commit] ❌ 검증 실패 — 커밋을 중단했습니다."
+  echo "              고치고 다시 커밋하거나, 의도한 것이면 git commit --no-verify"
+  exit 1
+}
+exit 0
