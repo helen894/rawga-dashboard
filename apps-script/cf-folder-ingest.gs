@@ -206,3 +206,70 @@ function ingestNewFiles() {
   Logger.log(out);
   return out;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   웹앱 진입점 — 대시보드 '지금 가져오기' 버튼이 이 주소를 친다 (2026-11-20 재작성)
+
+   ⚠⚠ 이 블록을 지우지 마라. 지우면 버튼이 **조용히** 멈춘다.
+     대시보드는 fetch 를 mode:'no-cors' 로 보내 응답을 못 읽는다 — 성공이든 고장이든
+     화면에는 "새로 가져온 내역이 없습니다" 가 똑같이 뜬다. 고장을 알아챌 방법이 없다.
+
+   ⚠ 어쩌다 이걸 새로 쓰게 됐는가 (2026-11-20)
+     배포는 **버전 1(2026-06-26)** 에 고정돼 있었고, 그 버전에만 doGet 이 있었다.
+     소스는 그 뒤(2026-07-10) 바뀌면서 진입점이 사라졌는데 배포는 옛 버전을 계속 서빙해
+     버튼은 멀쩡히 돌았다. 즉 **아무도 재현할 수 없는 코드로 운영되고 있었다** —
+     누가 재배포하는 순간 죽을 상태였다. 그래서 소스에 되돌려 놓는다.
+
+   ⚠ 접근이 '모든 사용자(익명)' 이고 주소는 index.html 에 공개돼 있다 — 누구나 부를 수 있다.
+     할 수 있는 일은 '10분 뒤 어차피 돌 적재를 지금 돌리는 것' 뿐이라 데이터 위험은 없다.
+     다만 연타하면 Apps Script 실행 할당량을 깎아 **정작 10분 트리거가 못 돈다.**
+     그래서 최소 간격과 잠금을 둔다. **토큰은 두지 않는다** — index.html 에 같이 박히므로
+     보안이 아니라 장식이 된다. 주소 자체가 이미 공개라는 사실을 가리지 않는 편이 낫다.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+var WEB_MIN_INTERVAL_MS = 60 * 1000;   // 같은 호출을 1분 안에 두 번 받지 않는다
+
+/** GET 은 **읽기 전용 상태 조회**다 — 적재하지 않는다.
+    크롤러·프리페치·주소창 확인이 적재를 돌려 버리면 안 된다. 진단용으로만 쓴다. */
+function doGet(e) {
+  var p = PropertiesService.getScriptProperties();
+  var n = 0;
+  try {
+    var it = DriveApp.getFolderById(INBOX_FOLDER_ID).getFiles();
+    while (it.hasNext()) { if (/\.(xlsx|xls|csv)$/i.test(it.next().getName())) n++; }
+  } catch (err) {
+    return ContentService.createTextOutput('상태 조회 실패: ' + err.message);
+  }
+  return ContentService.createTextOutput(
+    '업로드 폴더 대기 ' + n + '건 · 마지막 웹 실행 ' + (p.getProperty('WEB_LAST_RUN_AT') || '(없음)') +
+    '\n(적재는 POST 로만 실행됩니다)');
+}
+
+/** POST 만 실제로 적재한다 — 대시보드 버튼이 쓰는 경로. */
+function doPost(e) {
+  var p = PropertiesService.getScriptProperties();
+  var last = Number(p.getProperty('WEB_LAST_RUN_MS') || 0);
+  var now = Date.now();
+  if (now - last < WEB_MIN_INTERVAL_MS) {
+    return ContentService.createTextOutput('너무 잦은 호출입니다 — 잠시 후 다시 시도하세요.');
+  }
+
+  /* 10분 트리거와 겹치면 같은 파일을 두 번 집는다. 적재 Edge 가 중복을 걸러 주지만
+     같은 파일을 동시에 '완료' 로 옮기려다 한쪽이 깨진다. 잠금으로 막는다. */
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10 * 1000)) {
+    return ContentService.createTextOutput('다른 적재가 진행 중입니다 — 잠시 후 다시 시도하세요.');
+  }
+
+  var out;
+  try {
+    p.setProperty('WEB_LAST_RUN_MS', String(now));
+    p.setProperty('WEB_LAST_RUN_AT', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
+    out = ingestNewFiles();
+  } catch (err) {
+    out = '적재 실패: ' + err.message;
+  } finally {
+    lock.releaseLock();
+  }
+  return ContentService.createTextOutput(out);
+}
