@@ -986,6 +986,7 @@
         양식 다운로드
       </button>
     </div>
+    <div id="cf-clobe-result" style="display:none;margin-top:8px;font-size:11.5px;color:var(--text2);white-space:pre-wrap;line-height:1.65"></div>
   </div>
 
   <div class="filter-bar">
@@ -17789,9 +17790,11 @@ document.getElementById('cf-drive-pull-btn')?.addEventListener('click', async ()
 // Apps Script 웹앱이 클로브 MCP 를 **직접** 읽어 cf-clobe-ingest Edge 로 넘긴다.
 // 클라우드 루틴(07:00)·드라이브·10분 트리거를 전부 건너뛴다.
 //
-// ⚠ 응답을 읽을 수 없다 — no-cors 인데다 Apps Script 는 CORS 헤더를 주지 않는다.
-//   그래서 성공 판정은 **서버의 cf_data 를 되읽어 건수가 늘었는지**로 한다.
-//   '늘지 않음' 은 고장이 아니라 '가져올 게 없었음' 일 수 있다 — 문구를 그렇게 쓴다.
+// Apps Script 웹앱은 **CORS 로 응답을 돌려준다**(2026-11-20 실측 — GET·POST 둘 다 200).
+//   그래서 서버가 말한 실제 결과(추가 N · 중복 M · 실패 K)를 그대로 보여준다.
+//   ⚠ 종전처럼 'cf_data 행 수가 늘었나' 로 추측하지 않는다. 그 방식은 **성공과 고장을
+//     구분하지 못한다** — 적재 실패도 '새 내역 없음' 으로 보이고, 쓸데없이 105초를 기다린다.
+//     엑셀 버튼(cf-drive-pull-btn)은 아직 그 옛 방식이다. 고칠 때 같이 보라.
 //
 // ⚠ 천장: 클로브가 **마지막으로 수집한 시점까지만** 온다. 재수집은 MCP 로 트리거할 수 없고
 //   사람이 app.clobe.ai 에서 해야 한다. 그 뒤 들어온 거래는 이 버튼으로도 안 온다.
@@ -17799,40 +17802,46 @@ const CF_CLOBE_PULL_URL = 'https://script.google.com/macros/s/AKfycbzhRDAxjAp5gw
 
 document.getElementById('cf-clobe-pull-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('cf-clobe-pull-btn');
+  const box = document.getElementById('cf-clobe-result');
   if (btn.dataset.busy === '1') return;
   btn.dataset.busy = '1';
   const orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span style="opacity:.8">클로브에서 가져오는 중…</span>';
-  showToast('🏦 클로브에서 가져오는 중… (20~60초)', 'green');
+  if (box) { box.style.display = ''; box.style.color = 'var(--text2)'; box.textContent = '클로브에서 가져오는 중… (보통 20~60초)'; }
 
-  const before = Array.isArray(cfData) ? cfData.length : 0;
+  let text = '', failed = false;
   try {
-    await fetch(CF_CLOBE_PULL_URL, { method: 'POST', mode: 'no-cors', credentials: 'omit' });
-  } catch (e) { /* no-cors: 응답 못 읽음 — 정상 */ }
-
-  /* 3일치를 읽어 Edge 를 세 번 부르므로 드라이브 적재보다 오래 걸린다.
-     최대 ~105초까지 기다린다(엑셀 버튼의 22초로는 거의 항상 못 본다). */
-  let finalLen = before, changed = false;
-  for (let i = 0; i < 35; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    const len = await _reloadCfFromServer();
-    if (len !== false) {
-      finalLen = len;
-      if (len !== before) { changed = true; break; }
-    }
+    /* ⚠ Content-Type 을 text/plain 으로 둔다 — 단순 요청이라 프리플라이트가 없다.
+       application/json 으로 보내면 OPTIONS 가 먼저 가고 Apps Script 가 그걸 받지 않는다. */
+    const res = await fetch(CF_CLOBE_PULL_URL, {
+      method: 'POST', credentials: 'omit',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: 'days=3',
+    });
+    text = (await res.text() || '').trim();
+    if (!res.ok) failed = true;
+  } catch (e) {
+    failed = true;
+    text = '호출 실패: ' + (e && e.message ? e.message : e);
   }
-  await _reloadCfFromServer();
+
+  /* 서버가 돌려준 문장을 그대로 믿되, 머리줄만 뽑아 토스트로 쓴다 */
+  const head = (text.split('\n')[0] || '').trim();
+  const 실패포함 = /실패\s*[1-9]|적재 실패|호출 실패|너무 잦은|진행 중/.test(text);
+
+  if (box) {
+    box.textContent = text || '(응답 없음)';
+    box.style.color = (failed || 실패포함) ? 'var(--red)' : 'var(--text2)';
+  }
+
+  /* 화면 표도 최신으로 — 적재됐으면 여기서 반영된다 */
+  try { await _reloadCfFromServer(); } catch (e) {}
 
   btn.disabled = false;
   btn.dataset.busy = '0';
   btn.innerHTML = orig;
-  showToast(
-    changed
-      ? `✅ 클로브에서 ${finalLen - before}건 새로 반영됐습니다 (총 ${finalLen}건)`
-      : `ℹ️ 새로 가져올 내역이 없습니다 — 클로브가 마지막 수집 이후 새 거래가 없거나, 이미 전부 적재돼 있습니다 (총 ${finalLen}건)`,
-    'green'
-  );
+  showToast((failed || 실패포함 ? '⚠ ' : '✅ ') + (head || '응답 없음'), (failed || 실패포함) ? 'red' : 'green');
 });
 
 document.getElementById('cf-modal-close').addEventListener('click', () => document.getElementById('cf-modal').classList.add('hidden'));
