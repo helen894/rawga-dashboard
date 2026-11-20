@@ -33,8 +33,14 @@ function grab(name){
 }
 const NAMES = ['cardVisibleTail','cardMatchIssuer','cardApprovalDetail','cardMedian','cardApprovalUpTo',
                'cardIngestWatermarkDay','loanShiftToBizDay','normalizeCFRow','normalizeCFAmount',
-               'normalizeCFStatus','normalizeCFDate','excelDateToStr','generateCardPlanned'];
-const consts = html.match(/const CARD_PLAN_ISSUERS[\s\S]*?const CARD_PRORATE_MIN_DAYS = \d+;/)[0];
+               'normalizeCFStatus','normalizeCFDate','excelDateToStr',
+               /* 2026-10-23(43731c9) 부터 generateCardPlanned 가 쓴다. 스텁으로 때우지 않고
+                  실물을 뽑는다 — 건너뛰기 판정이 틀리면 예정 행이 되살아나는 그 버그다. */
+               'prunePlanSkip','isPlanSkipped','generateCardPlanned'];
+const consts = html.match(/const CARD_PLAN_ISSUERS[\s\S]*?const CARD_PRORATE_MIN_DAYS = \d+;/)[0]
+  /* 화살표 const 라 grab(함수 선언 탐색)으로는 못 뽑는다. 여기 베껴 두면 본체와 갈라지므로
+     소스에서 그대로 꺼내 붙인다. */
+  + '\n' + html.match(/const planSkipKey = [\s\S]*?;\n/)[0];
 
 let TODAY = '2026-08-18';
 const prelude = `
@@ -44,6 +50,9 @@ const prelude = `
   const getBigCat = () => '고정비';
   const saveData = () => { saves++; };
   const showToast = (m) => toasts.push(m);
+  /* planSkip 은 '그 달은 만들지 마라' 기록. 빈 배열 = 아무것도 안 건너뜀 = 원래 시나리오. */
+  let planSkip = [];
+  const savePlanSkip = () => {};
 `;
 const src = prelude + consts + '\n' + NAMES.map(grab).join('\n') + `
   ;globalThis.__api = {

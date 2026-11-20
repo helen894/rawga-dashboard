@@ -23,7 +23,12 @@ import { join } from 'node:path';
 const FIX_DIR = 'C:/Users/RAWGA/AppData/Local/Temp';
 /* 비교 대상(검증 분리 전 스크립트)은 git 에서 직접 꺼내 쓴다 — 수동 준비가 필요하면
    아무도 안 돌리게 된다. BASE_REF 로 기준 커밋을 바꿀 수 있다(기본: 분리 직전 커밋). */
-const BASE_REF = process.env.BASE_REF || 'HEAD';
+/* ⚠ 기본값을 HEAD 로 두면 안 된다. 검증을 clobe-validate.mjs 로 분리한 커밋(700ee5a)
+   이후의 스크립트는 그 모듈을 **상대경로로 import** 하는데, 이 테스트는 기준 스크립트를
+   %TEMP% 에 복사해 돌리므로 거기선 모듈을 못 찾는다 → 기준 쪽 출력이 통째로 비어 전건
+   실패한다. 실제로 분리 커밋이 같은 커밋에서 추가된 이 테스트를 바로 깨뜨렸다.
+   비교 대상은 애초에 '분리 직전' 이라야 의미가 있으므로 그 커밋으로 못 박는다. */
+const BASE_REF = process.env.BASE_REF || '2e5f3d9';
 const OLD = join(tmpdir(), `clobe-ingest-base-${BASE_REF.replace(/[^\w.-]/g, '_')}.mjs`);
 try {
   const src = execFileSync('git', ['show', `${BASE_REF}:scripts/clobe-cf-ingest.mjs`], { encoding: 'utf8' });

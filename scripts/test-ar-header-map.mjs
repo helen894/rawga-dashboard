@@ -25,7 +25,12 @@ function grab(name){
   }
 }
 const FIELDS = JSON.parse((src.match(/var FIELDS\s*=\s*(\[[^\]]*\])/) || [])[1].replace(/'/g, '"'));
-const cfgLine = src.match(/'천대표\(부산영업\)':\s*(\{[^}]*\})/)[1];
+/* ⚠ 소스에 '천대표(부산영업)': 가 **두 군데** 있다 — 탭 등록부({tab:…})와 열 매핑.
+   첫 매치를 잡으면 탭 등록부가 걸려 열 설정이 통째로 비고 전부 undefined 가 된다.
+   2026-09-18(87b5fb4)에 탭 등록부로 같은 키가 들어온 뒤 63일간 이 테스트가 그래서 죽어
+   있었다 — 헤더 이름이 바뀌면 조용히 0 이 되는 걸 잡으라고 만든 가드가 그동안 꺼져 있었다.
+   expected: 를 포함하는 쪽으로 못 박는다. */
+const cfgLine = src.match(/'천대표\(부산영업\)':\s*(\{[^}]*expected[^}]*\})/)[1];
 const cfg = eval('(' + cfgLine + ')');
 const api = new Function(`
   var FIELDS = ${JSON.stringify(FIELDS)};
