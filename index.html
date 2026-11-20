@@ -2895,6 +2895,29 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
+/* ── 브랜드 토큰 읽기 — 캔버스용 ─────────────────────────────────────────
+ * Chart.js 가 그리는 색은 CSS 가 아니라 캔버스라 `var(--x)` 를 해석하지 못한다.
+ * 그래서 지금껏 토큰 값을 문자열로 **복제**해 왔고, 복제본은 :root 가 바뀌어도
+ * 따라오지 않는다 — 2026-11-20 에 실제로 차트 눈금만 옛 팔레트의 블루그레이로
+ * 남아 있었다. 이제 색은 :root 한 곳에서만 바꾸면 차트까지 따라온다.
+ *
+ * ⚠ 읽는 기준은 **:root 뿐이다.** .header 처럼 스코프에서 재정의한 값은 안 잡힌다
+ *   (차트는 헤더 안에 없으므로 의도한 동작이다).
+ * ⚠ 한 번 읽고 캐시한다 — 테마 전환을 가정하지 않는다. 다크 모드를 넣게 되면
+ *   전환 시점에 clearTok() 을 부를 것. 안 부르면 옛 색이 남는다.
+ * ⚠ 두 번째 인자(대체값)는 생략하지 말 것. 토큰 이름을 잘못 적으면 빈 문자열이
+ *   돌아오고, Chart.js 는 그걸 검정으로 그려서 조용히 틀린 그림이 된다.
+ *
+ * 함수 선언이라 이 블록 어디서든(정의 위에서도) 부를 수 있다 — 호이스팅. */
+function tok(name, fallback) {
+  var c = tok._c || (tok._c = {});
+  if (name in c) return c[name];
+  var v = '';
+  try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) {}
+  if (!v) { console.warn('[brand] 토큰 ' + name + ' 을 못 읽어 대체값을 씁니다:', fallback); v = fallback; }
+  return (c[name] = v);
+}
+function clearTok() { tok._c = {}; }
 let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // Supabase 로드 후 덮어씀
 let isInitCashHidden = localStorage.getItem('init_cash_hidden') === 'true'; // 숨김 상태 (localStorage 유지)
 
@@ -5339,8 +5362,8 @@ function renderMonthlyRevenueChart() {
         tooltip: { callbacks: { label: c => `₩${fmt(c.raw)}` } }
       },
       scales: {
-        x: { ticks: { color: '#55655D', font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5580,17 +5603,17 @@ function renderCashChart() {
     `${minDate} ~ ${maxDate} 확정 · ~${futEnd} 예정` + (overdueN ? ` (연체 예정 ${overdueN}건은 기준일에 반영)` : '');
 
   const datasets = [
-    { label: '확정 잔액', data: actualSeries, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)',
-      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840',
+    { label: '확정 잔액', data: actualSeries, borderColor: tok('--brand-deep','#314840'), backgroundColor: 'rgba(49,72,64,0.10)',
+      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: tok('--brand-deep','#314840'),
       fill: true, tension: 0.3, spanGaps: false },
-    { label: '예정 포함(추정)', data: projSeries, borderColor: '#314840', borderDash: [6,4],
+    { label: '예정 포함(추정)', data: projSeries, borderColor: tok('--brand-deep','#314840'), borderDash: [6,4],
       backgroundColor: 'rgba(49,72,64,0.05)', borderWidth: 1.5, fill: true, tension: 0.2,
       pointRadius: ctx2 => (ctx2.dataIndex === lowLabelIdx ? 5 : 0),
-      pointBackgroundColor: '#C24A38', pointBorderColor: '#C24A38',
-      pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
+      pointBackgroundColor: tok('--red','#C24A38'), pointBorderColor: tok('--red','#C24A38'),
+      pointHoverRadius: 5, pointHoverBackgroundColor: tok('--red','#C24A38'), spanGaps: false },
   ];
   if (floorSeries) datasets.push(
-    { label: '안전선', data: floorSeries, borderColor: '#94A296', borderDash: [2,4], borderWidth: 2,
+    { label: '안전선', data: floorSeries, borderColor: tok('--text3','#94A296'), borderDash: [2,4], borderWidth: 2,
       pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 });
 
   /* 안전선 하회 구간 음영 — Chart.js annotation 플러그인이 없어 직접 그린다.
@@ -5627,7 +5650,7 @@ function renderCashChart() {
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: true, position: 'bottom',
-          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#55655D', usePointStyle: false } },
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: tok('--text2','#55655D'), usePointStyle: false } },
         tooltip: {
           callbacks: {
             label: c2 => {
@@ -5644,13 +5667,13 @@ function renderCashChart() {
             }
           },
           backgroundColor: 'rgba(255,255,255,0.96)',
-          titleColor: '#1B2B30', bodyColor: '#1B2B30',
+          titleColor: tok('--text','#1B2B30'), bodyColor: tok('--text','#1B2B30'),
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#55655D', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5709,7 +5732,9 @@ function renderDonutChart() {
   }
   const cats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#1B2B30'];
+  const colors = [tok('--brand-deep','#314840'), tok('--brand-soft','#739C65'), tok('--red','#C24A38'),
+                  tok('--amber','#9E6A15'), tok('--purple','#7A6AA6'), tok('--teal','#3F9E8C'),
+                  tok('--brand-light','#A8BCA3'), tok('--brand-dark','#1B2B30')];
 
   const legend = document.getElementById('donut-legend');
   legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
@@ -5742,7 +5767,9 @@ function renderDonutWeeklyChart() {
   }
   const cats   = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#1B2B30'];
+  const colors = [tok('--brand-deep','#314840'), tok('--brand-soft','#739C65'), tok('--red','#C24A38'),
+                  tok('--amber','#9E6A15'), tok('--purple','#7A6AA6'), tok('--teal','#3F9E8C'),
+                  tok('--brand-light','#A8BCA3'), tok('--brand-dark','#1B2B30')];
 
   const legend = document.getElementById('donut-weekly-legend');
   if (legend) legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
@@ -5789,8 +5816,8 @@ function renderWeeklyChart() {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ₩${fmt(c.raw)}` } } },
       scales: {
-        x: { ticks: { color: '#55655D', font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5803,9 +5830,9 @@ const AR_BAR_COLORS = {
   normal:  'rgba( 46, 199, 122, 0.75)', // 초록: 정상 + 보통
 };
 const AR_BAR_BORDER_COLORS = {
-  danger:  '#C24A38',
-  warning: '#9E6A15',
-  normal:  '#2A7F57',
+  danger:  tok('--red','#C24A38'),
+  warning: tok('--amber','#9E6A15'),
+  normal:  tok('--green','#2A7F57'),
 };
 
 /* 차트 대상 AR: remaining > 0이고 정상/지연/미정 상태인 것만 */
@@ -5911,13 +5938,13 @@ function renderARBarChart() {
             }
           },
           backgroundColor: 'rgba(255,255,255,0.96)',
-          titleColor: '#1B2B30', bodyColor: '#1B2B30',
+          titleColor: tok('--text','#1B2B30'), bodyColor: tok('--text','#1B2B30'),
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#55655D', font: { size: 11 } }, grid: { display: false } }
+        x: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: tok('--text2','#55655D'), font: { size: 11 } }, grid: { display: false } }
       }
     }
   });
@@ -5934,8 +5961,9 @@ function renderARDonutChart() {
   // 건수 0인 항목 제외
   const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
   const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
-  const colors = { 완료: '#2A7F57', 정상: '#314840', 지연: '#C24A38', 미정: '#7A6AA6' };
-  const colArr = labels.map(l => colors[l] || '#94A296');
+  const colors = { 완료: tok('--green','#2A7F57'), 정상: tok('--brand-deep','#314840'),
+                   지연: tok('--red','#C24A38'), 미정: tok('--purple','#7A6AA6') };
+  const colArr = labels.map(l => colors[l] || tok('--text3','#94A296'));
 
   const legend = document.getElementById('ar-legend');
   legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colArr[i]}"></span>${l} ${vals[i]}건</span>`)}`;
@@ -9829,15 +9857,15 @@ function renderWeeklyCashChart(wStart) {
       /* ⚠ Chart.js 는 CSS 변수를 해석하지 못한다 — var(--blue) 를 주면 선이 안 그려진다.
          색·굵기·점선 패턴을 대시보드 추이 차트와 **똑같이** 맞춘다. 같은 개념의 그래프가
          두 화면에서 다르게 보이면 사용자가 다른 지표로 읽는다. */
-      { label: '확정 잔액', data: actVals, borderColor: '#314840', backgroundColor: 'rgba(49,72,64,0.10)',
-        borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#314840',
+      { label: '확정 잔액', data: actVals, borderColor: tok('--brand-deep','#314840'), backgroundColor: 'rgba(49,72,64,0.10)',
+        borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: tok('--brand-deep','#314840'),
         fill: true, tension: 0.3, spanGaps: false },
-      { label: '궤적(예정 반영)', data: projVals, borderColor: '#314840', borderDash: [6, 4],
+      { label: '궤적(예정 반영)', data: projVals, borderColor: tok('--brand-deep','#314840'), borderDash: [6, 4],
         backgroundColor: 'rgba(49,72,64,0.05)', borderWidth: 1.5, fill: true, tension: 0.2,
         pointRadius: c2 => (c2.dataIndex === lowIdx ? 5 : 0),
-        pointBackgroundColor: '#C24A38', pointBorderColor: '#C24A38',
-        pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
-      ...(floor > 0 ? [{ label: '안전선', data: floorVals, borderColor: '#94A296',
+        pointBackgroundColor: tok('--red','#C24A38'), pointBorderColor: tok('--red','#C24A38'),
+        pointHoverRadius: 5, pointHoverBackgroundColor: tok('--red','#C24A38'), spanGaps: false },
+      ...(floor > 0 ? [{ label: '안전선', data: floorVals, borderColor: tok('--text3','#94A296'),
         borderDash: [2, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 }] : []),
     ]},
     options: {
@@ -9845,7 +9873,7 @@ function renderWeeklyCashChart(wStart) {
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: true, position: 'bottom',
-          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#55655D' } },
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: tok('--text2','#55655D') } },
         tooltip: {
           callbacks: {
             label: c2 => (c2.raw === null || c2.raw === undefined) ? null : `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
@@ -9860,14 +9888,14 @@ function renderWeeklyCashChart(wStart) {
               return bits.join(' · ');
             }
           },
-          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1B2B30', bodyColor: '#1B2B30',
+          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: tok('--text','#1B2B30'), bodyColor: tok('--text','#1B2B30'),
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#55655D', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
+        x: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
              grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) },
+        y: { ticks: { color: tok('--text2','#55655D'), font: { size: 10 }, callback: v => fmtM(v) },
              grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
@@ -10082,10 +10110,10 @@ function renderAssetMixChart() {
    * 칠 농도는 '현금 강조' — 현금 85%, 나머지 18% + 얇은 선. 자금 대시보드라 현금이
    * 주인공이고 나머지 셋은 배경 맥락으로 둔다. */
   const SERIES = [
-    { label: '현금',     data: cash, col: '#2A7F57', fill: 'D9', bw: 2.5 },   // --green
-    { label: '매출채권', data: ar,   col: '#C24A38', fill: '2E', bw: 1.5 },   // --red (테라코타)
+    { label: '현금',     data: cash, col: tok('--green','#2A7F57'), fill: 'D9', bw: 2.5 },   // --green
+    { label: '매출채권', data: ar,   col: tok('--red','#C24A38'), fill: '2E', bw: 1.5 },   // --red (테라코타)
     { label: '세종F2',   data: sej,  col: '#00785E', fill: '2E', bw: 1.5 },   // 브랜드 틸 채도보정
-    { label: '라오스',   data: lao,  col: '#9E6A15', fill: '2E', bw: 1.5 },   // --amber (오커)
+    { label: '라오스',   data: lao,  col: tok('--amber','#9E6A15'), fill: '2E', bw: 1.5 },   // --amber (오커)
   ];
   /* 끝점 직접 라벨 — 위 주석대로 색약 대비의 보조 부호다. 장식이 아니라 접근성 요건. */
   const endLabels = {
@@ -10128,8 +10156,8 @@ function renderAssetMixChart() {
             label: c2 => `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
             footer: it => dayLine(it[0].dataIndex),
           },
-          backgroundColor: '#ffffff', titleColor: '#1B2B30', bodyColor: '#1B2B30',
-          footerColor: '#55655D', borderColor: 'rgba(49,72,64,0.18)', borderWidth: 1, padding: 9,
+          backgroundColor: '#ffffff', titleColor: tok('--text','#1B2B30'), bodyColor: tok('--text','#1B2B30'),
+          footerColor: tok('--text2','#55655D'), borderColor: 'rgba(49,72,64,0.18)', borderWidth: 1, padding: 9,
           titleFont: { size: 12 }, bodyFont: { size: 11.5 }, footerFont: { size: 10.5, weight: '400' },
           boxWidth: 9, boxHeight: 9,
         },
@@ -10138,12 +10166,12 @@ function renderAssetMixChart() {
         /* 월이 바뀌는 첫 지점에만 '5월' 식으로 찍는다. autoSkip 을 켜두면 그 지점이 잘려
            라벨이 사라지므로 반드시 끈다. */
         x: { stacked: true,
-             ticks: { color: '#94A296', font: { size: 9.5, family: 'Pretendard, system-ui' },
+             ticks: { color: tok('--text3','#94A296'), font: { size: 9.5, family: 'Pretendard, system-ui' },
                       autoSkip: false, maxRotation: 0,
                       callback: (v, i) => isMonthStart(i) ? `${Number(dates[i].slice(5, 7))}월` : '' },
              grid: { display: true, color: 'rgba(49,72,64,0.10)',
                      lineWidth: (c) => isMonthStart(c.index) ? 1 : 0 } },
-        y: { stacked: true, ticks: { color: '#94A296', font: { size: 9.5, family: 'Pretendard, system-ui' },
+        y: { stacked: true, ticks: { color: tok('--text3','#94A296'), font: { size: 9.5, family: 'Pretendard, system-ui' },
                                      maxTicksLimit: 4, callback: v => fmtM(v) },
              grid: { color: 'rgba(49,72,64,0.10)' } },
       },
