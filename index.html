@@ -185,7 +185,7 @@
   .login-card .link-btn:hover { color: var(--blue); }
   .login-card .login-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0 4px; color: var(--text3); font-size: 11px; }
   .login-card .login-divider::before, .login-card .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
-  .login-card .google-btn { width: 100%; margin-top: 10px; background: #fff; color: #1a1d2e; border: 1px solid var(--border2); border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 600; font-family: var(--font); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .login-card .google-btn { width: 100%; margin-top: 10px; background: #fff; color: #1B2B30; border: 1px solid var(--border2); border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 600; font-family: var(--font); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
   .login-card .google-btn:hover { background: var(--bg3); }
   .login-card .google-btn:disabled { opacity: 0.6; cursor: default; }
   body.auth-pending .header, body.auth-pending .tabs, body.auth-pending .main { display: none; }
@@ -237,12 +237,12 @@
   .corp-mini-card:hover { filter: brightness(1.06); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
   .corp-card-label { font-size: 12px; color: var(--text2); margin-bottom: 6px; white-space: nowrap; }
   .corp-card-value { font-size: 15px; font-weight: 700; color: var(--text); font-family: var(--mono); word-break: break-all; }
-  .corp-mini-card.corp-person-card { background: #2D7059; border-color: #2D7059; }
+  .corp-mini-card.corp-person-card { background: #314840; border-color: #314840; }
   .corp-mini-card.corp-person-card .corp-card-label,
   .corp-mini-card.corp-person-card .corp-card-value { color: #fff; }
-  .corp-mini-card.corp-code-card { background: #9DB9AE; border-color: #9DB9AE; }
+  .corp-mini-card.corp-code-card { background: #A8BCA3; border-color: #A8BCA3; }
   .corp-mini-card.corp-code-card .corp-card-label,
-  .corp-mini-card.corp-code-card .corp-card-value { color: #1a1d2e; }
+  .corp-mini-card.corp-code-card .corp-card-value { color: #1B2B30; }
   @media (max-width: 900px) { .corp-card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
   @media (max-width: 680px) { .corp-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 460px) { .corp-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -312,7 +312,7 @@
   .cctx-filter-bar input[type=date]:focus, .cctx-filter-bar input[type=text]:focus, .cctx-filter-bar select:focus { outline:none; border-color:var(--blue); }
   /* cctx 정렬·선택·행작업·드롭다운·수정 모달 */
   .cctx-table th.cctx-sort { cursor:pointer; user-select:none; }
-  .cctx-table th.cctx-sort:hover { color:var(--text); background:#e4e7f0; }
+  .cctx-table th.cctx-sort:hover { color:var(--text); background:#E9EFE7; }
   .cctx-sort-ic { margin-left:3px; font-size:9px; opacity:0.3; }
   .cctx-table th.cctx-sa .cctx-sort-ic, .cctx-table th.cctx-sd .cctx-sort-ic { opacity:1; color:var(--blue); }
   .cctx-sel-bar { display:flex; align-items:center; gap:8px; padding:7px 10px; margin-bottom:6px; background:rgba(99,102,241,0.07); border:1px solid rgba(99,102,241,0.22); border-radius:8px; flex-wrap:wrap; }
@@ -1023,7 +1023,7 @@
       <option value="bigOnly">대분류만 있음</option>
       <option value="done">분류완료(중+대)</option>
     </select>
-    <button class="btn" id="cf-autoclass-btn" style="white-space:nowrap;color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)" title="중분류 미분류 행을 학습된 매핑으로 자동 추천 → 검토 후 적용">✨ 자동분류 추천</button>
+    <button class="btn" id="cf-autoclass-btn" style="white-space:nowrap;color:var(--blue);border-color:var(--blue)" title="중분류 미분류 행을 학습된 매핑으로 자동 추천 → 검토 후 적용">✨ 자동분류 추천</button>
   </div>
 
   <!-- 금액 범위 필터 -->
@@ -1046,7 +1046,7 @@
   <div id="cf-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.22);border-radius:8px">
     <span id="cf-selected-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
     <div style="flex:1"></div>
-    <button class="btn sm" id="cf-bulk-edit-btn" style="color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)">선택 수정 (0건)</button>
+    <button class="btn sm" id="cf-bulk-edit-btn" style="color:var(--blue);border-color:var(--blue)">선택 수정 (0건)</button>
     <button class="btn sm" id="cf-download-selected-btn" style="color:var(--green);border-color:var(--green)">선택 다운로드</button>
     <button class="btn sm red" id="cf-delete-selected-btn">선택 삭제</button>
     <button class="btn sm" id="cf-bulk-cancel-btn" style="color:var(--text2)">취소</button>
@@ -1164,7 +1164,7 @@
   <div id="ar-bulk-bar" style="display:none;align-items:center;gap:10px;padding:8px 12px;margin-bottom:8px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.22);border-radius:8px">
     <span id="ar-selected-count" style="font-size:12px;color:var(--text2)">0건 선택됨</span>
     <div style="flex:1"></div>
-    <button class="btn sm" id="ar-bulk-edit-btn" style="color:var(--blue,#6366f1);border-color:var(--blue,#6366f1)">선택 수정 (0건)</button>
+    <button class="btn sm" id="ar-bulk-edit-btn" style="color:var(--blue);border-color:var(--blue)">선택 수정 (0건)</button>
     <button class="btn sm" id="ar-download-selected-btn" style="color:var(--green);border-color:var(--green)">선택 다운로드</button>
     <button class="btn sm red" id="ar-delete-selected-btn">선택 삭제</button>
     <button class="btn sm" id="ar-bulk-cancel-btn" style="color:var(--text2)">취소</button>
@@ -2330,7 +2330,7 @@
     <div style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.7">
       선택한 매출채권 <strong id="ar-bulk-edit-count" style="color:var(--text)">0</strong>건을 수정합니다.<br>
       <span style="font-size:12px">변경할 항목만 선택하세요. 선택하지 않은 항목은 기존 값을 유지합니다.<br>
-      <strong style="color:var(--blue,#6366f1)">상태와 위험등급은 저장 후 자동 재계산됩니다.</strong></span>
+      <strong style="color:var(--blue)">상태와 위험등급은 저장 후 자동 재계산됩니다.</strong></span>
     </div>
 
     <!-- 완료 AR 안내 -->
@@ -5339,8 +5339,8 @@ function renderMonthlyRevenueChart() {
         tooltip: { callbacks: { label: c => `₩${fmt(c.raw)}` } }
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: '#55655D', font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5590,7 +5590,7 @@ function renderCashChart() {
       pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
   ];
   if (floorSeries) datasets.push(
-    { label: '안전선', data: floorSeries, borderColor: '#9BA79F', borderDash: [2,4], borderWidth: 2,
+    { label: '안전선', data: floorSeries, borderColor: '#94A296', borderDash: [2,4], borderWidth: 2,
       pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 });
 
   /* 안전선 하회 구간 음영 — Chart.js annotation 플러그인이 없어 직접 그린다.
@@ -5627,7 +5627,7 @@ function renderCashChart() {
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: true, position: 'bottom',
-          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478', usePointStyle: false } },
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#55655D', usePointStyle: false } },
         tooltip: {
           callbacks: {
             label: c2 => {
@@ -5644,13 +5644,13 @@ function renderCashChart() {
             }
           },
           backgroundColor: 'rgba(255,255,255,0.96)',
-          titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
+          titleColor: '#1B2B30', bodyColor: '#1B2B30',
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: '#55655D', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5709,7 +5709,7 @@ function renderDonutChart() {
   }
   const cats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
+  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#1B2B30'];
 
   const legend = document.getElementById('donut-legend');
   legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
@@ -5742,7 +5742,7 @@ function renderDonutWeeklyChart() {
   }
   const cats   = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0,8);
   const labels = cats.map(c => c[0]), vals = cats.map(c => c[1]);
-  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#8FA8B8'];
+  const colors = ['#314840','#739C65','#C24A38','#9E6A15','#7A6AA6','#3F9E8C','#A8BCA3','#1B2B30'];
 
   const legend = document.getElementById('donut-weekly-legend');
   if (legend) legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colors[i]}"></span>${l}</span>`)}`;
@@ -5789,8 +5789,8 @@ function renderWeeklyChart() {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ₩${fmt(c.raw)}` } } },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 } }, grid: { display: false } },
-        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        x: { ticks: { color: '#55655D', font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
   });
@@ -5911,13 +5911,13 @@ function renderARBarChart() {
             }
           },
           backgroundColor: 'rgba(255,255,255,0.96)',
-          titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
+          titleColor: '#1B2B30', bodyColor: '#1B2B30',
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#5a6478', font: { size: 11 } }, grid: { display: false } }
+        x: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) }, grid: { color: 'rgba(0,0,0,0.06)' } },
+        y: { ticks: { color: '#55655D', font: { size: 11 } }, grid: { display: false } }
       }
     }
   });
@@ -5935,7 +5935,7 @@ function renderARDonutChart() {
   const filteredCounts = Object.fromEntries(Object.entries(counts).filter(([,v]) => v > 0));
   const labels = Object.keys(filteredCounts), vals = Object.values(filteredCounts);
   const colors = { 완료: '#2A7F57', 정상: '#314840', 지연: '#C24A38', 미정: '#7A6AA6' };
-  const colArr = labels.map(l => colors[l] || '#aaaaaa');
+  const colArr = labels.map(l => colors[l] || '#94A296');
 
   const legend = document.getElementById('ar-legend');
   legend.innerHTML = html`${labels.map((l,i) => html`<span class="legend-item"><span class="legend-dot" style="background:${colArr[i]}"></span>${l} ${vals[i]}건</span>`)}`;
@@ -7604,9 +7604,9 @@ function previewCFBulkEdit() {
           ? row(`　· 대분류 자동(${getBigCat(params.mid)})`, stats.bigCnt + '건') : ''),
     params.descMode !== 'keep' ? row('　· 거래내용 변경', stats.descCnt + '건') : '',
     params.memoMode !== 'keep' ? row('　· 비고 변경',     stats.memoCnt + '건') : '',
-    row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#f59e0b' : ''),
+    row('AR 연결 거래',  stats.arLinkedCnt + '건', stats.arLinkedCnt > 0 ? '#9E6A15' : ''),
   ];
-  const _out = html`${errors.map(e => html`<div style="color:var(--red);margin-bottom:4px">🚫 ${e}</div>`)}${warnings.map(w => html`<div style="color:#f59e0b;margin-bottom:4px">${w}</div>`)}<table style="width:100%;border-collapse:collapse">${rows}</table>`;
+  const _out = html`${errors.map(e => html`<div style="color:var(--red);margin-bottom:4px">🚫 ${e}</div>`)}${warnings.map(w => html`<div style="color:#9E6A15;margin-bottom:4px">${w}</div>`)}<table style="width:100%;border-collapse:collapse">${rows}</table>`;
 
   const previewEl = document.getElementById('cf-bulk-preview');
   previewEl.innerHTML = _out;
@@ -8492,7 +8492,7 @@ function previewARBulkEdit() {
     <div style="font-weight:600;color:var(--text);margin-bottom:10px">📋 변경사항 미리보기</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <tr><td style="padding:3px 0;color:var(--text2)">선택 건수</td><td style="text-align:right;font-weight:600">${selectedRows.length}건</td></tr>
-      <tr><td style="padding:3px 0;color:var(--text2)">실제 변경 예정</td><td style="text-align:right;font-weight:600;color:var(--blue,#6366f1)">${s.actualCnt}건</td></tr>
+      <tr><td style="padding:3px 0;color:var(--text2)">실제 변경 예정</td><td style="text-align:right;font-weight:600;color:var(--blue)">${s.actualCnt}건</td></tr>
       <tr><td style="padding:3px 0;color:var(--text2)">변경 없는 항목</td><td style="text-align:right">${s.noChangeCnt}건</td></tr>
       ${s.partnerCnt  ? html`<tr><td style="padding:3px 0;color:var(--text2)">거래처 변경</td><td style="text-align:right">${s.partnerCnt}건</td></tr>` : ''}
       ${s.startCnt    ? html`<tr><td style="padding:3px 0;color:var(--text2)">시작일 변경</td><td style="text-align:right">${s.startCnt}건</td></tr>` : ''}
@@ -9837,7 +9837,7 @@ function renderWeeklyCashChart(wStart) {
         pointRadius: c2 => (c2.dataIndex === lowIdx ? 5 : 0),
         pointBackgroundColor: '#C24A38', pointBorderColor: '#C24A38',
         pointHoverRadius: 5, pointHoverBackgroundColor: '#C24A38', spanGaps: false },
-      ...(floor > 0 ? [{ label: '안전선', data: floorVals, borderColor: '#9BA79F',
+      ...(floor > 0 ? [{ label: '안전선', data: floorVals, borderColor: '#94A296',
         borderDash: [2, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0 }] : []),
     ]},
     options: {
@@ -9845,7 +9845,7 @@ function renderWeeklyCashChart(wStart) {
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: true, position: 'bottom',
-          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#5a6478' } },
+          labels: { boxWidth: 18, font: { size: 10.5 }, color: '#55655D' } },
         tooltip: {
           callbacks: {
             label: c2 => (c2.raw === null || c2.raw === undefined) ? null : `${c2.dataset.label}: ₩${fmt(c2.raw)}`,
@@ -9860,14 +9860,14 @@ function renderWeeklyCashChart(wStart) {
               return bits.join(' · ');
             }
           },
-          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1a1d2e', bodyColor: '#1a1d2e',
+          backgroundColor: 'rgba(255,255,255,0.96)', titleColor: '#1B2B30', bodyColor: '#1B2B30',
           borderColor: 'rgba(0,0,0,0.12)', borderWidth: 1,
         }
       },
       scales: {
-        x: { ticks: { color: '#5a6478', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
+        x: { ticks: { color: '#55655D', font: { size: 10 }, autoSkip: true, maxTicksLimit: 12 },
              grid: { color: 'rgba(0,0,0,0.06)' } },
-        y: { ticks: { color: '#5a6478', font: { size: 10 }, callback: v => fmtM(v) },
+        y: { ticks: { color: '#55655D', font: { size: 10 }, callback: v => fmtM(v) },
              grid: { color: 'rgba(0,0,0,0.06)' } }
       }
     }
@@ -11430,7 +11430,7 @@ async function renderEmailHistory() {
 
   const statusBadge = s => {
     const map = { sent:'background:#E7F1E1;color:#2A7F57', pending:'background:#F8EEDA;color:#9E6A15', failed:'background:#F7E4DE;color:#C24A38' };
-    const style = map[s] || 'background:#f0f2f7;color:#5a6478';
+    const style = map[s] || 'background:#E9EFE7;color:#55655D';
     const label = s==='sent'?'성공':s==='pending'?'처리중':'실패';
     return html`<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;${style}">${label}</span>`;
   };
@@ -16404,7 +16404,7 @@ function renderMidBigList() {
   }
 
   // 대분류별로 색 지정
-  const bigColors = ['var(--blue)','var(--green)','var(--amber)','var(--purple)','var(--teal)','#ff8c42','#a8c5ff','var(--red)'];
+  const bigColors = ['var(--blue)','var(--green)','var(--amber)','var(--purple)','var(--teal)','#739C65','#A8BCA3','var(--red)'];
   const bigColorMap = {};
   allBigs.forEach((b,i) => bigColorMap[b] = bigColors[i % bigColors.length]);
 
