@@ -186,7 +186,27 @@ function fetchDay_(companyId, day) {
   return merged;
 }
 
-function runDirectIngest(days) {
+/** 원본 보존 — 적재한(또는 실패한) 클로브 응답을 그대로 드라이브에 남긴다.
+    ⚠ 드라이브를 **경유하지는 않는다.** 적재는 이미 Edge 로 끝났고 이건 감사 흔적일 뿐이다.
+      이름에 시각을 넣어 클라우드 루틴이 쓰는 cf-YYYYMMDD.json 과 겹치지 않게 한다.
+      '대기' 에는 절대 쓰지 않는다 — 거기 쓰면 브리지가 집어가 이중 적재 시도가 된다. */
+function archive_(day, payload, ok) {
+  try {
+    var d = dirs_();
+    var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HHmmss');
+    (ok ? d.done : d.hold).createFile('direct-cf-' + day.replace(/-/g, '') + '-' + stamp + '.json',
+                                      JSON.stringify(payload), MimeType.PLAIN_TEXT);
+  } catch (e) { Logger.log('원본 보존 실패(' + day + '): ' + e.message); }
+}
+
+/**
+ * @param days  조회할 일수 (오늘 포함, 역순)
+ * @param opts  { archive: 성공분도 보존할지, notifyOnFail: 실패 시 메일 보낼지 }
+ *              버튼은 둘 다 끈다(눌릴 때마다 파일이 쌓이면 '완료' 가 쓰레기통이 된다).
+ *              예약 실행은 둘 다 켠다 — **조용히 멈추는 것**이 이 프로젝트에서 제일 아팠다.
+ */
+function runDirectIngest(days, opts) {
+  opts = opts || {};
   var n = Math.max(1, Math.min(14, Number(days) || DEFAULT_DAYS));
   mcpHandshake_();
 
@@ -246,12 +266,15 @@ function runDirectIngest(days) {
     if (code === 200 && body.ok) {
       added += (body.added || 0); skipped += (body.skipped || 0);
       lines.push('✓ ' + day + ' ' + rows.length + '건 → 추가 ' + (body.added || 0) + ' · 중복 ' + (body.skipped || 0));
+      if (opts.archive) archive_(day, page, true);
     } else if (code === 422) {
       failed++;
       lines.push('⚠ ' + day + ' 검증 중단 [' + (body.code || '') + '] ' + (body.error || '').slice(0, 90));
+      archive_(day, page, false);      // 검증 실패는 **언제나** 원본을 남긴다 — 사람이 봐야 한다
     } else {
       failed++;
       lines.push('✗ ' + day + ' HTTP ' + code + ' ' + (body.error || '').slice(0, 90));
+      archive_(day, page, false);
     }
   });
 
@@ -260,7 +283,46 @@ function runDirectIngest(days) {
   props_().setProperty('DIRECT_LAST_RESULT', out.slice(0, 8000));
   props_().setProperty('DIRECT_LAST_RUN_AT', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
   Logger.log(out);
+
+  /* ⚠ 실패했는데 아무도 모르는 상태를 만들지 않는다. 성공했을 때는 조용히 — 매번 메일이 오면
+     곧 안 읽게 되고 진짜 사고가 묻힌다(브리지가 같은 원칙으로 돌고 있다). */
+  if (failed && opts.notifyOnFail) {
+    notify_('[자금 대시보드] 클로브 직접 적재 실패 ' + failed + '건', out +
+            '\n\n· 실패한 날짜의 클로브 원본은 드라이브 ' + ROOT_FOLDER + '/' + DIR_HOLD + ' 에 남겨 뒀습니다.' +
+            '\n· 네트워크·일시 오류면 다음 날 예약 실행이 같은 날짜를 다시 집습니다(중복은 Edge 가 거릅니다).');
+  }
   return out;
+}
+
+/* ── 예약 실행 ─────────────────────────────────────────────────────────────
+   클라우드 루틴(클로브→드라이브)을 대신한다. 드라이브를 경유하지 않으므로
+   10분 브리지 트리거를 기다릴 일도 없다.
+
+   ⚠ 시각은 못 박지 못한다. 구글이 일부러 분산시킨다 — atHour 만 쓰면 분이 **무작위**이고,
+     nearMinute 를 써야 **±15분**으로 좁혀진다. 그래서 06:45~07:15 사이에 돈다.
+     분 단위가 꼭 필요하면 외부 cron 으로 이 웹앱에 POST 하면 된다(주간 리포트가 쓰는 방식).
+     다만 신선도를 정하는 건 우리가 아니라 **클로브가 언제 수집했는가** 라, 실익은 없어 보인다. */
+function runDailyDirectIngest() {
+  return runDirectIngest(6, { archive: true, notifyOnFail: true });   // 6일 — 연휴·주말을 덮는다
+}
+
+function setupDirectTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'runDailyDirectIngest') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('runDailyDirectIngest').timeBased().atHour(7).nearMinute(0).everyDays(1).create();
+  var msg = '예약 완료 — 매일 06:45~07:15 사이에 runDailyDirectIngest 가 돕니다.';
+  Logger.log(msg);
+  return msg;
+}
+
+function removeDirectTrigger() {
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'runDailyDirectIngest') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  Logger.log('예약 해제 ' + n + '건');
+  return '예약 해제 ' + n + '건';
 }
 
 /* ── 웹앱 ──────────────────────────────────────────────────────────────── */
