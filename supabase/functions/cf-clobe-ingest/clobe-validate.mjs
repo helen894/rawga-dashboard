@@ -103,16 +103,25 @@ export function validateClobe(inp) {
     warnings.push('외화계좌 화이트리스트 없음 — 계좌명(/외화|수출입|FX/)으로만 판정했습니다. fxAccounts 를 넘기는 편이 안전합니다.');
   }
 
-  /* ── 4) 환율 밴드 ── */
+  /* ── 4) 환율 밴드 ──
+     ⚠ 밴드는 **외화 행이 있을 때만** 뜻이 있다. 외화가 0건이면 검사할 환율 자체가 없으므로
+       '기준환율 없음' 은 경고가 아니라 틀린 말이다. 종전엔 이 경우에도 같은 경고가 떠서
+       외화 없는 날(= 대부분의 날)마다 울렸고, 그러면 **정작 외화가 있는데 환율이 없는 날**의
+       같은 문구가 그 소음에 묻힌다. 2026-11-20 주간 검산이 실제로 이 경고를 보고
+       "왜 뜨는지 모르겠다" 고 남겼다. 세 경우를 갈라 적는다. */
   let RATE_MIN = RATE_MIN_WIDE, RATE_MAX = RATE_MAX_WIDE;
-  let bandNote = '⚠ 기준환율 없음 — 행 누락 감지가 약합니다';
-  if (fxRows.length && fxRef > 0) {
+  let bandNote;
+  if (!fxRows.length) {
+    bandNote = '외화 거래 없음 — 환율 검사 해당 없음';
+  } else if (fxRef > 0) {
     const asOf = inp.fxRefAsOf ? String(inp.fxRefAsOf) : null;
     const age = asOf ? Math.round((Date.parse(today) - Date.parse(asOf)) / 864e5) : 9999;
     const tol = age > STALE_DAYS ? FX_TOL_STALE : FX_TOL;
     RATE_MIN = fxRef * (1 - tol);
     RATE_MAX = fxRef * (1 + tol);
     bandNote = `기준 ${fxRef.toFixed(2)}원 ±${(tol * 100).toFixed(0)}%` + (asOf ? ` · 기준일 ${asOf}${age > STALE_DAYS ? ` (${age}일 경과라 밴드 완화)` : ''}` : '');
+  } else {
+    bandNote = `⚠ 외화 ${fxRows.length}건이 있는데 기준환율이 없습니다 — 행 누락 감지가 약합니다`;
   }
 
   /* ── 5) 합계 교차검증 + 환율 역산 ──
@@ -140,7 +149,7 @@ export function validateClobe(inp) {
     const rateOk = fxNet ? (rDerived > RATE_MIN && rDerived < RATE_MAX) : Math.abs(resIn - resOut) <= TOL;
     const explained = rateOk && c >= -TOL;
 
-    Object.assign(report, { krwIn, krwOut, resIn, resOut, fxIn, fxOut, fxNet,
+    Object.assign(report, { krwIn, krwOut, resIn, resOut, fxIn, fxOut, fxNet, fxCount: fxRows.length,
                             rDerived, rateBand: [RATE_MIN, RATE_MAX], bandNote, cancelLeg: c });
 
     if (hasRes && !explained) {

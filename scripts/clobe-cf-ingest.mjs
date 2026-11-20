@@ -106,7 +106,9 @@ if (R.resIn !== undefined) {
   console.log('\nAPI 합계 대조 (행 누락 감지)');
   console.log(`  입금  API ${won(R.expIn)} vs 원화계좌 ${won(R.krwIn)} → 잔차 ${won(R.resIn)}${R.fxIn ? ` (외화 ${R.fxIn} 환산분 포함)` : ''}`);
   console.log(`  출금  API ${won(R.expOut)} vs 원화계좌 ${won(R.krwOut)} → 잔차 ${won(R.resOut)}${R.fxOut ? ` (외화 ${R.fxOut} 환산분 포함)` : ''}`);
-  if (R.rateBand) console.log(`  환율 허용 밴드 ${R.rateBand[0].toFixed(0)}~${R.rateBand[1].toFixed(0)}원 — ${R.bandNote}`);
+  /* 외화가 0건인 날엔 밴드 줄 자체를 띄우지 않는다 — 검사할 환율이 없는데 밴드를 적으면
+     매일 뜨는 장식이 되고, 진짜 환율 경고가 그 틈에 묻힌다. */
+  if (R.rateBand && R.fxCount) console.log(`  환율 허용 밴드 ${R.rateBand[0].toFixed(0)}~${R.rateBand[1].toFixed(0)}원 — ${R.bandNote}`);
 }
 for (const w of res.warnings) console.log(`⚠ ${w}`);
 for (const n of res.notes) console.log(`  ${n}`);

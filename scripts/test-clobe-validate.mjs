@@ -137,5 +137,31 @@ console.log('중단 조건 6종\n');
   t('  외화 원금 보존(fx_usd)', fx?.fx_usd, 10);
 }
 
+/* ⑩ 환율 밴드 문구 — 세 갈래 (2026-11-20)
+   종전엔 외화가 0건인 날에도 '기준환율 없음' 경고가 떴다. 외화 없는 날이 대부분이라
+   경고가 일상이 됐고, 그러면 **외화는 있는데 환율이 없는** 진짜 경우가 같은 문구에 묻힌다.
+   세 경우가 서로 다른 말을 하는지 고정한다. 하나라도 합쳐지면 다시 묻히기 시작한다. */
+{
+  const krwOnly = page([tx({ id: 'a', in: 1000, acc: 1001 }), tx({ id: 'b', out: 400, acc: 1001 })]);
+
+  const noFx = validateClobe({ ...base, pages: krwOnly, fxRef: 1400, fxRefAsOf: TODAY });
+  t('외화 0건이면 경고가 아니다', /^외화 거래 없음/.test(noFx.report.bandNote || ''), true);
+  t('  경고 표시(⚠)가 붙지 않는다', (noFx.report.bandNote || '').includes('⚠'), false);
+  t('  fxCount 0 — 출력부가 밴드 줄을 접는 근거', noFx.report.fxCount, 0);
+
+  /* 외화가 있는데 기준환율이 없다 — 이때만 진짜 경고 */
+  const pFx = page([tx({ id: 'k', in: 1000, acc: 1001 }), tx({ id: 'f', in: 10, acc: 5000, accName: '외화보통예금' })],
+                   { expIn: 15_000, expOut: 0 });
+  const fxNoRef = validateClobe({ ...base, pages: pFx, fxAccounts: { 5000: 'USD' }, fxRef: 0 });
+  t('외화는 있고 환율이 없으면 경고', (fxNoRef.report.bandNote || '').includes('⚠'), true);
+  t('  몇 건인지 밝힌다', /외화 1건/.test(fxNoRef.report.bandNote || ''), true);
+
+  /* 외화 + 기준환율 → 밴드 문구 */
+  const fxWithRef = validateClobe({ ...base, pages: pFx, fxAccounts: { 5000: 'USD' }, fxRef: 1400, fxRefAsOf: TODAY });
+  t('외화 + 환율이면 밴드를 적는다', /^기준 1400\.00원 ±5%/.test(fxWithRef.report.bandNote || ''), true);
+  t('  이 경우에도 ⚠ 는 없다', (fxWithRef.report.bandNote || '').includes('⚠'), false);
+  t('  fxCount 가 실제 외화 건수', fxWithRef.report.fxCount, 1);
+}
+
 console.log(`\n${fail ? '❌' : '✅'} ${pass}/${pass + fail} 통과`);
 process.exit(fail ? 1 : 0);
