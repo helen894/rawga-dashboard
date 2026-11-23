@@ -55,11 +55,40 @@ eq('윤년 2월 (2028-02-28 → 03-01)', lag('2028-02-28', '2028-03-01'), 2);
 eq('평년 2월 (2027-02-28 → 03-01)', lag('2027-02-28', '2027-03-01'), 1);
 eq('긴 공백 (연휴 끼고 10일)', lag('2026-11-13', '2026-11-23'), 10);
 
-/* 예약 시각이 실제로 옮겨졌는지도 같이 본다 — 지연 판정만 맞고 07:00 그대로면 의미가 없다. */
-const hourOk = /\.atHour\(10\)\.nearMinute\(0\)/.test(src);
-eq('예약 시각이 10시 (클로브 수집 09:13 이후)', hourOk, true);
 const notifyOk = /if \(lagDays >= 2 && opts\.notifyOnFail\)/.test(src);
 eq('이틀 이상 멈추면 실패 아니어도 알림', notifyOk, true);
+
+/* ── 예약표 ────────────────────────────────────────────────────────────────
+   지연 판정만 맞고 **클로브 수집 뒤에 도는 회차가 없으면** 아무 소용이 없다.
+   11-23 에 당한 게 정확히 그 모양이라, 시각 자체를 요구사항으로 못 박는다. */
+console.log('\n예약표\n');
+
+const schedRaw = src.match(/var DIRECT_SCHEDULE = (\[\[[\s\S]*?\]\]);/);
+if (!schedRaw) { console.error('❌ DIRECT_SCHEDULE 을 소스에서 못 찾았습니다'); process.exit(1); }
+const sched = JSON.parse(schedRaw[1]);
+const mins = ([h, m]) => h * 60 + m;
+
+eq('하루 3회', sched.length, 3);
+eq('1회차 07:00', JSON.stringify(sched[0]), '[7,0]');
+eq('2회차 11:30', JSON.stringify(sched[1]), '[11,30]');
+eq('3회차 16:30', JSON.stringify(sched[2]), '[16,30]');
+eq('시·분이 유효 범위', sched.every(([h, m]) => h >= 0 && h <= 23 && m >= 0 && m <= 59), true);
+/* ★ 이 줄이 11-23 의 교훈이다. 회차를 어떻게 바꾸든 09:1x 이후가 하나는 있어야 한다. */
+eq('클로브 수집(09:1x) 이후 회차가 있다', sched.some((hm) => mins(hm) >= 9 * 60 + 30), true);
+eq('같은 시각 중복 없음', new Set(sched.map(mins)).size, sched.length);
+
+/* 사람이 읽는 구간 표시 — ±15분이라 07:00 은 06:45~07:15 이다. 여기가 틀리면 로그만 거짓말한다. */
+const spanSrc = src.match(/function scheduleSpan_\([\s\S]*?\n}/);
+const hhmmSrc = src.match(/function hhmm_\([\s\S]*?\n}/);
+if (!spanSrc || !hhmmSrc) { console.error('❌ scheduleSpan_ / hhmm_ 을 소스에서 못 찾았습니다'); process.exit(1); }
+vm.runInContext(spanSrc[0] + '\n' + hhmmSrc[0] + '\nglobalThis.span = scheduleSpan_;', ctx);
+const span = ctx.span;
+
+eq('07:00 → ±15분', span(7, 0), '06:45~07:15');
+eq('11:30 → ±15분', span(11, 30), '11:15~11:45');
+eq('16:30 → ±15분', span(16, 30), '16:15~16:45');
+eq('자정을 넘겨도 감싼다', span(0, 0), '23:45~00:15');
+eq('23:50 → 다음날로 감싼다', span(23, 50), '23:35~00:05');
 
 console.log(`\n${fail ? '❌' : '✅'} 통과 ${pass} · 실패 ${fail}\n`);
 process.exitCode = fail ? 1 : 0;

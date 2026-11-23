@@ -328,25 +328,73 @@ function runDirectIngest(days, opts) {
    10분 브리지 트리거를 기다릴 일도 없다.
 
    ⚠ 시각은 못 박지 못한다. 구글이 일부러 분산시킨다 — atHour 만 쓰면 분이 **무작위**이고,
-     nearMinute 를 써야 **±15분**으로 좁혀진다. 그래서 09:45~10:15 사이에 돈다.
+     nearMinute 를 써야 **±15분**으로 좁혀진다. 아래 괄호가 실제로 도는 구간이다. */
 
-   ⚠ **07:00 이 아니라 10:00 인 이유 (2026-11-23).** 클로브가 그날 자료를 긁는 시각이
-     09:12~09:13 이었다. 07:00 에 돌면 매일 **클로브의 어제치**를 읽게 되고, 적재는 늘
-     '성공' 인데 대시보드만 하루 늦는다. 실제로 11-23 07:06 카드대금 6,148,296 이 그래서
-     하루 밀렸다. 클로브 수집 시각이 바뀌면 여기도 같이 옮겨야 한다 — 판단 근거는
-     get_scraping_status 의 scrapedAt 이고, 웹앱 doGet 의 '수집 기준' 줄에 그게 찍힌다.
-     분 단위가 꼭 필요하면 외부 cron 으로 이 웹앱에 POST 하면 된다(주간 리포트가 쓰는 방식).
-     다만 신선도를 정하는 건 우리가 아니라 **클로브가 언제 수집했는가** 라, 실익은 없어 보인다. */
+/** 하루 세 번 — [시, 분].
+ *
+ *  07:00 (06:45~07:15)  밤사이 재수집분. **보통 비어 있다.** 클로브 정기 수집이 09:1x 라
+ *                       이 회차가 읽는 건 사실상 어제치고, 머리줄에 '1일 전' 이 붙는 게 정상이다.
+ *  11:30 (11:15~11:45)  오늘치가 처음 들어오는 회차. 셋 중 **본진**이다.
+ *  16:30 (16:15~16:45)  장중 재수집분을 줍는다.
+ *
+ *  ⚠ 왜 07:00 하나로는 안 됐나 (2026-11-23). 클로브 정기 수집이 09:12~09:13 이라 07:00 에만
+ *    돌면 매일 어제치를 읽는다. 적재는 늘 '성공' 인데 대시보드만 하루 늦고, 로그는
+ *    '거래 없음' 이라 아무도 모른다. 11-23 07:06 카드대금 6,148,296 이 그렇게 밀렸다.
+ *  ⚠ 오후 회차가 헛돌지 않는 근거. 클로브는 정기 수집 말고도 **다시 긁는다** — 2026-11-23 에
+ *    10:28 재수집 요청 → 기업은행 6계좌가 10:32 에 다시 수집됐다(나머지는 09:1x 그대로).
+ *    즉 클로브에서 '최신화' 를 누르면 그다음 회차가 알아서 집어 온다.
+ *  ⚠ 클로브 수집 시각이 바뀌면 여기도 옮긴다. 근거는 get_scraping_status 의 scrapedAt 이고,
+ *    웹앱 doGet 의 '수집 기준' 줄에 매 회차 찍힌다. 분 단위가 꼭 필요하면 외부 cron 으로
+ *    이 웹앱에 POST 하면 되지만(주간 리포트 방식), 신선도를 정하는 건 우리가 아니라
+ *    **클로브가 언제 수집했는가** 라 실익은 없다. */
+var DIRECT_SCHEDULE = [[7, 0], [11, 30], [16, 30]];
+
 function runDailyDirectIngest() {
   return runDirectIngest(6, { archive: true, notifyOnFail: true });   // 6일 — 연휴·주말을 덮는다
 }
 
-function setupDirectTrigger() {
+/** nearMinute 는 ±15분이다. 사람이 읽을 실제 구간으로 바꿔 준다(자정을 넘으면 감싼다). */
+function scheduleSpan_(h, m) {
+  var t = h * 60 + m;
+  return hhmm_(t - 15) + '~' + hhmm_(t + 15);
+}
+function hhmm_(t) {
+  t = ((t % 1440) + 1440) % 1440;
+  return ('0' + Math.floor(t / 60)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2);
+}
+
+/** ⚠ 이름이 setupDirectTrigger 가 **아니다.** 구글 프로젝트에 옛 사본이 남아 있으면 같은
+ *    이름의 함수 중 하나만 이기고 **경고가 없다** — 2026-11-23 에 새 코드를 저장하고도 옛
+ *    07:00 메시지가 찍힌 게 그 증상이다. 이름을 바꿔 그 싸움 자체를 피한다.
+ *    옛 사본을 지우고 나서도 이 이름을 그대로 쓴다(되돌리면 같은 함정에 다시 빠진다). */
+function setupDirectSchedule() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'runDailyDirectIngest') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('runDailyDirectIngest').timeBased().atHour(10).nearMinute(0).everyDays(1).create();
-  var msg = '예약 완료 — 매일 09:45~10:15 사이에 runDailyDirectIngest 가 돕니다.';
+  var spans = DIRECT_SCHEDULE.map(function (hm) {
+    ScriptApp.newTrigger('runDailyDirectIngest').timeBased()
+      .atHour(hm[0]).nearMinute(hm[1]).everyDays(1).create();
+    return scheduleSpan_(hm[0], hm[1]);
+  });
+  var msg = '예약 완료 — 매일 ' + spans.length + '회 (' + spans.join(' / ') + ') runDailyDirectIngest 가 돕니다.';
+  Logger.log(msg);
+  return msg;
+}
+
+/** 지금 **실제로 도는** 코드가 새 사본인지 본다.
+ *  옛 파일이 이름 싸움에서 이기고 있으면 '고쳤는데 안 바뀐다' 로만 나타나므로,
+ *  눈으로 확인할 자리를 만들어 둔다. runDirectIngest 는 두 사본에 다 있고
+ *  collectionLagDays_ 를 부르는 건 새 사본뿐이라, 이게 판별선이다. */
+function checkCodeVersion() {
+  var rows = [];
+  var live = String(runDirectIngest).indexOf('collectionLagDays_') >= 0;
+  rows.push((live ? '✅ 새 사본이 돈다' : '❌ 옛 사본이 이기고 있다 — 다른 .gs 파일을 지워야 한다')
+            + ' — runDirectIngest');
+  rows.push((typeof collectionLagDays_ === 'function' ? '✅ 있음' : '❌ 없음') + ' — collectionLagDays_');
+  rows.push((typeof DIRECT_SCHEDULE !== 'undefined' && DIRECT_SCHEDULE.length === 3
+             ? '✅ ' + DIRECT_SCHEDULE.map(function (hm) { return scheduleSpan_(hm[0], hm[1]); }).join(' / ')
+             : '❌ 예약표 없음') + ' — DIRECT_SCHEDULE');
+  var msg = rows.join('\n');
   Logger.log(msg);
   return msg;
 }
