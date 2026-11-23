@@ -163,6 +163,16 @@ function mcpHandshake_() {
 }
 
 /* ── 적재 ──────────────────────────────────────────────────────────────── */
+/** 클로브 수집일이 오늘보다 며칠 뒤처졌는가. 판정 불가(빈 값·'(확인 실패)')면 0.
+ *  ⚠ 0 은 '최신' 과 '모름' 을 겸한다 — 모르는 걸 경고로 올리면 매일 울어서 아무도 안 본다.
+ *  ⚠ 두 값 다 yyyy-MM-dd 라 Date.parse 는 UTC 자정으로 읽는다. 같은 기준끼리 빼므로
+ *    시간대 보정이 필요 없다 — 한쪽에만 시각을 붙이면 그 순간 하루씩 틀어진다. */
+function collectionLagDays_(asOfDay, today) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDay) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return 0;
+  if (asOfDay >= today) return 0;          // 미래값은 시계 어긋남 — 지연으로 치지 않는다
+  return Math.round((Date.parse(today) - Date.parse(asOfDay)) / 86400000);
+}
+
 function daysBack_(n) {
   var tz = Session.getScriptTimeZone(), out = [];
   for (var i = n - 1; i >= 0; i--) {
@@ -278,14 +288,33 @@ function runDirectIngest(days, opts) {
     }
   });
 
-  var head = '클로브 직접 적재 · ' + n + '일 · 추가 ' + added + '건 (중복 ' + skipped + ', 실패 ' + failed + ')';
-  var out = head + '\n수집 기준 ' + asOf + '\n' + lines.join('\n');
+  /* ⑤ 신선도 — **'거래 없음' 과 '클로브가 아직 안 긁었음' 은 다른 사건이다.**
+     둘이 같은 글자로 나오면 하루 늦은 숫자를 맞다고 믿게 된다. 2026-11-23 에 실제로 그랬다:
+     07:00 에 돌았는데 클로브 수집은 09:13 이라, 그날 07:06 카드대금 6,148,296 이 다음 날에야
+     들어왔다. 그런데 로그는 '거래 없음' 이라 아무도 몰랐다. **지연 일수를 머리줄에 박는다.** */
+  var asOfDay = String(asOf || '').slice(0, 10);
+  var lagDays = collectionLagDays_(asOfDay, today);
+  var warn = lagDays
+    ? ' ⚠ 클로브 수집이 ' + lagDays + '일 전(' + asOfDay + ') — 그 뒤 거래는 아직 안 들어옵니다'
+    : '';
+
+  var head = '클로브 직접 적재 · ' + n + '일 · 추가 ' + added + '건 (중복 ' + skipped + ', 실패 ' + failed + ')' + warn;
+  var out = head + '\n수집 기준 ' + asOf + (lagDays ? '  [' + lagDays + '일 지연]' : '  [당일]') + '\n' + lines.join('\n');
   props_().setProperty('DIRECT_LAST_RESULT', out.slice(0, 8000));
   props_().setProperty('DIRECT_LAST_RUN_AT', Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
+  props_().setProperty('DIRECT_LAST_ASOF', asOfDay + (lagDays ? ' (' + lagDays + '일 지연)' : ' (당일)'));
   Logger.log(out);
 
   /* ⚠ 실패했는데 아무도 모르는 상태를 만들지 않는다. 성공했을 때는 조용히 — 매번 메일이 오면
      곧 안 읽게 되고 진짜 사고가 묻힌다(브리지가 같은 원칙으로 돌고 있다). */
+  /* 수집이 이틀 넘게 멈추면 **실패가 아니어도** 알린다. 그 상태에서 적재는 매일 '성공' 으로
+     끝나지만 들어오는 게 없다 — 실패 알림만 걸어 두면 영원히 조용하다. */
+  if (lagDays >= 2 && opts.notifyOnFail) {
+    notify_('[자금 대시보드] 클로브 수집이 ' + lagDays + '일째 멈춰 있습니다',
+            out + '\n\n· 적재 자체는 정상입니다 — 가져올 자료가 클로브에 없습니다.' +
+                  '\n· app.clobe.ai 에서 데이터 최신화를 실행하면 다음 예약 실행이 집어 옵니다.');
+  }
+
   if (failed && opts.notifyOnFail) {
     notify_('[자금 대시보드] 클로브 직접 적재 실패 ' + failed + '건', out +
             '\n\n· 실패한 날짜의 클로브 원본은 드라이브 ' + ROOT_FOLDER + '/' + DIR_HOLD + ' 에 남겨 뒀습니다.' +
@@ -299,7 +328,13 @@ function runDirectIngest(days, opts) {
    10분 브리지 트리거를 기다릴 일도 없다.
 
    ⚠ 시각은 못 박지 못한다. 구글이 일부러 분산시킨다 — atHour 만 쓰면 분이 **무작위**이고,
-     nearMinute 를 써야 **±15분**으로 좁혀진다. 그래서 06:45~07:15 사이에 돈다.
+     nearMinute 를 써야 **±15분**으로 좁혀진다. 그래서 09:45~10:15 사이에 돈다.
+
+   ⚠ **07:00 이 아니라 10:00 인 이유 (2026-11-23).** 클로브가 그날 자료를 긁는 시각이
+     09:12~09:13 이었다. 07:00 에 돌면 매일 **클로브의 어제치**를 읽게 되고, 적재는 늘
+     '성공' 인데 대시보드만 하루 늦는다. 실제로 11-23 07:06 카드대금 6,148,296 이 그래서
+     하루 밀렸다. 클로브 수집 시각이 바뀌면 여기도 같이 옮겨야 한다 — 판단 근거는
+     get_scraping_status 의 scrapedAt 이고, 웹앱 doGet 의 '수집 기준' 줄에 그게 찍힌다.
      분 단위가 꼭 필요하면 외부 cron 으로 이 웹앱에 POST 하면 된다(주간 리포트가 쓰는 방식).
      다만 신선도를 정하는 건 우리가 아니라 **클로브가 언제 수집했는가** 라, 실익은 없어 보인다. */
 function runDailyDirectIngest() {
@@ -310,8 +345,8 @@ function setupDirectTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'runDailyDirectIngest') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('runDailyDirectIngest').timeBased().atHour(7).nearMinute(0).everyDays(1).create();
-  var msg = '예약 완료 — 매일 06:45~07:15 사이에 runDailyDirectIngest 가 돕니다.';
+  ScriptApp.newTrigger('runDailyDirectIngest').timeBased().atHour(10).nearMinute(0).everyDays(1).create();
+  var msg = '예약 완료 — 매일 09:45~10:15 사이에 runDailyDirectIngest 가 돕니다.';
   Logger.log(msg);
   return msg;
 }

@@ -9,6 +9,14 @@
  *   정확히 그 코드로 멈추는지 본다. 옛 스크립트도 같은 입력에 이의를 제기하는지 함께 확인한다.
  *
  * 쓰는 법: node scripts/test-clobe-validate.mjs
+ *
+ * 기준(옛) 스크립트는 **git 에서 꺼내 쓴다** — 바꾸려면 BASE_REF=<ref>, 직접 지정하려면
+ * OLD_INGEST=<경로>.
+ *   ⚠ 2026-11-23 수정: 전에는 OS 임시폴더의 old-ingest.mjs 가 **이미 있다고 가정**했다.
+ *     주말에 윈도우가 임시폴더를 비우자 3건이 got=null 로 깨졌다. 테스트가 틀려서가 아니라
+ *     기준본이 사라져서였는데, 화면에는 똑같이 ❌ 로 보인다 — 이런 실패가 쌓이면
+ *     '원래 빨간 것' 으로 분류되고 진짜 고장이 묻힌다(2026-11-20 에 4건이 그래서 방치됐다).
+ *     동치 테스트(test-clobe-ingest-parity)가 쓰던 git 조달 방식으로 맞춘다.
  */
 import { validateClobe } from '../supabase/functions/cf-clobe-ingest/clobe-validate.mjs';
 import { execFileSync } from 'node:child_process';
@@ -17,7 +25,25 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const TODAY = '2026-11-13';
-const OLD = process.env.OLD_INGEST || join(tmpdir(), 'old-ingest.mjs');
+
+/* 기준 커밋 = 검증을 clobe-validate.mjs 로 분리하기 **직전**. 그 뒤 커밋을 쓰면 옛
+   스크립트가 모듈을 상대경로로 import 하는데 임시폴더엔 그게 없어 통째로 빈 출력이 된다
+   (동치 테스트가 2026-11-13~20 에 그래서 7일간 죽어 있었다). */
+const BASE_REF = process.env.BASE_REF || '2e5f3d9';
+const OLD = process.env.OLD_INGEST
+  || join(tmpdir(), `clobe-validate-base-${BASE_REF.replace(/[^\w.-]/g, '_')}.mjs`);
+
+/* 없으면 git 에서 꺼내 만든다 — 임시폴더는 언제든 비워진다고 가정한다. */
+if (!existsSync(OLD)) {
+  try {
+    writeFileSync(OLD, execFileSync('git', ['show', `${BASE_REF}:scripts/clobe-cf-ingest.mjs`],
+      { encoding: 'utf8', cwd: new URL('..', import.meta.url).pathname.replace(/^\/(\w:)/, '$1') }));
+  } catch (e) {
+    console.error(`❌ 기준 스크립트를 git 에서 못 꺼냈습니다 (BASE_REF=${BASE_REF}): ${e.message}`);
+    console.error('   OLD_INGEST=<경로> 로 직접 지정하거나 BASE_REF 를 바꾸세요.');
+    process.exit(1);
+  }
+}
 
 /* 거래 한 건. accountId 가 외화 화이트리스트에 있으면 금액은 통화 원금이다. */
 const tx = (o = {}) => ({
@@ -52,7 +78,9 @@ const t = (name, got, want) => {
 const CACHES = ['C:/Users/RAWGA/AppData/Local/rawga/fx-accounts.json',
                 'C:/Users/RAWGA/AppData/Local/rawga/fx-ref-rate.json'];
 const oldObjects = (pages, extraArgs = []) => {
-  if (!existsSync(OLD)) return null;
+  /* 위에서 조달을 보장했다. 그래도 없으면 **조용히 null 을 돌려주지 않는다** —
+     null 은 '기준본 없음' 과 '옛 스크립트가 이의 없음' 을 겸해서 원인을 가린다. */
+  if (!existsSync(OLD)) throw new Error('기준 스크립트가 사라졌습니다: ' + OLD);
   const saved = CACHES.map(p => (existsSync(p) ? readFileSync(p) : null));
   try {
     const f = join(tmpdir(), `clobe-guard-${Math.random().toString(36).slice(2)}.json`);
