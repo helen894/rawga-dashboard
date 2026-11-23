@@ -61,34 +61,49 @@ eq('이틀 이상 멈추면 실패 아니어도 알림', notifyOk, true);
 /* ── 예약표 ────────────────────────────────────────────────────────────────
    지연 판정만 맞고 **클로브 수집 뒤에 도는 회차가 없으면** 아무 소용이 없다.
    11-23 에 당한 게 정확히 그 모양이라, 시각 자체를 요구사항으로 못 박는다. */
-console.log('\n예약표\n');
+console.log('\n예약표 — 마감 기준\n');
 
-const schedRaw = src.match(/var DIRECT_SCHEDULE = (\[\[[\s\S]*?\]\]);/);
-if (!schedRaw) { console.error('❌ DIRECT_SCHEDULE 을 소스에서 못 찾았습니다'); process.exit(1); }
-const sched = JSON.parse(schedRaw[1]);
+const dueRaw = src.match(/var DIRECT_DEADLINES = (\[\[[\s\S]*?\]\]);/);
+if (!dueRaw) { console.error('❌ DIRECT_DEADLINES 를 소스에서 못 찾았습니다'); process.exit(1); }
+const due = JSON.parse(dueRaw[1]);
 const mins = ([h, m]) => h * 60 + m;
 
-eq('하루 3회', sched.length, 3);
-eq('1회차 07:00', JSON.stringify(sched[0]), '[7,0]');
-eq('2회차 11:30', JSON.stringify(sched[1]), '[11,30]');
-eq('3회차 16:30', JSON.stringify(sched[2]), '[16,30]');
-eq('시·분이 유효 범위', sched.every(([h, m]) => h >= 0 && h <= 23 && m >= 0 && m <= 59), true);
-/* ★ 이 줄이 11-23 의 교훈이다. 회차를 어떻게 바꾸든 09:1x 이후가 하나는 있어야 한다. */
-eq('클로브 수집(09:1x) 이후 회차가 있다', sched.some((hm) => mins(hm) >= 9 * 60 + 30), true);
-eq('같은 시각 중복 없음', new Set(sched.map(mins)).size, sched.length);
+eq('하루 3회', due.length, 3);
+eq('1회차 마감 07:00', JSON.stringify(due[0]), '[7,0]');
+eq('2회차 마감 11:30', JSON.stringify(due[1]), '[11,30]');
+eq('3회차 마감 16:30', JSON.stringify(due[2]), '[16,30]');
+eq('시·분이 유효 범위', due.every(([h, m]) => h >= 0 && h <= 23 && m >= 0 && m <= 59), true);
+eq('같은 마감 중복 없음', new Set(due.map(mins)).size, due.length);
 
-/* 사람이 읽는 구간 표시 — ±15분이라 07:00 은 06:45~07:15 이다. 여기가 틀리면 로그만 거짓말한다. */
-const spanSrc = src.match(/function scheduleSpan_\([\s\S]*?\n}/);
-const hhmmSrc = src.match(/function hhmm_\([\s\S]*?\n}/);
-if (!spanSrc || !hhmmSrc) { console.error('❌ scheduleSpan_ / hhmm_ 을 소스에서 못 찾았습니다'); process.exit(1); }
-vm.runInContext(spanSrc[0] + '\n' + hhmmSrc[0] + '\nglobalThis.span = scheduleSpan_;', ctx);
-const span = ctx.span;
+/* ★ 11-23 의 교훈. 회차를 어떻게 바꾸든 클로브 수집(09:1x) **뒤에 시작하는** 회차가
+   하나는 있어야 한다. 가장 이른 시작은 마감-30분이라 거기로 잰다 — 마감으로 재면
+   11:30 마감짜리가 실제로는 11:00 에 돌 수 있다는 걸 놓친다. */
+eq('클로브 수집(09:1x) 뒤에 시작하는 회차가 있다',
+   due.some((hm) => mins(hm) - 30 >= 9 * 60 + 30), true);
 
-eq('07:00 → ±15분', span(7, 0), '06:45~07:15');
-eq('11:30 → ±15분', span(11, 30), '11:15~11:45');
-eq('16:30 → ±15분', span(16, 30), '16:15~16:45');
-eq('자정을 넘겨도 감싼다', span(0, 0), '23:45~00:15');
-eq('23:50 → 다음날로 감싼다', span(23, 50), '23:35~00:05');
+/* 마감 → 중심/구간.
+   중심을 마감에 그대로 두면 ±15분 중 **절반이 마감을 넘겨** 돈다. 그게 이번 수정의 전부다. */
+const grab = (name) => {
+  const m = src.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n}`));
+  if (!m) { console.error(`❌ ${name} 을 소스에서 못 찾았습니다`); process.exit(1); }
+  return m[0];
+};
+vm.runInContext([grab('triggerCenter_'), grab('deadlineSpan_'), grab('hhmm_')].join('\n')
+  + '\nglobalThis.center = triggerCenter_; globalThis.span = deadlineSpan_;', ctx);
+const { center, span } = ctx;
+
+eq('07:00 마감 → 구간', span(7, 0), '06:30~07:00');
+eq('11:30 마감 → 구간', span(11, 30), '11:00~11:30');
+eq('16:30 마감 → 구간', span(16, 30), '16:00~16:30');
+eq('자정 마감 → 감싼다', span(0, 0), '23:30~00:00');
+
+eq('07:00 마감 → 중심 06:45', JSON.stringify(center(7, 0)), '[6,45]');
+eq('11:30 마감 → 중심 11:15', JSON.stringify(center(11, 30)), '[11,15]');
+eq('16:30 마감 → 중심 16:15', JSON.stringify(center(16, 30)), '[16,15]');
+eq('00:10 마감 → 중심 23:55 (자정 감쌈)', JSON.stringify(center(0, 10)), '[23,55]');
+eq('중심이 atHour/nearMinute 유효 범위',
+   due.every((hm) => { const c = center(...hm); return c[0] >= 0 && c[0] <= 23 && c[1] >= 0 && c[1] <= 59; }),
+   true);
 
 console.log(`\n${fail ? '❌' : '✅'} 통과 ${pass} · 실패 ${fail}\n`);
 process.exitCode = fail ? 1 : 0;
