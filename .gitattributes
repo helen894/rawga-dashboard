@@ -1,5 +1,18 @@
+# 줄끝은 **LF 로 못 박는다** (2026-11-24).
+# 윈도우 개발기는 core.autocrlf=true 라 체크아웃 때 CRLF 로 바뀌는데, 검증 스크립트 몇 개가
+# index.html 에서 소스 조각을 `;\n` 같은 LF 기준 문자열로 떼어 쓴다
+# (test-card-plan.mjs · test-cf-report-parity.mjs). CRLF 면 `끝을 못 찾음` 으로 죽는다 —
+# **고친 것과 무관한 테스트가 깨져서 원인을 엉뚱한 데서 찾게 되는** 종류의 고장이다.
+# 실제로 2026-11-24 에 파이썬으로 파일을 쓰다 CRLF 가 되어 두 건이 그렇게 깨졌다.
+# 파이썬으로 파일을 쓸 땐 newline='' 를 줄 것. 저장소엔 바이너리가 없어 text=auto 로 충분하다.
+#
+# ⚠ 이 줄은 **맨 위**에 둔다. .gitattributes 는 나중 줄이 이기므로, 아래 .githooks 규칙 같은
+#   구체적인 예외를 덮어쓰지 않으려면 포괄 규칙이 먼저 와야 한다.
+* text=auto eol=lf
+
 # 훅은 /bin/sh 가 읽는다. core.autocrlf=true 인 윈도우에서 체크아웃될 때 CRLF 로
 # 바뀌면 셔뱅 줄 끝에 \r 이 붙어 `bad interpreter: /bin/sh^M` 으로 죽는다.
 # 더 나쁜 건 그때 git 이 "훅이 없다" 와 비슷하게 조용히 넘어가는 경우가 있다는 것 —
 # 검증이 안 도는데 도는 줄 알게 된다. LF 로 못 박는다.
+# (위 포괄 규칙이 이미 LF 로 맞추지만, text=auto 의 자동판별에 맡기지 않고 여기서 고정한다.)
 .githooks/** text eol=lf
