@@ -985,6 +985,10 @@
     <div id="cf-clobe-result" style="display:none;margin-top:8px;font-size:11.5px;color:var(--text2);white-space:pre-wrap;line-height:1.65"></div>
   </div>
 
+  <!-- 자동적재 현황 — 토스트는 한 번 뜨고 사라지므로, 놓쳤을 때 돌아와서 볼 자리.
+       판정하지 않고 사실만 적는다(아래 renderIngestStatus 의 ⚠ 참고). -->
+  <div id="cf-ingest-status"></div>
+
   <div class="filter-bar">
     <label>기간</label>
     <input type="date" id="cf-from">
@@ -3276,6 +3280,67 @@ function relTime(ms) {
    데이터가 아예 없는 경우는 Infinity — 같은 등급 안에서는 '없음' 이 가장 나쁜 상태다. */
 const FRESH_LIMIT = { bank: 24, cf: 1, ar: 7, card: 40 };   // 시간 · 영업일 · 일 · 일
 
+/* 자동적재 현황을 **한 군데서** 만든다 — 신선도 칩과 입출금 탭 상태줄이 같은 값을 쓴다.
+ * 둘이 따로 세면 화면 두 곳이 서로 다른 말을 하게 된다.
+ *
+ * ⚠ `last` 는 '마지막으로 **새 거래가 들어온** 시각' 이지 '마지막으로 **작업이 돈** 시각' 이
+ *   아니다. 회차가 제시간에 돌아도 새 거래가 없으면 추가분이 0건이라 아무 흔적이 없다
+ *   (실제로 11/24 16:21 회차가 추가 0건이었다). 그래서 화면에 '마지막 실행' 이라고 쓰면
+ *   안 된다 — 돌았는데 안 돈 것처럼 보인다. 작업이 돌았는지는 Apps Script 상태 페이지가 답한다.
+ * ⚠ `clobe_id` 가 있는 행만 센다. 수기 입력도 같은 `cf_<ms>_` 를 받으므로, 이 조건이 없으면
+ *   손으로 넣은 걸 '적재' 라고 부른다. */
+function ingestStats() {
+  const rows = (cfData || []).filter(r => r.clobe_id);
+  const today = todayKST();
+  let last = 0, todayCount = 0;
+  for (const r of rows) {
+    const st = idStamp(r._id, 'cf');
+    if (!st) continue;
+    if (st > last) last = st;
+    if (stampYmd(st) === today) todayCount++;
+  }
+  return { last, todayCount, rows: rows.length };
+}
+
+/* 입출금 탭의 자동적재 상태줄 — 항상 보인다.
+ *
+ * ⚠ **판정하지 않는다.** 적재 간격이 길다고 빨강을 칠하면 거짓말이 된다 — 주말·거래 없는
+ *   날은 회차가 제시간에 돌아도 추가분이 0건이고, 그건 정상이다. 커버리지 판정(영업일 기준)은
+ *   신선도 배지가 이미 맡고 있으므로 여기는 사실만 적는다.
+ * ⚠ '마지막 실행' 이라고 쓰지 않는다 — ingestStats 의 ⚠ 참고. 여기 값은 '새 거래가 들어온'
+ *   시각이다. 작업이 돌았는지는 Apps Script 상태 페이지가 답한다. */
+function renderIngestStatus() {
+  const el = document.getElementById('cf-ingest-status');
+  if (!el) return;
+  const ist = ingestStats();
+  const fmt = (ms) => {
+    const d = new Date(Number(ms) + 9 * 3600 * 1000);
+    return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  };
+  const cell = (label, value) => html`<span style="display:inline-flex;align-items:baseline;gap:6px">
+      <span style="color:var(--text3)">${label}</span>
+      <b style="color:var(--text);font-weight:600">${value}</b>
+    </span>`;
+  const sep = html`<span style="color:var(--border)">|</span>`;
+
+  el.innerHTML = html`<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;
+      margin:0 0 10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);
+      border-radius:8px;font-size:11.5px;color:var(--text2)">
+    <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text2);font-weight:600">
+      <span style="font-size:13px">📥</span> 자동적재
+    </span>
+    ${ist.last
+      ? cell('마지막', `${fmt(ist.last)} · ${relTime(ist.last)}`)
+      : cell('마지막', '기록 없음')}
+    ${sep}
+    ${cell('오늘', `${ist.todayCount}건`)}
+    ${sep}
+    ${cell('회차', '07:00 · 11:30 · 16:30')}
+    <span style="flex:1"></span>
+    ${ist.todayCount ? '' : html`<span style="color:var(--text3)">새 거래가 없는 날은 0건입니다 — 회차는 그래도 돕니다</span>`}
+  </div>`;
+}
+
 function collectFreshness() {
   const today = todayKST();
   const md = d => (d && d.length >= 10) ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '—';
@@ -3297,15 +3362,14 @@ function collectFreshness() {
   const cfMax = actual.map(r => r.date).filter(Boolean).sort().pop();
   if (cfMax) {
     const gap = bizDaysBetween(cfMax, today);
-    const ing = Math.max(0, ...(cfData || []).map(r => idStamp(r._id, 'cf')));
-    /* 오늘 자동적재로 들어온 건수. 토스트(notifyIngest)는 한 번 뜨고 사라지므로,
-       그걸 놓쳤을 때 돌아와서 볼 자리가 필요하다. 여기 값은 날이 바뀔 때까지 남는다. */
-    const ingToday = (cfData || []).filter(r => r.clobe_id && stampYmd(idStamp(r._id, 'cf')) === today).length;
+    /* 적재 현황은 ingestStats 한 곳에서 받는다 — 종전엔 여기서 따로 세면서 clobe_id 조건이
+       빠져 **수기 입력분까지 '마지막 적재' 로 쳤다.** 입출금 탭 상태줄과 같은 값을 써야 한다. */
+    const ist = ingestStats();
     out.push({ name: '입출금', cover: `${md(cfMax)}까지`, lvl: gap <= 1 ? 0 : (gap <= 3 ? 1 : 2),
                sev: gap / FRESH_LIMIT.cf,
                tip: `최근 실제거래 ${cfMax} (영업일 ${gap}일 경과)`
-                    + (ing ? ` · 마지막 적재 ${relTime(ing)}` : '')
-                    + ` · 오늘 적재 ${ingToday}건`
+                    + (ist.last ? ` · 마지막 적재 ${relTime(ist.last)}` : '')
+                    + ` · 오늘 적재 ${ist.todayCount}건`
                     + ' · 자동 매일 07:00·11:30·16:30' });
   } else out.push({ name: '입출금', cover: '없음', lvl: 2, sev: Infinity, tip: '실제 거래 없음' });
 
@@ -16197,6 +16261,7 @@ function renderAll() {
   if (typeof renderLoanSummaryCard === 'function') try { renderLoanSummaryCard(); } catch(e) {}
   renderCharts();
   buildCFFilterSelects();
+  try { renderIngestStatus(); } catch (e) { console.warn('[ingest-status]', e); }
   renderCFTable();
   renderARTable();
   if (document.getElementById('panel-reporting').classList.contains('active')) {

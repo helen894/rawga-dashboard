@@ -33,18 +33,22 @@ let cfData = [];
      **삼켜서** seen=0 으로 조용히 흘러간다 — 터지지 않으니 하네스가 틀린 걸 모른다
      (2026-11-24 에 실제로 여기서 30분 헤맸다). */
 const lsStore = new Map();
-const fn = new Function('getCf', 'ls', `
+let TODAY = '2026-11-24';
+const fn = new Function('getCf', 'ls', 'getToday', `
   Object.defineProperty(globalThis, 'cfData', { get: getCf, configurable: true });
   const localStorage = ls;
+  const todayKST = getToday;
   const INGEST_ALERT_KEY = 'cf_ingest_seen';
   const INGEST_HELLO_KEY = 'cf_ingest_hello2';
   ${grab('idStamp')}
+  ${grab('stampYmd')}
   ${grab('collectNewIngest')}
-  return { collectNewIngest, idStamp };`)(() => cfData, {
+  ${grab('ingestStats')}
+  return { collectNewIngest, idStamp, ingestStats };`)(() => cfData, {
     getItem: k => lsStore.has(k) ? lsStore.get(k) : null,
     setItem: (k, v) => lsStore.set(k, String(v)),
-  });
-const { collectNewIngest, idStamp } = fn;
+  }, () => TODAY);
+const { collectNewIngest, idStamp, ingestStats } = fn;
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -136,6 +140,45 @@ eq('무인자 호출은 localStorage 기준선을 읽는다',
    [collectNewIngest().seen, collectNewIngest().rows.length], [ms('2026-11-24T07:00:00'), 1]);
 lsStore.delete('cf_ingest_seen');
 eq('기준선이 없으면 seen 0 (첫 실행)', collectNewIngest().seen, 0);
+
+/* ── ingestStats — 신선도 칩과 입출금 탭 상태줄이 같이 쓰는 값 ─────────────── */
+console.log('\n항상 보이는 상태줄이 쓰는 값\n');
+
+cfData = [
+  AUTO('2026-11-23T07:00:00', '2026-11-20', 0, 5000),
+  AUTO('2026-11-24T16:21:09', '2026-11-23', 0, 88149640),
+  AUTO('2026-11-24T16:21:09', '2026-11-23', 1000000, 0),
+  MANUAL('2026-11-24T18:00:00', '2026-11-24'),      // 수기 — 적재가 아니다
+];
+let st = ingestStats();
+eq('마지막 적재는 자동적재분 기준', st.last, ms('2026-11-24T16:21:09'));
+eq('오늘 적재 건수', st.todayCount, 2);
+/* ★ 종전 신선도 칩은 clobe_id 조건이 빠져 수기 입력분(18:00)을 '마지막 적재' 로 쳤다.
+     그래서 손으로 한 건 넣으면 적재가 방금 된 것처럼 보였다. */
+eq('수기 입력분은 마지막 적재가 아니다', st.last < ms('2026-11-24T18:00:00'), true);
+
+TODAY = '2026-11-25';
+eq('날이 바뀌면 오늘 적재는 0건', ingestStats().todayCount, 0);
+eq('날이 바뀌어도 마지막 적재는 남는다', ingestStats().last, ms('2026-11-24T16:21:09'));
+TODAY = '2026-11-24';
+
+cfData = [MANUAL('2026-11-24T18:00:00', '2026-11-24')];
+eq('자동적재분이 없으면 last 0 (= 화면은 "기록 없음")', ingestStats().last, 0);
+
+cfData = [];
+eq('데이터가 비어도 안 터진다', [ingestStats().last, ingestStats().todayCount], [0, 0]);
+
+/* ⚠ 상태줄이 '마지막 실행' 이라고 쓰면 거짓말이다 — 회차가 제시간에 돌아도 새 거래가
+     없으면 추가분 0건이라 흔적이 없다(11/24 16:21 회차가 실제로 추가 0건이었다).
+     그리고 적재 간격으로 빨강/노랑을 칠하면 주말·거래 없는 날을 고장으로 부른다. */
+const statusFn = grab('renderIngestStatus');
+eq("상태줄은 '마지막 실행' 이라고 쓰지 않는다", /마지막 실행/.test(statusFn), false);
+eq('상태줄은 적재 간격으로 판정하지 않는다',
+   !/var\(--red\)|var\(--amber\)/.test(statusFn), true);
+eq('상태줄도 ingestStats 를 쓴다(값이 갈리지 않게)', /ingestStats\(\)/.test(statusFn), true);
+eq('신선도 칩도 ingestStats 를 쓴다',
+   /const ist = ingestStats\(\);/.test(grab('collectFreshness')), true);
+eq('renderAll 이 상태줄을 그린다', /renderIngestStatus\(\);/.test(grab('renderAll')), true);
 
 const dayStamp = ms('2026-11-24T11:12:00');
 eq('하루 단위 집계는 KST 로 센다',
