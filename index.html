@@ -3238,7 +3238,7 @@ function fxAdjTail(date) { return FX_ADJ - fxAdjAt(date); }
 /* ===== 데이터 신선도 (P0-2) =====
  * 소스마다 갱신 주기가 달라 임계도 다르게 잡는다.
  *  · 은행잔액: 매일 자동(09:00)     → 24h/72h
- *  · 입출금  : 매일 자동(09:20)     → 영업일 1/3일 (주말엔 거래가 없으므로 영업일 기준)
+ *  · 입출금  : 매일 자동(07:00·11:30·16:30) → 영업일 1/3일 (주말엔 거래가 없으므로 영업일 기준)
  *  · 매출채권: 수동 시트 동기화      → 7일/14일
  *  · 법인카드: 월 1회 업로드         → 40일/70일
  * '커버리지'(데이터가 어디까지 반영됐나)를 우선 보여준다 — 갱신을 돌려도 원본이 없으면 소용없기 때문. */
@@ -3260,6 +3260,8 @@ function idStamp(id, kind) {
   else               { const m = s.match(/^corp_card_(\d+)_/);  if (m) ms = parseInt(m[1], 10); }
   return (ms > 1577836800000 && ms < 2524608000000) ? ms : 0;   // 2020~2050 범위만 신뢰
 }
+// 적재 시각(ms) → KST 날짜(YYYY-MM-DD). '오늘 적재분' 을 세는 데 쓴다.
+function stampYmd(ms) { return new Date(Number(ms || 0) + 9 * 3600 * 1000).toISOString().slice(0, 10); }
 function relTime(ms) {
   const mins = Math.max(0, Math.floor((Date.now() - ms) / 60000));
   return mins < 60 ? `${mins}분 전` : mins < 2880 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
@@ -3296,9 +3298,15 @@ function collectFreshness() {
   if (cfMax) {
     const gap = bizDaysBetween(cfMax, today);
     const ing = Math.max(0, ...(cfData || []).map(r => idStamp(r._id, 'cf')));
+    /* 오늘 자동적재로 들어온 건수. 토스트(notifyIngest)는 한 번 뜨고 사라지므로,
+       그걸 놓쳤을 때 돌아와서 볼 자리가 필요하다. 여기 값은 날이 바뀔 때까지 남는다. */
+    const ingToday = (cfData || []).filter(r => r.clobe_id && stampYmd(idStamp(r._id, 'cf')) === today).length;
     out.push({ name: '입출금', cover: `${md(cfMax)}까지`, lvl: gap <= 1 ? 0 : (gap <= 3 ? 1 : 2),
                sev: gap / FRESH_LIMIT.cf,
-               tip: `최근 실제거래 ${cfMax} (영업일 ${gap}일 경과)` + (ing ? ` · 마지막 적재 ${relTime(ing)}` : '') + ' · 자동 매일 09:20' });
+               tip: `최근 실제거래 ${cfMax} (영업일 ${gap}일 경과)`
+                    + (ing ? ` · 마지막 적재 ${relTime(ing)}` : '')
+                    + ` · 오늘 적재 ${ingToday}건`
+                    + ' · 자동 매일 07:00·11:30·16:30' });
   } else out.push({ name: '입출금', cover: '없음', lvl: 2, sev: Infinity, tip: '실제 거래 없음' });
 
   // 매출채권 — 시트 동기화 시각(arMeta)
@@ -3689,6 +3697,83 @@ function notifyPendingDue() {
   try { localStorage.setItem(PENDING_ALERT_KEY, token); } catch (e) {}
 
   showToast(`${icon} 입출금 예정 — ${bits.join(' · ')} (눌러서 보기)`, tone, {
+    ms: 10000,
+    onClick: () => {
+      const tab = document.querySelector('.tab[data-tab="cashflow"]');
+      if (tab) tab.click();
+      requestAnimationFrame(() => {
+        const panel = document.getElementById('panel-cashflow');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    },
+  });
+}
+
+/* ═══ 자동적재 알림 ═════════════════════════════════════════════════
+ * 대시보드를 열면 **지난번에 본 뒤로 새로 적재된 거래**를 토스트로 알린다
+ * (2026-11-24 사용자 요청 — "자동 적재하고 대시보드 들어가면 적재 완료 알람").
+ *
+ * 왜 '적재 완료' 가 아니라 '신규 N건' 인가
+ *   하루 세 번 "적재 완료" 가 뜨면 사흘이면 안 보게 된다. 그리고 적재가 **돌았는지**는
+ *   이미 신선도 배지가 답한다(지연되면 노랑·빨강). 이 알림이 새로 주는 정보는
+ *   "내가 안 본 사이에 무엇이 들어왔나" 하나뿐이라, **신규가 0건이면 조용하다.**
+ *   (은행 대조 알림이 일치하면 아무 말 안 하는 것과 같은 규칙이다.)
+ *
+ * 어떻게 세나 — 적재 로그 테이블이 없다. 대신 Edge(cf-clobe-ingest) 의 genId 가
+ *   새 행에 `cf_<base36 적재시각ms>_…` 를 붙여서 **행 자체에 적재 시각이 박혀 있다**.
+ *   idStamp 로 되읽는다(신선도 배지가 쓰던 것과 같은 함수). 서버를 안 고쳐도 된다.
+ *
+ * ⚠ `clobe_id` 가 있는 행만 센다. 그게 클로브 자동적재분이라는 표시다. 수기로 넣은 행도
+ *   `cf_<ms>_` 를 받으므로, 이 조건이 없으면 **내가 방금 손으로 넣은 걸 '자동적재' 라고
+ *   말한다.** 화면이 사실과 다른 말을 하는 건 알림을 안 다느니만 못하다.
+ * ⚠ 첫 실행에는 기준선이 없다. 그대로 두면 1,500건을 통째로 '신규' 라고 외친다.
+ *   그래서 기준선이 없으면 **조용히 현재치로 찍고 넘어간다** — 첫 화면에선 안 뜬다.
+ * ⚠ 수정은 `_id` 를 안 바꾼다. 그래서 적요를 고쳐도 신규로 잡히지 않는다(의도한 대로다).
+ * ⚠ 기준선은 localStorage 라 **브라우저마다 따로 센다.** 다른 PC에서 먼저 보면 이쪽에선
+ *   다시 뜬다. 공유할 값이 아니라 '내가 봤나' 라서 이게 맞다. */
+const INGEST_ALERT_KEY = 'cf_ingest_seen';   // 마지막으로 알린 적재 시각(ms)
+
+function collectNewIngest(seenOverride) {
+  let seen = Number(seenOverride);
+  if (!Number.isFinite(seen)) {
+    seen = 0;
+    try { seen = Number(localStorage.getItem(INGEST_ALERT_KEY)) || 0; } catch (e) {}
+  }
+  const rows = [];
+  let maxStamp = 0;
+  for (const r of (cfData || [])) {
+    if (!r.clobe_id) continue;                  // 수기 입력·예정 행은 대상이 아니다 (위 ⚠)
+    const st = idStamp(r._id, 'cf');
+    if (!st) continue;
+    if (st > maxStamp) maxStamp = st;
+    if (st > seen) rows.push(r);
+  }
+  const inSum  = rows.reduce((t, r) => t + (Number(r.in)  || 0), 0);
+  const outSum = rows.reduce((t, r) => t + (Number(r.out) || 0), 0);
+  const dates  = rows.map(r => r.date).filter(Boolean).sort();
+  return { seen, maxStamp, rows, inSum, outSum,
+           from: dates[0] || '', to: dates[dates.length - 1] || '' };
+}
+
+function notifyIngest() {
+  if (typeof _isInitialized === 'undefined' || !_isInitialized) return;
+  const g = collectNewIngest();
+  if (!g.maxStamp) return;                      // 자동적재분이 아예 없다 — 알릴 것이 없다
+
+  /* 첫 실행: 기준선만 세우고 조용히 넘어간다 (위 ⚠ 참고) */
+  const first = !g.seen;
+  try { localStorage.setItem(INGEST_ALERT_KEY, String(g.maxStamp)); } catch (e) {}
+  if (first || !g.rows.length) return;
+
+  const md = d => d && d.length >= 10 ? `${d.slice(5, 7)}/${d.slice(8, 10)}` : '';
+  const span = g.from ? (g.from === g.to ? md(g.from) : `${md(g.from)}~${md(g.to)}`) : '';
+  const bits = [];
+  if (g.inSum)  bits.push(`입금 ${fmtM(g.inSum)}`);
+  if (g.outSum) bits.push(`출금 ${fmtM(g.outSum)}`);
+
+  showToast(`📥 자동적재 완료 · ${relTime(g.maxStamp)} — 신규 ${g.rows.length}건`
+            + (span ? ` (${span})` : '') + (bits.length ? ` · ${bits.join(' · ')}` : '')
+            + ' (눌러서 보기)', 'green', {
     ms: 10000,
     onClick: () => {
       const tab = document.querySelector('.tab[data-tab="cashflow"]');
@@ -16079,6 +16164,9 @@ function renderAll() {
   /* 예정 임박 알림 — 데이터가 다 실린 뒤 한 번. localStorage 토큰이 중복을 막으므로
      renderAll 이 여러 번 불려도 하루 한 번만 뜬다(대상이 바뀌면 다시 뜬다). */
   try { notifyPendingDue(); } catch (e) { console.warn('[pending-due]', e); }
+  /* 자동적재 알림 — 같은 이유로 여기. localStorage 기준선이 중복을 막으므로
+     renderAll 이 여러 번 불려도 새 적재분이 있을 때만 뜬다. */
+  try { notifyIngest(); } catch (e) { console.warn('[ingest-notify]', e); }
   renderCorpCardDashboard();
   if (typeof renderLoanSummaryCard === 'function') try { renderLoanSummaryCard(); } catch(e) {}
   renderCharts();
