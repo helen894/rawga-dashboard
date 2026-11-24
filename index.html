@@ -3736,7 +3736,11 @@ function notifyPendingDue() {
  * ⚠ 기준선은 localStorage 라 **브라우저마다 따로 센다.** 다른 PC에서 먼저 보면 이쪽에선
  *   다시 뜬다. 공유할 값이 아니라 '내가 봤나' 라서 이게 맞다. */
 const INGEST_ALERT_KEY = 'cf_ingest_seen';   // 마지막으로 알린 적재 시각(ms)
-const INGEST_HELLO_KEY = 'cf_ingest_hello';  // '알림 켜졌다' 를 한 번 말했나
+/* '알림 켜졌다' 를 한 번 말했나.
+   ⚠ v1(`cf_ingest_hello`) 은 버린다 — 그때 showToast 가 엘리먼트를 돌려써서 인사가
+     부팅 토스트에 **덮여 사라졌다.** 플래그만 서고 아무도 못 본 상태라, 키를 올려
+     고쳐진 빌드에서 딱 한 번 다시 인사하게 한다(2026-11-24). */
+const INGEST_HELLO_KEY = 'cf_ingest_hello2';
 
 function collectNewIngest(seenOverride) {
   let seen = Number(seenOverride);
@@ -18373,29 +18377,61 @@ document.getElementById('ar-download-btn').addEventListener('click', () => {
  * ⚠ cssText 에 '+=' 로 색을 덧붙이는 구조라 앞선 호출의 스타일이 남는다. pointer-events 는
  *   매번 명시적으로 다시 써야 한다 — 안 그러면 클릭 가능한 토스트 뒤에 뜬 일반 토스트가
  *   화면 클릭을 계속 가로챈다. */
+/* ⚠⚠ 토스트는 **쌓는다. 돌려쓰지 않는다** (2026-11-24).
+ *   종전엔 `#toast-el` 엘리먼트 **하나**에 textContent 를 덮어쓰고 타이머를 리셋했다.
+ *   그래서 한 번에 두 개 이상 뜨면 **먼저 것이 소리 없이 사라진다** — 뜬 적이 없는 것과
+ *   구별이 안 된다. 부팅이 정확히 그 상황이다:
+ *       renderAll() → notifyBankRecon / notifyPendingDue / notifyIngest
+ *       그 **뒤에** 자동업데이트 · 반복거래 · 대출예정 · 카드예정 토스트 4개
+ *   예정 생성은 거의 매일 돌므로, 앞의 알림 셋은 사실상 상시 덮였다.
+ *   "자동적재 알림이 안 뜬다" 의 진짜 원인이 이거였다 — 알림 로직이 아니라 표시층이었다.
+ *   호출부 123곳은 그대로 두고 여기만 고친다(시그니처 동일). */
 function showToast(msg, type='green', opts={}) {
   const ms = Number(opts.ms) > 0 ? Number(opts.ms) : 3500;
   const onClick = typeof opts.onClick === 'function' ? opts.onClick : null;
-  let t = document.getElementById('toast-el');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast-el';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;max-width:400px;transition:opacity 0.3s;';
-    document.body.appendChild(t);
+
+  let box = document.getElementById('toast-stack');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'toast-stack';
+    /* 아래쪽이 최신. 컨테이너 자체는 클릭을 통과시키고(none), 토스트만 받는다 —
+       안 그러면 보이지 않는 빈 영역이 화면 오른쪽 아래 클릭을 먹는다. */
+    box.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;display:flex;'
+                      + 'flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none;max-width:420px';
+    document.body.appendChild(box);
   }
+
   const colors = {
     green: 'background:#183D2B;color:#8FD3AC;border:1px solid rgba(42,127,87,0.45)',
     red:   'background:#3D1C16;color:#E9A18F;border:1px solid rgba(255,77,106,0.4)',
     amber: 'background:#3B2E12;color:#E8C878;border:1px solid rgba(217,164,65,0.45)',
   };
-  t.style.cssText += colors[type] || colors.green;
+
+  const t = document.createElement('div');
+  t.className = 'toast-item';
+  t.style.cssText = 'padding:12px 20px;border-radius:10px;font-size:13px;font-weight:500;'
+                  + 'max-width:400px;transition:opacity 0.3s;opacity:0;'
+                  + (colors[type] || colors.green);
   t.style.pointerEvents = onClick ? 'auto' : 'none';
   t.style.cursor = onClick ? 'pointer' : 'default';
-  t.onclick = onClick ? () => { t.style.opacity = '0'; onClick(); } : null;
   t.textContent = msg;
-  t.style.opacity = '1';
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.style.opacity = '0'; }, ms);
+
+  const kill = () => {
+    clearTimeout(t._timer);
+    t.style.opacity = '0';
+    setTimeout(() => { if (t.parentNode) t.parentNode.removeChild(t); }, 350);
+  };
+  t.onclick = onClick ? () => { kill(); onClick(); } : null;
+
+  box.appendChild(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });   // 투명→불투명으로 떠야 전환이 보인다
+  t._timer = setTimeout(kill, ms);
+
+  /* 한 번에 너무 많이 쌓이면 화면을 덮는다. 오래된 것부터 걷어낸다. */
+  const items = box.querySelectorAll('.toast-item');
+  for (let i = 0; i < items.length - 5; i++) {
+    if (items[i].parentNode) items[i].parentNode.removeChild(items[i]);
+  }
 }
 
 </script>

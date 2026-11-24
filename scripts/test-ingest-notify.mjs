@@ -37,7 +37,7 @@ const fn = new Function('getCf', 'ls', `
   Object.defineProperty(globalThis, 'cfData', { get: getCf, configurable: true });
   const localStorage = ls;
   const INGEST_ALERT_KEY = 'cf_ingest_seen';
-  const INGEST_HELLO_KEY = 'cf_ingest_hello';
+  const INGEST_HELLO_KEY = 'cf_ingest_hello2';
   ${grab('idStamp')}
   ${grab('collectNewIngest')}
   return { collectNewIngest, idStamp };`)(() => cfData, {
@@ -122,7 +122,7 @@ eq('신규 0건이면 조용하다', /\n  if \(nothingNew\) return;/.test(guard)
 eq('켜졌다는 인사를 한 번은 한다',
    /INGEST_HELLO_KEY[\s\S]*if \(nothingNew\) \{[\s\S]*showToast\(/.test(guard), true);
 eq('인사 플래그는 기준선과 다른 키다',
-   /const INGEST_HELLO_KEY = 'cf_ingest_hello';/.test(src)
+   /const INGEST_HELLO_KEY = 'cf_ingest_hello2';/.test(src)
    && /const INGEST_ALERT_KEY = 'cf_ingest_seen';/.test(src), true);
 
 /* 무인자 호출 — 실제 코드(notifyIngest)가 쓰는 경로다. 기준선을 localStorage 에서
