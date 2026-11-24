@@ -1,8 +1,13 @@
 /**
  * clobe-direct-ingest.gs — **버튼을 누르면 클로브에서 바로 읽어 cf_data 에 적재한다.**
  *
+ * 📍 구글에서는 프로젝트 `제목 없는 프로젝트`(2026-11-13 생성) 의 **둘째 파일**이다.
+ *   첫째 파일 `Code.gs` 가 `clobe-drive-bridge.gs` 다 — **여기를 Code.gs 에 붙여넣지 말 것.**
+ *
  * ⚠ 이 파일은 `clobe-drive-bridge.gs` 와 **같은 Apps Script 프로젝트**에 둔다.
- *   거기 있는 `EDGE_URL` · `SUPA_PUBLISHABLE_KEY` · `getSecret_()` 를 그대로 쓴다(중복 정의 금지).
+ *   거기 있는 `EDGE_URL` · `SUPA_PUBLISHABLE_KEY` · `getSecret_()` · `dirs_()` · `notify_()` 를
+ *   그대로 **빌려 쓴다**(중복 정의 금지). 그래서 Code.gs 가 비면 이 파일도 같이 죽는다 —
+ *   `getSecret_ is not defined` 로 적재가 통째로 실패한다.
  *
  * ═══ 왜 이게 가능한가 (2026-11-20 실측으로 확인) ═══════════════════════════
  * 종전 전제는 "클로브는 MCP 커넥터(=Claude)로만 읽을 수 있다" 였는데 **절반만 맞았다.**
