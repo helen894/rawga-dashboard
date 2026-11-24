@@ -28,11 +28,22 @@ const grab = (name) => {
 };
 
 let cfData = [];
-const fn = new Function('getCf', `
+/* ⚠ 키 상수를 같이 넣어야 한다. 안 넣으면 collectNewIngest 안의
+     `try { localStorage.getItem(INGEST_ALERT_KEY) } catch {}` 가 ReferenceError 를
+     **삼켜서** seen=0 으로 조용히 흘러간다 — 터지지 않으니 하네스가 틀린 걸 모른다
+     (2026-11-24 에 실제로 여기서 30분 헤맸다). */
+const lsStore = new Map();
+const fn = new Function('getCf', 'ls', `
   Object.defineProperty(globalThis, 'cfData', { get: getCf, configurable: true });
+  const localStorage = ls;
+  const INGEST_ALERT_KEY = 'cf_ingest_seen';
+  const INGEST_HELLO_KEY = 'cf_ingest_hello';
   ${grab('idStamp')}
   ${grab('collectNewIngest')}
-  return { collectNewIngest, idStamp };`)(() => cfData);
+  return { collectNewIngest, idStamp };`)(() => cfData, {
+    getItem: k => lsStore.has(k) ? lsStore.get(k) : null,
+    setItem: (k, v) => lsStore.set(k, String(v)),
+  });
 const { collectNewIngest, idStamp } = fn;
 
 let pass = 0, fail = 0;
@@ -103,8 +114,28 @@ cfData = [AUTO('2026-11-23T07:00:00', '2026-11-20'), AUTO('2026-11-24T11:12:00',
 eq('기준선 0 이면 전건이 신규로 잡힌다(= 첫 실행 가드가 필요한 이유)',
    collectNewIngest(0).rows.length, 2);
 const guard = grab('notifyIngest');
-eq('notifyIngest 에 첫 실행 가드가 있다', /const first = !g\.seen;[\s\S]*if \(first \|\| !g\.rows\.length\) return;/.test(guard), true);
-eq('신규 0건이면 조용하다', /!g\.rows\.length\) return;/.test(guard), true);
+eq('notifyIngest 에 첫 실행 가드가 있다',
+   /const first = !g\.seen;\s*\n\s*const nothingNew = first \|\| !g\.rows\.length;/.test(guard), true);
+eq('신규 0건이면 조용하다', /\n  if \(nothingNew\) return;/.test(guard), true);
+/* 첫 화면에서 아무 말도 안 하면 고장과 구별이 안 된다 — 2026-11-24 에 실제로 그 문의를
+   받았다. 기준선(cf_ingest_seen)과 **별도 키**로 한 번만 인사하는 분기가 살아있나. */
+eq('켜졌다는 인사를 한 번은 한다',
+   /INGEST_HELLO_KEY[\s\S]*if \(nothingNew\) \{[\s\S]*showToast\(/.test(guard), true);
+eq('인사 플래그는 기준선과 다른 키다',
+   /const INGEST_HELLO_KEY = 'cf_ingest_hello';/.test(src)
+   && /const INGEST_ALERT_KEY = 'cf_ingest_seen';/.test(src), true);
+
+/* 무인자 호출 — 실제 코드(notifyIngest)가 쓰는 경로다. 기준선을 localStorage 에서
+   읽어야 하는데, 위 ⚠ 처럼 여기서 조용히 0 이 되면 **매번 전건을 신규로 세게 된다.** */
+cfData = [
+  AUTO('2026-11-23T07:00:00', '2026-11-20', 0, 5000),
+  AUTO('2026-11-24T11:12:00', '2026-11-23', 0, 88149640),
+];
+lsStore.set('cf_ingest_seen', String(ms('2026-11-24T07:00:00')));
+eq('무인자 호출은 localStorage 기준선을 읽는다',
+   [collectNewIngest().seen, collectNewIngest().rows.length], [ms('2026-11-24T07:00:00'), 1]);
+lsStore.delete('cf_ingest_seen');
+eq('기준선이 없으면 seen 0 (첫 실행)', collectNewIngest().seen, 0);
 
 const dayStamp = ms('2026-11-24T11:12:00');
 eq('하루 단위 집계는 KST 로 센다',
